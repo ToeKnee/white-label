@@ -8,14 +8,13 @@
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    components::{Route, Router, Routes, A},
-    hooks::use_params_map,
+    components::{Route, Router, Routes},
     path, StaticSegment,
 };
-use markdown;
 
-use crate::routes::artist::get_artist;
-use crate::routes::label::get_label;
+use crate::components::artist::home::ArtistPage;
+use crate::components::record_label::header::LabelHeader;
+use crate::components::record_label::home::RecordLabelHome as RecordLabel;
 
 /// HTML shell for the application.
 #[must_use]
@@ -57,99 +56,10 @@ pub fn WhiteLabelRoot() -> impl IntoView {
         <Router>
             <main>
                 <Routes fallback=|| "Page not found.".into_view()>
-                    <Route path=StaticSegment("") view=HomePage />
+                    <Route path=StaticSegment("") view=RecordLabel />
                     <Route path=path!("artist/:slug") view=ArtistPage />
                 </Routes>
             </main>
         </Router>
-    }
-}
-
-/// Renders the home page of your application.
-#[component]
-fn HomePage() -> impl IntoView {
-    view! { <RecordLabel /> }
-}
-
-/// Renders the record label page.
-//#[tracing::instrument]
-#[component]
-pub fn LabelHeader() -> impl IntoView {
-    view! {
-        <Transition fallback=move || view! { <p>"Loading Record Label"</p> }>
-            <ErrorBoundary fallback=|_| {
-                view! { <p class="error-messages text-xs-center">"Something went wrong."</p> }
-            }>
-                {move || Suspend::new(async move {
-                    let resource = get_label().await;
-                    let label = resource.unwrap().label;
-                    view! { <h1 class="text-4xl font-bold">{label.name}</h1> }
-                })}
-
-            </ErrorBoundary>
-        </Transition>
-    }
-}
-
-/// Renders the record label page.
-//#[tracing::instrument]
-#[component]
-pub fn RecordLabel() -> impl IntoView {
-    view! {
-        <Transition fallback=move || view! { <p>"Loading Record Label"</p> }>
-            <ErrorBoundary fallback=|_| {
-                view! { <p class="error-messages text-xs-center">"Something went wrong."</p> }
-            }>
-                {move || Suspend::new(async move {
-                    let resource = get_label().await;
-                    let label = resource.unwrap().label;
-                    view! {
-                        <h2>{label.name}</h2>
-                        <div inner_html=markdown::to_html(&label.description) />
-                        <A href=format!("/artist/janky-switch")>"View Artists"</A>
-                    }
-                })}
-
-            </ErrorBoundary>
-        </Transition>
-    }
-}
-
-/// Renders the record label page.
-//#[tracing::instrument]
-#[component]
-pub fn ArtistPage() -> impl IntoView {
-    let params = use_params_map();
-
-    let artist_res = Resource::new(
-        move || params.get(),
-        |slug| async move {
-            if let Some(s) = slug.get("slug") {
-                get_artist(s.to_string()).await
-            } else {
-                get_artist("janky-switch".to_string()).await
-            }
-        },
-    );
-
-    view! {
-        <Transition fallback=move || view! { <p>"Loading Artist"</p> }>
-            <ErrorBoundary fallback=|_| {
-                view! { <p class="error-messages text-xs-center">"Something went wrong."</p> }
-            }>
-                {move || {
-                    artist_res
-                        .get()
-                        .map(move |x| {
-                            x.map(move |a| {
-                                view! {
-                                    <h1>{a.artist.name}</h1>
-                                    <div inner_html=markdown::to_html(&a.artist.description) />
-                                }
-                            })
-                        })
-                }}
-            </ErrorBoundary>
-        </Transition>
     }
 }
