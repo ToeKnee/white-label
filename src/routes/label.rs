@@ -1,7 +1,7 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
-// use leptos_router::*;
 
+use crate::models::artist::Artist;
 use crate::models::label::Label;
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default)]
@@ -18,4 +18,19 @@ pub async fn get_label() -> Result<LabelResult, ServerFnError> {
             ServerFnError::new("Could not retrieve labels, try again later")
         })?,
     })
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone, Default)]
+pub struct LabelArtistResult {
+    pub artists: Vec<Artist>,
+}
+
+#[server(GetLabelArtists, "/api", "GetJson")]
+pub async fn get_label_artists(label: Label) -> Result<LabelArtistResult, ServerFnError> {
+    let artists = label.artists().await.map_err(|x| {
+        let err = format!("Error while getting artists: {x:?}");
+        tracing::error!("{err}");
+        ServerFnError::new("Could not retrieve artists, try again later")
+    })?;
+    Ok(LabelArtistResult { artists })
 }

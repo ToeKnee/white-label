@@ -17,7 +17,7 @@ pub(crate) mod models;
 pub(crate) mod routes;
 #[cfg(feature = "ssr")]
 pub mod setup;
-
+pub mod state;
 pub mod utils;
 
 #[cfg(feature = "hydrate")]

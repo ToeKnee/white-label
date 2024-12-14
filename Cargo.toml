@@ -20,6 +20,8 @@ leptos_axum = { version = "0.7.0", optional = true }
 leptos_meta = { version = "0.7.0" }
 leptos_router = { version = "0.7.0", features = ["ssr"] }
 markdown = "0.3.0"
+reactive_stores = "0.1.0"
+reactive_stores_macro = "0.1.0"
 regex = "1.11.1"
 serde = { version = "1.0.215", features = ["derive"] }
 sqlx = { version = "0.8.2", features = [

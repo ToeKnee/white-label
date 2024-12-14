@@ -2,10 +2,11 @@
 //!
 //! The Artist struct is used to represent a record artist in the database.
 
+use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 
 /// The Artist struct is used to represent a record artist in the database.
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, Store)]
 pub struct Artist {
     /// The unique identifier of the artist
     pub id: i64,

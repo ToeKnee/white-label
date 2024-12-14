@@ -2,10 +2,14 @@
 //!
 //! The Label struct is used to represent a record label in the database.
 
+use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ssr")]
+use crate::models::artist::Artist;
+
 /// The Label struct is used to represent a record label in the database.
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, Store)]
 pub struct Label {
     /// The unique identifier of the label
     pub id: i64,
@@ -90,4 +94,37 @@ impl Label {
 
     // #[cfg(feature = "ssr")]
     // pub async fn delete() -> Self {}
+
+    #[cfg(feature = "ssr")]
+    pub async fn artists(self) -> anyhow::Result<Vec<Artist>> {
+        use sqlx::Row;
+
+        let rows = sqlx::query("SELECT * FROM artists WHERE label_id = $1 ORDER BY name ASC")
+            .bind(self.id)
+            .fetch_all(crate::database::get_db())
+            .await;
+
+        let rows = match rows {
+            Ok(rows) => rows,
+            Err(e) => {
+                eprintln!("{}", e);
+                return Err(anyhow::anyhow!("Could not find artists"));
+            }
+        };
+
+        let mut artists = Vec::new();
+        for row in rows {
+            artists.push(Artist {
+                id: row.get("id"),
+                name: row.get("name"),
+                slug: row.get("slug"),
+                description: row.get("description"),
+                label_id: row.get("label_id"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(artists)
+    }
 }

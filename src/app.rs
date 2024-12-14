@@ -11,10 +11,12 @@ use leptos_router::{
     components::{Route, Router, Routes},
     path, StaticSegment,
 };
+use reactive_stores::Store;
 
 use crate::components::artist::home::ArtistPage;
 use crate::components::record_label::header::LabelHeader;
 use crate::components::record_label::home::RecordLabelHome as RecordLabel;
+use crate::state::GlobalState;
 
 /// HTML shell for the application.
 #[must_use]
@@ -39,9 +41,11 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 /// Renders the main application.
 #[component]
 #[must_use]
-pub fn WhiteLabelRoot() -> impl IntoView {
+#[must_use] pub fn WhiteLabelRoot() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
+    // Provide global state context
+    provide_context(Store::new(GlobalState::default()));
 
     view! {
         // injects a stylesheet into the document <head>
