@@ -2,7 +2,7 @@
 //!
 //! White Label is a web application for managing record labels, artists and releases.
 
-#![warn(missing_docs)]
+//#![warn(missing_docs)]
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::style)]
@@ -27,6 +27,5 @@ pub fn hydrate() {
     #[allow(unused_imports)]
     use crate::app::WhiteLabelRoot;
     console_error_panic_hook::set_once();
-    //leptos::mount::hydrate_islands();
     leptos::mount::hydrate_body(WhiteLabelRoot);
 }

@@ -23,9 +23,9 @@ pub async fn init_app(configuration_path: Option<&str>) {
     // Get leptos configuration
     let conf = get_configuration(configuration_path).unwrap();
     let addr = conf.leptos_options.site_addr;
-    // Generate the list of routes in your Leptos App
-    let routes = generate_route_list(|| view! { <WhiteLabelRoot /> });
     let leptos_options = conf.leptos_options;
+    // Generate the list of routes in your Leptos App
+    let routes = generate_route_list(WhiteLabelRoot);
 
     let app = axum::Router::new()
         .leptos_routes(&leptos_options, routes, {
@@ -36,5 +36,7 @@ pub async fn init_app(configuration_path: Option<&str>) {
         .with_state(leptos_options);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app.into_make_service())
+        .await
+        .unwrap();
 }

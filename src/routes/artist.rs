@@ -9,7 +9,7 @@ pub struct ArtistResult {
     pub artist: Artist,
 }
 
-#[server(GetArtistAction, "/api", "GetJson")]
+#[server(GetArtist, "/api", "GetJson")]
 pub async fn get_artist(slug: String) -> Result<ArtistResult, ServerFnError> {
     Ok(ArtistResult {
         artist: Artist::get_by_slug(slug).await.map_err(|x| {

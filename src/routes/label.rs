@@ -9,7 +9,7 @@ pub struct LabelResult {
     pub label: Label,
 }
 
-#[server(GetLabelAction, "/api", "GetJson")]
+#[server(GetLabel, "/api", "GetJson")]
 pub async fn get_label() -> Result<LabelResult, ServerFnError> {
     Ok(LabelResult {
         label: Label::first().await.map_err(|x| {

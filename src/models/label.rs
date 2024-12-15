@@ -4,6 +4,8 @@
 
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ssr")]
+use leptos::logging;
 
 #[cfg(feature = "ssr")]
 use crate::models::artist::Artist;
@@ -48,6 +50,9 @@ impl Label {
                 return Err(anyhow::anyhow!("Could not find label"));
             }
         };
+
+        logging::warn!("Finding label");
+      //  logging::warn!("Found label with slug {}", row.get("slug"));
 
         Ok(Self {
             id: row.get("id"),
@@ -99,6 +104,7 @@ impl Label {
     pub async fn artists(self) -> anyhow::Result<Vec<Artist>> {
         use sqlx::Row;
 
+        logging::log!("Finding artists for label {}", self.id);
         let rows = sqlx::query("SELECT * FROM artists WHERE label_id = $1 ORDER BY name ASC")
             .bind(self.id)
             .fetch_all(crate::database::get_db())

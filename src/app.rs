@@ -41,7 +41,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 /// Renders the main application.
 #[component]
 #[must_use]
-#[must_use] pub fn WhiteLabelRoot() -> impl IntoView {
+pub fn WhiteLabelRoot() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
     // Provide global state context
@@ -55,13 +55,14 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
         // sets the document title
         <Title text="Welcome to White-Label" />
 
-        <LabelHeader />
-        // content for this welcome page
         <Router>
+            <LabelHeader />
+
             <main>
                 <Routes fallback=|| "Page not found.".into_view()>
                     <Route path=StaticSegment("") view=RecordLabel />
-                    <Route path=path!("artist/:slug") view=ArtistPage />
+                    <Route path=path!("artists") view=RecordLabel />
+                    <Route path=path!("artists/:slug") view=ArtistPage />
                 </Routes>
             </main>
         </Router>

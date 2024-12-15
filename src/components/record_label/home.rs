@@ -4,32 +4,34 @@ use markdown;
 use reactive_stores::Store;
 
 use crate::models::artist::ArtistStoreFields;
+#[cfg(feature = "ssr")]
 use crate::routes::label::{get_label, get_label_artists};
+
 use crate::state::GlobalState;
 use crate::state::GlobalStateStoreFields;
 
 /// Renders the record label page.
 #[component]
 pub fn RecordLabelHome() -> impl IntoView {
-    let store = expect_context::<Store<GlobalState>>();
-    let record_label = store.record_label();
-
     view! {
         <Transition fallback=move || view! { <p>"Loading Record Label"</p> }>
             <ErrorBoundary fallback=|_| {
                 view! { <p class="error-messages text-xs-center">"Something went wrong."</p> }
             }>
                 {move || Suspend::new(async move {
-                    if record_label.get().name.is_empty() {
+                    let store = expect_context::<Store<GlobalState>>();
+                    #[cfg(feature = "ssr")]
+                    if store.record_label().get().name.is_empty() {
+                        let record_label = store.record_label();
                         *record_label.write() = get_label().await.unwrap().label;
                     }
-                    let record_label = record_label.get();
+                    let record_label = store.record_label().get();
 
                     view! {
                         <h2>{record_label.name.clone()}</h2>
                         <div inner_html=markdown::to_html(&record_label.description) />
 
-                        <h3>"Artists"</h3>
+                        <h3 class="text-4xl font-bold">"Artists"</h3>
                         <ArtistList />
                     }
                 })}
@@ -41,10 +43,6 @@ pub fn RecordLabelHome() -> impl IntoView {
 /// Render a list of artists for a record label.
 #[component]
 pub fn ArtistList() -> impl IntoView {
-    let store = expect_context::<Store<GlobalState>>();
-    let record_label = store.record_label();
-    let artists = store.artists();
-
     view! {
         <ul>
             <Transition fallback=move || view! { <p>"Loading Artists"</p> }>
@@ -52,31 +50,35 @@ pub fn ArtistList() -> impl IntoView {
                     view! { <p class="error-messages text-xs-center">"Something went wrong."</p> }
                 }>
                     {move || Suspend::new(async move {
-                        if record_label.get().name.is_empty() {
+                        let store = expect_context::<Store<GlobalState>>();
+                        #[cfg(feature = "ssr")]
+                        if store.record_label().get().name.is_empty() {
+                            let record_label = store.record_label();
                             *record_label.write() = get_label().await.unwrap().label;
                         }
-                        let record_label = record_label.get();
-                        if artists.get().is_empty() {
+                        #[cfg(feature = "ssr")]
+                        if store.artists().get().is_empty() {
+                            let record_label = store.record_label().get();
+                            let artists = store.artists();
                             *artists.write() = get_label_artists(record_label)
                                 .await
                                 .unwrap()
                                 .artists;
                         }
+                        let artists = store.artists();
 
                         view! {
                             <For each=move || artists key=|row| row.id().get() let:artist>
                                 <li>
-                                    <A href=format!(
-                                        "/artist/{}",
-                                        artist.get().slug,
-                                    )>{artist.get().name}</A>
+                                    <A href=format!("/artists/{}", artist.get().slug)>
+                                        <h4 class="text-3xl font-bold">{artist.get().name}</h4>
+                                    </A>
 
                                     <div inner_html=markdown::to_html(&artist.get().description) />
                                 </li>
                             </For>
                         }
                     })}
-
                 </ErrorBoundary>
             </Transition>
         </ul>
