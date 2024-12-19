@@ -1,2 +1,2 @@
 pub mod artist;
-pub mod label;
+pub mod record_label;

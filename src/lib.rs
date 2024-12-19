@@ -5,9 +5,14 @@
 //#![warn(missing_docs)]
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
-#![warn(clippy::style)]
 #![warn(clippy::complexity)]
+#![warn(clippy::nursery)]
 #![warn(clippy::perf)]
+#![warn(clippy::style)]
+// This pattern works well for components/routes etc.
+#![allow(clippy::module_name_repetitions)]
+// False positive on `must_use` for components
+#![allow(clippy::must_use_candidate)]
 
 pub mod app;
 pub(crate) mod components;

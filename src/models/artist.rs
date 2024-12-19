@@ -4,11 +4,9 @@
 
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
-use leptos::logging;
 
 /// The Artist struct is used to represent a record artist in the database.
-#[derive(Serialize, Deserialize, Clone, Default, Debug, Store)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, Store, Eq, PartialEq)]
 pub struct Artist {
     /// The unique identifier of the artist
     pub id: i64,
@@ -34,10 +32,8 @@ impl Artist {
     /// Get a artist by its slug
     #[cfg(feature = "ssr")]
     pub async fn get_by_slug(slug: String) -> anyhow::Result<Self> {
-        use leptos::logging;
         use sqlx::Row;
 
-        logging::log!("Finding artist with slug {}", slug);
 
         let row = sqlx::query("SELECT * FROM artists WHERE slug = $1")
             .bind(slug.clone())
@@ -52,7 +48,6 @@ impl Artist {
             }
         };
 
-        logging::warn!("Found artist with slug {}", slug);
 
         Ok(Self {
             id: row.get("id"),

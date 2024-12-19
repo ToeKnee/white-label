@@ -4,15 +4,13 @@
 
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
-use leptos::logging;
 
 #[cfg(feature = "ssr")]
 use crate::models::artist::Artist;
 
 /// The Label struct is used to represent a record label in the database.
-#[derive(Serialize, Deserialize, Clone, Default, Debug, Store)]
-pub struct Label {
+#[derive(Serialize, Deserialize, Clone, Default, Debug, Store, Eq, PartialEq)]
+pub struct RecordLabel {
     /// The unique identifier of the label
     pub id: i64,
     /// The name of the label
@@ -29,7 +27,7 @@ pub struct Label {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-impl Label {
+impl RecordLabel {
     // pub async fn create(name: String, description: String, isrc_base: String) -> Self {
     //     let slug = slugify(&name);
     // }
@@ -51,8 +49,6 @@ impl Label {
             }
         };
 
-        logging::warn!("Finding label");
-      //  logging::warn!("Found label with slug {}", row.get("slug"));
 
         Ok(Self {
             id: row.get("id"),
@@ -104,7 +100,6 @@ impl Label {
     pub async fn artists(self) -> anyhow::Result<Vec<Artist>> {
         use sqlx::Row;
 
-        logging::log!("Finding artists for label {}", self.id);
         let rows = sqlx::query("SELECT * FROM artists WHERE label_id = $1 ORDER BY name ASC")
             .bind(self.id)
             .fetch_all(crate::database::get_db())

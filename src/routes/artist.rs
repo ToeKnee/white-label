@@ -1,6 +1,5 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
-// use leptos_router::*;
 
 use crate::models::artist::Artist;
 
@@ -9,7 +8,7 @@ pub struct ArtistResult {
     pub artist: Artist,
 }
 
-#[server(GetArtist, "/api", "GetJson")]
+#[server]
 pub async fn get_artist(slug: String) -> Result<ArtistResult, ServerFnError> {
     Ok(ArtistResult {
         artist: Artist::get_by_slug(slug).await.map_err(|x| {
