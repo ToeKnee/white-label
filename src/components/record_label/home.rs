@@ -1,13 +1,15 @@
 use leptos::prelude::*;
-use leptos_router::components::A;
 use markdown;
 use reactive_stores::Store;
 
+use crate::components::utils::error::ErrorPage;
+use crate::components::utils::loading::Loading;
 use crate::models::artist::Artist;
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::{get_label_artists, get_record_label};
 use crate::state::GlobalState;
 use crate::state::GlobalStateStoreFields;
+use crate::utils::shorten_string;
 
 /// Renders the record label page.
 #[component]
@@ -16,9 +18,9 @@ pub fn RecordLabelHome() -> impl IntoView {
     let (record_label, set_record_label) = signal(store.record_label().get());
     let record_label_resource = Resource::new(move || record_label.get(), |_| get_record_label());
     view! {
-        <Transition fallback=move || view! { <p>"Loading Record Label"</p> }>
+        <Transition fallback=move || view! { <Loading /> }>
             <ErrorBoundary fallback=|_| {
-                view! { <p class="error-messages text-xs-center">"Something went wrong."</p> }
+                ErrorPage
             }>
                 {move || Suspend::new(async move {
                     if store.record_label().get().id == 0 {
@@ -35,11 +37,13 @@ pub fn RecordLabelHome() -> impl IntoView {
                     let record_label = store.record_label().get();
 
                     view! {
-                        <h2>{record_label.name.clone()}</h2>
-                        <div inner_html=markdown::to_html(&record_label.description) />
+                        <article class="md:container md:mx-auto prose">
+                            <h1>{record_label.name.clone()}</h1>
+                            <div inner_html=markdown::to_html(&record_label.description) />
 
-                        <h3 class="text-4xl font-bold">"Artists"</h3>
-                        <ArtistList record_label />
+                            <h2>"Artists"</h2>
+                            <ArtistList record_label />
+                        </article>
                     }
                 })}
             </ErrorBoundary>
@@ -59,9 +63,9 @@ pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
     );
 
     view! {
-        <Transition fallback=move || view! { <p>"Loading Artists"</p> }>
+        <Transition fallback=move || view! { <Loading /> }>
             <ErrorBoundary fallback=|_| {
-                view! { <p class="error-messages text-xs-center">"Something went wrong."</p> }
+                ErrorPage
             }>
                 {move || Suspend::new(async move {
                     if store.artists().get().is_empty() {
@@ -79,14 +83,10 @@ pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
                     let artist_rows = artists
                         .into_iter()
                         .map(|artist| {
-                            view! {
-                                <li>
-                                    <ArtistRow artist />
-                                </li>
-                            }
+                            view! { <ArtistBox artist /> }
                         })
                         .collect::<Vec<_>>();
-                    view! { <ul>{artist_rows}</ul> }
+                    view! { <div class="grid grid-cols-3 grid-flow-row-dense">{artist_rows}</div> }
                 })}
             </ErrorBoundary>
         </Transition>
@@ -94,10 +94,22 @@ pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
 }
 
 #[component]
-fn ArtistRow(#[prop(into)] artist: Artist) -> impl IntoView {
+fn ArtistBox(#[prop(into)] artist: Artist) -> impl IntoView {
     view! {
-        <div>
-            <A href=format!("/artists/{}", artist.slug)>{artist.name}</A>
-        </div>
+        <a href=format!("/artists/{}", artist.slug) class="no-underline">
+            <div class="w-96 shadow-xl card card-compact bg-base-100">
+                <figure>
+                    <img
+                        src="https://jankyswitch.com/images/Avatar240.webp"
+                        alt=artist.name.clone()
+                    />
+                </figure>
+                <div class="card-body">
+                    <h2 class="card-title">{artist.name}</h2>
+
+                    <p>{shorten_string(artist.description)}</p>
+                </div>
+            </div>
+        </a>
     }
 }

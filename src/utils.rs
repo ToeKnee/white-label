@@ -51,6 +51,28 @@ pub fn trim_whitespace(s: &str) -> String {
     new_str
 }
 
+/// Shorten a string. It will either be to the first . or the first new line
+#[must_use]
+pub fn shorten_string(s: String) -> String {
+    let mut new_str = s.to_owned();
+    if let Some(index) = new_str.find('.') {
+        new_str.truncate(index + 1);
+    }
+    if let Some(index) = new_str.find('\n') {
+        new_str.truncate(index);
+    }
+
+    // Strip markdown
+    new_str = new_str.replace("*", "");
+    new_str = new_str.replace("#", "");
+    new_str = new_str.replace("[", "");
+    new_str = new_str.replace("]", "");
+    new_str = new_str.replace("(", "");
+    new_str = new_str.replace(")", "");
+
+    new_str
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

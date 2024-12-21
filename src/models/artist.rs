@@ -34,7 +34,6 @@ impl Artist {
     pub async fn get_by_slug(slug: String) -> anyhow::Result<Self> {
         use sqlx::Row;
 
-
         let row = sqlx::query("SELECT * FROM artists WHERE slug = $1")
             .bind(slug.clone())
             .fetch_one(crate::database::get_db())

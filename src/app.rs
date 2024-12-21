@@ -14,8 +14,10 @@ use leptos_router::{
 use reactive_stores::Store;
 
 use crate::components::artist::home::ArtistPage;
+use crate::components::record_label::footer::LabelFooter;
 use crate::components::record_label::header::LabelHeader;
 use crate::components::record_label::home::RecordLabelHome as RecordLabel;
+use crate::components::utils::not_found::NotFound;
 use crate::state::GlobalState;
 
 /// HTML shell for the application.
@@ -58,13 +60,15 @@ pub fn WhiteLabelRoot() -> impl IntoView {
         <Router>
             <LabelHeader />
 
-            <main>
-                <Routes fallback=|| "Page not found.".into_view()>
+            <main class="flex flex-col-reverse gap-6 justify-between my-6 space-y-6 xl:flex-row padding">
+                <Routes fallback=NotFound>
                     <Route path=StaticSegment("") view=RecordLabel />
                     <Route path=path!("artists") view=RecordLabel />
                     <Route path=path!("artists/:slug") view=ArtistPage />
                 </Routes>
             </main>
+
+            <LabelFooter />
         </Router>
     }
 }

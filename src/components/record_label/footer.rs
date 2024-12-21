@@ -10,7 +10,7 @@ use crate::state::GlobalStateStoreFields;
 
 /// Renders the record label page.
 #[component]
-pub fn LabelHeader() -> impl IntoView {
+pub fn LabelFooter() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
     let (record_label, set_record_label) = signal(store.record_label().get());
     let record_label_resource = Resource::new(move || record_label.get(), |_| get_record_label());
@@ -32,23 +32,30 @@ pub fn LabelHeader() -> impl IntoView {
                         };
                     }
                     let record_label = store.record_label().get();
-                    view! {
-                        <div class="navbar bg-primary text-primary-content">
-                            <div class="navbar-start">
-                                <a href="/" class="text-xl btn btn-ghost">
-                                    {record_label.name}
-                                </a>
-                            </div>
 
-                            <div class="navbar-end">
-                                <a href="/" class="btn btn-ghost">
-                                    Home
-                                </a>
-                                <a href="/about" class="btn btn-ghost">
-                                    About
-                                </a>
-                            </div>
-                        </div>
+                    view! {
+                        <footer class="p-10 footer bg-neutral text-neutral-content">
+                            <nav>
+                                <h6 class="footer-title">Services</h6>
+                                <a class="link link-hover">Branding</a>
+                                <a class="link link-hover">Design</a>
+                                <a class="link link-hover">Marketing</a>
+                                <a class="link link-hover">Advertisement</a>
+                            </nav>
+                            <nav>
+                                <h6 class="footer-title">{record_label.name}</h6>
+                                <a class="link link-hover">About us</a>
+                                <a class="link link-hover">Contact</a>
+                                <a class="link link-hover">Jobs</a>
+                                <a class="link link-hover">Press kit</a>
+                            </nav>
+                            <nav>
+                                <h6 class="footer-title">Legal</h6>
+                                <a class="link link-hover">Terms of use</a>
+                                <a class="link link-hover">Privacy policy</a>
+                                <a class="link link-hover">Cookie policy</a>
+                            </nav>
+                        </footer>
                     }
                 })}
             </ErrorBoundary>
