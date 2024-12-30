@@ -22,7 +22,9 @@ pub(crate) mod models;
 pub(crate) mod routes;
 #[cfg(feature = "ssr")]
 pub mod setup;
+#[cfg(feature = "ssr")]
 pub mod state;
+pub mod store;
 pub mod utils;
 
 #[cfg(feature = "hydrate")]
@@ -30,7 +32,7 @@ pub mod utils;
 /// Hydrate the application on the client side.
 pub fn hydrate() {
     #[allow(unused_imports)]
-    use crate::app::WhiteLabelRoot;
+    use crate::app::WhiteLabel;
     console_error_panic_hook::set_once();
-    leptos::mount::hydrate_body(WhiteLabelRoot);
+    leptos::mount::hydrate_body(WhiteLabel);
 }

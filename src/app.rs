@@ -8,17 +8,21 @@
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    components::{Route, Router, Routes},
+    components::{ProtectedRoute, Route, Router, Routes},
     path, StaticSegment,
 };
 use reactive_stores::Store;
 
 use crate::components::artist::home::ArtistPage;
+use crate::components::auth::login::Login;
+use crate::components::auth::logout::Logout;
+use crate::components::auth::register::Register;
 use crate::components::record_label::footer::LabelFooter;
 use crate::components::record_label::header::LabelHeader;
 use crate::components::record_label::home::RecordLabelHome as RecordLabel;
 use crate::components::utils::not_found::NotFound;
-use crate::state::GlobalState;
+use crate::routes::auth::get_user;
+use crate::store::GlobalState;
 
 /// HTML shell for the application.
 #[must_use]
@@ -34,7 +38,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <MetaTags />
             </head>
             <body>
-                <WhiteLabelRoot />
+                <WhiteLabel />
             </body>
         </html>
     }
@@ -43,11 +47,13 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 /// Renders the main application.
 #[component]
 #[must_use]
-pub fn WhiteLabelRoot() -> impl IntoView {
+pub fn WhiteLabel() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
     // Provide global state context
     provide_context(Store::new(GlobalState::default()));
+
+    let user = Resource::new(move || (), move |_| get_user());
 
     view! {
         // injects a stylesheet into the document <head>
@@ -65,6 +71,15 @@ pub fn WhiteLabelRoot() -> impl IntoView {
                     <Route path=StaticSegment("") view=RecordLabel />
                     <Route path=path!("artists") view=RecordLabel />
                     <Route path=path!("artists/:slug") view=ArtistPage />
+
+                    <Route path=path!("login") view=Login />
+                    <Route path=path!("register") view=Register />
+                    <ProtectedRoute
+                        path=path!("logout")
+                        condition=move || user.get().map(|r| r.ok().flatten().is_some())
+                        redirect_path=|| "/login"
+                        view=Logout
+                    />
                 </Routes>
             </main>
 

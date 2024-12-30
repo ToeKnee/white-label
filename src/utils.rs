@@ -31,7 +31,7 @@ pub fn slugify(text: &str) -> String {
     slug = binding;
 
     // Remove double spaces from the text
-    let binding = trim_whitespace(slug);
+    let binding = clean_whitespace(slug);
     slug = &binding;
 
     // Replace spaces with hyphens
@@ -40,7 +40,7 @@ pub fn slugify(text: &str) -> String {
 
 /// Trim whitespace from a string
 #[must_use]
-pub fn trim_whitespace(s: &str) -> String {
+pub fn clean_whitespace(s: &str) -> String {
     let mut new_str = s.trim().to_owned();
     let mut prev = ' '; // The initial value doesn't really matter
     new_str.retain(|ch| {
@@ -71,6 +71,15 @@ pub fn shorten_string(s: String) -> String {
     new_str = new_str.replace(")", "");
 
     new_str
+}
+
+/// Split a string at the first occurrence of a colon
+/// Returns a tuple of the string before the colon and the string after the semi-colon
+pub fn split_at_colon(s: String) -> (String, String) {
+    let mut split = s.splitn(2, ':');
+    let first = split.next().unwrap_or_default().trim().to_string();
+    let second = split.next().unwrap_or_default().trim().to_string();
+    (first, second)
 }
 
 #[cfg(test)]

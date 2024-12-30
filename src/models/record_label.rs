@@ -49,7 +49,6 @@ impl RecordLabel {
             }
         };
 
-
         Ok(Self {
             id: row.get("id"),
             name: row.get("name"),

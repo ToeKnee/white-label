@@ -1,40 +1,107 @@
-//! This module is the entry point of the application, it will setup the database, the web server and the logger.
-//! It will also serve the application.
+//! This file is the entry point for the server. It sets up the server and runs it.
+//! It also sets up the database connection and the session store.
+//! It also sets up the routes and the handlers for the server.
 
-use leptos::prelude::get_configuration;
-use leptos_axum::{generate_route_list, LeptosRoutes};
+use axum::{
+    body::Body as AxumBody,
+    extract::{Path, State},
+    http::Request,
+    response::{IntoResponse, Response},
+    routing::get,
+    Router,
+};
+use axum_session::{SessionConfig, SessionLayer, SessionStore};
+use axum_session_auth::{AuthConfig, AuthSessionLayer};
+use axum_session_sqlx::SessionPgPool;
+use leptos::{config::get_configuration, logging::log, prelude::provide_context};
+use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
+use sqlx::PgPool;
 
-use crate::app::{shell, WhiteLabelRoot};
+use crate::app::{shell, WhiteLabel};
+use crate::database::{get_db, init_db};
+use crate::models::auth::{ssr::AuthSession, User};
+use crate::state::AppState;
 
-/// # Panics
-///
-/// Will panic if anything is badly setup from database, or web server
-pub async fn init_app(configuration_path: Option<&str>) {
-    tracing_subscriber::fmt()
-        .with_level(true)
-        .with_max_level(tracing::Level::INFO)
-        .init();
-    // Init the pool into static
-    crate::database::init_db()
-        .await
-        .expect("problem during initialization of the database");
+async fn server_fn_handler(
+    State(app_state): State<AppState>,
+    auth_session: AuthSession,
+    path: Path<String>,
+    request: Request<AxumBody>,
+) -> impl IntoResponse {
+    log!("{:?}", path);
+    log!("{:?}", request);
+    handle_server_fns_with_context(
+        move || {
+            provide_context(auth_session.clone());
+            provide_context(app_state.pool.clone());
+        },
+        request,
+    )
+    .await
+}
 
-    // Get leptos configuration
-    let conf = get_configuration(configuration_path).unwrap();
-    let addr = conf.leptos_options.site_addr;
+async fn leptos_routes_handler(
+    auth_session: AuthSession,
+    state: State<AppState>,
+    req: Request<AxumBody>,
+) -> Response {
+    let State(app_state) = state.clone();
+    let handler = leptos_axum::render_route_with_context(
+        app_state.routes.clone(),
+        move || {
+            provide_context(auth_session.clone());
+            provide_context(app_state.pool.clone());
+        },
+        move || shell(app_state.leptos_options.clone()),
+    );
+    handler(state, req).await.into_response()
+}
+
+pub async fn init_app() {
+    simple_logger::init().expect("Couldn't initialize logging.");
+
+    let _db = init_db().await.unwrap();
+    let pool = get_db();
+
+    // Auth section
+    let session_config = SessionConfig::default().with_table_name("axum_sessions");
+    let auth_config = AuthConfig::<i64>::default();
+    let session_store =
+        SessionStore::<SessionPgPool>::new(Some(SessionPgPool::from(pool.clone())), session_config)
+            .await
+            .unwrap();
+
+    // Setting this to None means we'll be using cargo-leptos and its env vars
+    let conf = get_configuration(None).unwrap();
     let leptos_options = conf.leptos_options;
-    // Generate the list of routes in your Leptos App
-    let routes = generate_route_list(WhiteLabelRoot);
+    let addr = leptos_options.site_addr;
+    let routes = generate_route_list(WhiteLabel);
 
-    let app = axum::Router::new()
-        .leptos_routes(&leptos_options, routes, {
-            let leptos_options = leptos_options.clone();
-            move || shell(leptos_options.clone())
-        })
-        .fallback(leptos_axum::file_and_error_handler(shell))
-        .with_state(leptos_options);
+    let app_state = AppState {
+        leptos_options,
+        pool: pool.clone(),
+        routes: routes.clone(),
+    };
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    // build our application with a route
+    let app = Router::new()
+        .route(
+            "/api/*fn_name",
+            get(server_fn_handler).post(server_fn_handler),
+        )
+        .leptos_routes_with_handler(routes, get(leptos_routes_handler))
+        .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
+        .layer(
+            AuthSessionLayer::<User, i64, SessionPgPool, PgPool>::new(Some(pool.clone()))
+                .with_config(auth_config),
+        )
+        .layer(SessionLayer::new(session_store))
+        .with_state(app_state);
+
+    // run our app with hyper
+    // `axum::Server` is a re-export of `hyper::Server`
+    log!("Listening on http://{}", &addr);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();

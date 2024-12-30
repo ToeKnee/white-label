@@ -7,8 +7,8 @@ use crate::components::utils::loading::Loading;
 use crate::models::artist::Artist;
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::{get_label_artists, get_record_label};
-use crate::state::GlobalState;
-use crate::state::GlobalStateStoreFields;
+use crate::store::GlobalState;
+use crate::store::GlobalStateStoreFields;
 use crate::utils::shorten_string;
 
 /// Renders the record label page.

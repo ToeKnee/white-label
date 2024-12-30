@@ -5,8 +5,8 @@ use crate::components::utils::error::ErrorPage;
 use crate::components::utils::loading::Loading;
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::get_record_label;
-use crate::state::GlobalState;
-use crate::state::GlobalStateStoreFields;
+use crate::store::GlobalState;
+use crate::store::GlobalStateStoreFields;
 
 /// Renders the record label page.
 #[component]

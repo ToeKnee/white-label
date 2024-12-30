@@ -13,7 +13,7 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
-    white_label::setup::init_app(None).await;
+    white_label::setup::init_app().await;
 }
 
 /// There is no client-side main function - we are using SSR and hydrating the app instead.

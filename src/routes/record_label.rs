@@ -26,7 +26,9 @@ pub struct LabelArtistResult {
 }
 
 #[server]
-pub async fn get_label_artists(record_label: RecordLabel) -> Result<LabelArtistResult, ServerFnError> {
+pub async fn get_label_artists(
+    record_label: RecordLabel,
+) -> Result<LabelArtistResult, ServerFnError> {
     let artists = record_label.artists().await.map_err(|x| {
         let err = format!("Error while getting artists: {x:?}");
         tracing::error!("{err}");
