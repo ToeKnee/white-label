@@ -8,19 +8,20 @@
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    components::{ProtectedRoute, Route, Router, Routes},
+    components::{Route, Router, Routes},
     path, StaticSegment,
 };
 use reactive_stores::Store;
 
-use crate::components::artist::home::ArtistPage;
-use crate::components::auth::login::Login;
-use crate::components::auth::logout::Logout;
-use crate::components::auth::register::Register;
-use crate::components::record_label::footer::LabelFooter;
-use crate::components::record_label::header::LabelHeader;
-use crate::components::record_label::home::RecordLabelHome as RecordLabel;
-use crate::components::utils::not_found::NotFound;
+use crate::components::{
+    artist::home::ArtistPage,
+    auth::login::Login,
+    auth::logout::Logout,
+    auth::register::Register,
+    record_label::{footer::LabelFooter, header::LabelHeader, home::RecordLabelHome},
+    utils::{error::ErrorPage, loading::Loading, not_found::NotFound},
+};
+use crate::models::auth::User;
 use crate::routes::auth::get_user;
 use crate::store::GlobalState;
 
@@ -44,6 +45,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct UserContext(pub ReadSignal<User>, pub WriteSignal<User>);
+
 /// Renders the main application.
 #[component]
 #[must_use]
@@ -53,7 +57,9 @@ pub fn WhiteLabel() -> impl IntoView {
     // Provide global state context
     provide_context(Store::new(GlobalState::default()));
 
-    let user = Resource::new(move || (), move |_| get_user());
+    let (user, set_user) = signal(User::default());
+    let user_resource = Resource::new(move || (user.get()), move |_| get_user());
+    provide_context(UserContext(user, set_user));
 
     view! {
         // injects a stylesheet into the document <head>
@@ -63,27 +69,41 @@ pub fn WhiteLabel() -> impl IntoView {
         // sets the document title
         <Title text="Welcome to White-Label" />
 
+        // This transition is used for loading the user and storing it in context.
+        <Transition fallback=Loading>
+            <ErrorBoundary fallback=|_| {
+                ErrorPage
+            }>
+                {move || Suspend::new(async move {
+                    match user_resource.await {
+                        Ok(this_user) => {
+                            *set_user.write() = this_user.clone().unwrap_or_default();
+                            this_user
+                        }
+                        Err(_) => Some(User::default()),
+                    };
+                    view! { "" }
+                })}
+            </ErrorBoundary>
+        </Transition>
+
         <Router>
             <LabelHeader />
 
             <main class="flex flex-col-reverse gap-6 justify-between my-6 space-y-6 xl:flex-row padding">
                 <Routes fallback=NotFound>
-                    <Route path=StaticSegment("") view=RecordLabel />
-                    <Route path=path!("artists") view=RecordLabel />
+                    <Route path=StaticSegment("") view=RecordLabelHome />
+                    <Route path=path!("artists") view=RecordLabelHome />
                     <Route path=path!("artists/:slug") view=ArtistPage />
 
                     <Route path=path!("login") view=Login />
                     <Route path=path!("register") view=Register />
-                    <ProtectedRoute
-                        path=path!("logout")
-                        condition=move || user.get().map(|r| r.ok().flatten().is_some())
-                        redirect_path=|| "/login"
-                        view=Logout
-                    />
+                    <Route path=path!("logout") view=Logout />
                 </Routes>
             </main>
 
             <LabelFooter />
+
         </Router>
     }
 }

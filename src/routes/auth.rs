@@ -29,7 +29,7 @@ pub async fn login(
     username: String,
     password: String,
     remember: Option<String>,
-) -> Result<(), ServerFnError> {
+) -> Result<User, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
 
@@ -48,8 +48,7 @@ pub async fn login(
         true => {
             auth.login_user(user.id);
             auth.remember_user(remember.is_some());
-            leptos_axum::redirect("/");
-            Ok(())
+            Ok(user)
         }
         false => Err(ServerFnError::ServerError(
             "Password does not match.".to_string(),
@@ -63,7 +62,7 @@ pub async fn register(
     password: String,
     password_confirmation: String,
     remember: Option<String>,
-) -> Result<(), ServerFnError> {
+) -> Result<User, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
 
@@ -100,17 +99,14 @@ pub async fn register(
     auth.login_user(user.id);
     auth.remember_user(remember.is_some());
 
-    leptos_axum::redirect("/");
-
-    Ok(())
+    Ok(user)
 }
 
 #[server(Logout, "/api")]
-pub async fn logout() -> Result<(), ServerFnError> {
+pub async fn logout() -> Result<User, ServerFnError> {
     let auth = auth()?;
 
     auth.logout_user();
-    leptos_axum::redirect("/");
 
-    Ok(())
+    Ok(User::default())
 }

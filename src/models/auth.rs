@@ -24,6 +24,20 @@ impl Default for User {
     }
 }
 
+impl User {
+    pub fn is_authenticated(&self) -> bool {
+        self.id != -1
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.id != -1
+    }
+
+    pub fn is_anonymous(&self) -> bool {
+        self.id == -1
+    }
+}
+
 #[cfg(feature = "ssr")]
 pub mod ssr {
     pub use super::{User, UserPasshash};
@@ -105,15 +119,15 @@ pub mod ssr {
         }
 
         fn is_authenticated(&self) -> bool {
-            true
+            self.id == -1
         }
 
         fn is_active(&self) -> bool {
-            true
+            self.id != -1
         }
 
         fn is_anonymous(&self) -> bool {
-            false
+            self.id == -1
         }
     }
 

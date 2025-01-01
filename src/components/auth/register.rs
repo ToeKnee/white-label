@@ -1,6 +1,9 @@
 use leptos::form::ActionForm;
 use leptos::prelude::*;
+use leptos_router::hooks::use_navigate;
 
+use crate::app::UserContext;
+use crate::models::auth::User;
 use crate::routes::auth::Register;
 use crate::utils::split_at_colon;
 
@@ -8,7 +11,14 @@ use crate::utils::split_at_colon;
 #[component]
 pub fn Register() -> impl IntoView {
     let register = ServerAction::<Register>::new();
-    let value = Signal::derive(move || register.value().get().unwrap_or_else(|| Ok(())));
+    let value = Signal::derive(move || {
+        register
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(User::default()))
+    });
+
+    let user_context = expect_context::<UserContext>();
 
     view! {
         <article class="md:container md:mx-auto prose">
@@ -44,7 +54,16 @@ pub fn Register() -> impl IntoView {
                             </div>
                         }
                     }>
-                        <span>{value}</span>
+                        {move || {
+                            if value.get().ok().is_some() {
+                                let this_user = value.get().unwrap();
+                                user_context.1.set(this_user.clone());
+                                if this_user.is_authenticated() {
+                                    let navigate = use_navigate();
+                                    navigate("/", Default::default());
+                                }
+                            }
+                        }}
                     </ErrorBoundary>
 
                     <label class="flex gap-2 items-center input input-bordered">
