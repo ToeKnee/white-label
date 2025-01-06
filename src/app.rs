@@ -8,12 +8,14 @@
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    components::{Route, Router, Routes},
+    components::{ParentRoute, Route, Router, Routes},
     path, StaticSegment,
 };
 use reactive_stores::Store;
 
 use crate::components::{
+    admin::dashboard::Dashboard,
+    admin::root::AdminRoot,
     artist::home::ArtistPage,
     auth::login::Login,
     auth::logout::Logout,
@@ -82,7 +84,6 @@ pub fn WhiteLabel() -> impl IntoView {
                         }
                         Err(_) => Some(User::default()),
                     };
-                    view! { "" }
                 })}
             </ErrorBoundary>
         </Transition>
@@ -99,6 +100,15 @@ pub fn WhiteLabel() -> impl IntoView {
                     <Route path=path!("login") view=Login />
                     <Route path=path!("register") view=Register />
                     <Route path=path!("logout") view=Logout />
+
+                    <ParentRoute path=path!("admin") view=AdminRoot>
+                        <Route path=path!("") view=Dashboard />
+                    // <Route path=path!("conversations") view=|| view! {
+                    // <div class="tab">
+                    // "(Conversations)"
+                    // </div>
+                    // }/>
+                    </ParentRoute>
                 </Routes>
             </main>
 

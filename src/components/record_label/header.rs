@@ -22,7 +22,7 @@ pub fn LabelHeader() -> impl IntoView {
 
     view! {
         <div class="navbar bg-primary text-primary-content">
-            <Transition fallback=move || view! { <Loading /> }>
+            <Transition fallback=Loading>
                 <ErrorBoundary fallback=|_| {
                     ErrorPage
                 }>
@@ -49,25 +49,58 @@ pub fn LabelHeader() -> impl IntoView {
                     })}
                 </ErrorBoundary>
             </Transition>
-            <Transition fallback=move || view! { <Loading /> }>
+            <Transition fallback=Loading>
                 <ErrorBoundary fallback=|_| {
                     ErrorPage
                 }>
                     {move || Suspend::new(async move {
                         set_user.set(user_context.0.get().clone());
+
                         view! {
                             <div class="navbar-end">
                                 {if user.get().is_authenticated() {
                                     view! {
-                                        <span>
-                                            <span>{user.get().username}</span>
-                                            <a href="/logout" class="btn btn-ghost">
-                                                "Log out"
-                                            </a>
-                                        </span>
+                                        <div class="flex-none">
+                                            <ul class="px-1 menu menu-horizontal">
+                                                <li>
+                                                    <details>
+                                                        <summary>{user.get().username}</summary>
+                                                        <ul
+                                                            data-theme="light"
+                                                            class="p-2 rounded-t-none bg-base-100"
+                                                        >
+                                                            <li>
+                                                                <a href="/profile" class="btn btn-ghost">
+                                                                    "Profile"
+                                                                </a>
+                                                            </li>
+                                                            {if user.get().permissions.contains("admin") {
+                                                                view! {
+                                                                    <li>
+                                                                        <a href="/admin" class="btn btn-ghost">
+                                                                            "Admin"
+                                                                        </a>
+                                                                    </li>
+                                                                }
+                                                                    .into_any()
+                                                            } else {
+                                                                view! { <li /> }.into_any()
+                                                            }}
+
+                                                            <li>
+                                                                <a href="/logout" class="btn btn-ghost">
+                                                                    "Log out"
+                                                                </a>
+                                                            </li>
+                                                        </ul>
+                                                    </details>
+                                                </li>
+                                            </ul>
+                                        </div>
                                     }
                                         .into_any()
                                 } else {
+
                                     view! {
                                         <span>
                                             <a href="/register" class="btn btn-ghost">
