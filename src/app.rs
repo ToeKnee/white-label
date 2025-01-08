@@ -14,12 +14,9 @@ use leptos_router::{
 use reactive_stores::Store;
 
 use crate::components::{
-    admin::dashboard::Dashboard,
-    admin::root::AdminRoot,
+    admin::{dashboard::Dashboard, edit_label::EditLabel, root::AdminRoot},
     artist::home::ArtistPage,
-    auth::login::Login,
-    auth::logout::Logout,
-    auth::register::Register,
+    auth::{login::Login, logout::Logout, register::Register},
     record_label::{footer::LabelFooter, header::LabelHeader, home::RecordLabelHome},
     utils::{error::ErrorPage, loading::Loading, not_found::NotFound},
 };
@@ -103,11 +100,7 @@ pub fn WhiteLabel() -> impl IntoView {
 
                     <ParentRoute path=path!("admin") view=AdminRoot>
                         <Route path=path!("") view=Dashboard />
-                    // <Route path=path!("conversations") view=|| view! {
-                    // <div class="tab">
-                    // "(Conversations)"
-                    // </div>
-                    // }/>
+                        <Route path=path!("label") view=EditLabel />
                     </ParentRoute>
                 </Routes>
             </main>

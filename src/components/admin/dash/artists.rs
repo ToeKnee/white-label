@@ -19,7 +19,7 @@ pub fn ArtistsTable() -> impl IntoView {
     let (artists, set_artists) = signal(store.artists().get());
     let artists_resource = Resource::new(
         move || artists.get(),
-        move |_artists| get_label_artists(record_label.get()),
+        move |_artists| get_label_artists(record_label.get().id),
     );
 
     let user_context = expect_context::<UserContext>();

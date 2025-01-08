@@ -33,7 +33,7 @@ pub fn RecordLabel() -> impl IntoView {
                                     <div class="shadow-xl card bg-base-100">
                                         <div class="card-body">
                                             <h2 class="card-title">{record_label.get().name}</h2>
-                                            <p>"ISRC: "{record_label.get().isrc_base}" YYYY XXX"</p>
+                                            <p>"ISRC: "{record_label.get().isrc_base}" YY XXXXX"</p>
                                             <p>{shorten_string(record_label.get().description)}</p>
                                             <div class="justify-end card-actions">
                                                 <a href="/admin/label" class="btn btn-primary">

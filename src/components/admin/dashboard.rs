@@ -1,31 +1,18 @@
 use leptos::prelude::*;
-use reactive_stores::Store;
 
-use crate::app::UserContext;
 use crate::components::admin::dash::{artists::ArtistsTable, record_label::RecordLabel};
 use crate::components::utils::error::ErrorPage;
 use crate::components::utils::loading::Loading;
-use crate::models::auth::User;
-use crate::store::GlobalState;
-use crate::store::GlobalStateStoreFields;
 
 /// Renders the record label page.
 #[component]
 pub fn Dashboard() -> impl IntoView {
-    let store = expect_context::<Store<GlobalState>>();
-    let (record_label, set_record_label) = signal(store.record_label().get());
-
-    let user_context = expect_context::<UserContext>();
-    let (user, set_user) = signal(User::default());
-
     view! {
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    set_user.set(user_context.0.get().clone());
-                    set_record_label.set(store.record_label().get().clone());
                     view! {
                         <div class="flex flex-row flex-wrap gap-4 justify-around">
                             <RecordLabel />

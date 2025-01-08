@@ -48,7 +48,7 @@ pub fn Register() -> impl IntoView {
                                         .last()
                                         .map(|(_, e)| {
 
-                                            view! { <span>{split_at_colon(e.to_string()).1}</span> }
+                                            view! { <span>{split_at_colon(&e.to_string()).1}</span> }
                                         })
                                 }}
                             </div>

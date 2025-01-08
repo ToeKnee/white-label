@@ -59,7 +59,7 @@ pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
 
     let artists_resource = Resource::new(
         move || artists.get(),
-        move |_artists| get_label_artists(record_label.clone()),
+        move |_artists| get_label_artists(record_label.clone().id),
     );
 
     view! {

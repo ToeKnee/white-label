@@ -60,6 +60,35 @@ impl RecordLabel {
         })
     }
 
+    /// Get a label by its slug
+    #[cfg(feature = "ssr")]
+    pub async fn get_by_id(id: i64) -> anyhow::Result<Self> {
+        use sqlx::Row;
+
+        let row = sqlx::query("SELECT * FROM labels WHERE id = $1")
+            .bind(id)
+            .fetch_one(crate::database::get_db())
+            .await;
+
+        let row = match row {
+            Ok(row) => row,
+            Err(e) => {
+                eprintln!("{}", e);
+                return Err(anyhow::anyhow!("Could not find label with id {}", id));
+            }
+        };
+
+        Ok(Self {
+            id: row.get("id"),
+            name: row.get("name"),
+            slug: row.get("slug"),
+            description: row.get("description"),
+            isrc_base: row.get("isrc_base"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
     // /// Get a label by its slug
     // #[cfg(feature = "ssr")]
     // pub async fn get_by_slug(slug: String) -> anyhow::Result<Self> {
@@ -89,8 +118,39 @@ impl RecordLabel {
     //     })
     // }
 
-    // #[cfg(feature = "ssr")]
-    // pub async fn update() -> Self {}
+    #[cfg(feature = "ssr")]
+    pub async fn update(self: Self) -> anyhow::Result<Self> {
+        use crate::utils::slugify;
+        use sqlx::Row;
+
+        let slug = slugify(&self.name);
+        let row = sqlx::query("UPDATE labels SET name = $1, slug=$2, description = $3, isrc_base = $4, updated_at = NOW() WHERE id = $5 RETURNING *")
+            .bind(self.name)
+            .bind(slug)
+            .bind(self.description)
+            .bind(self.isrc_base)
+            .bind(self.id)
+            .fetch_one(crate::database::get_db())
+            .await;
+
+        let row = match row {
+            Ok(row) => row,
+            Err(e) => {
+                eprintln!("{}", e);
+                return Err(anyhow::anyhow!("Could not update label."));
+            }
+        };
+
+        Ok(Self {
+            id: row.get("id"),
+            name: row.get("name"),
+            slug: row.get("slug"),
+            description: row.get("description"),
+            isrc_base: row.get("isrc_base"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
 
     // #[cfg(feature = "ssr")]
     // pub async fn delete() -> Self {}
