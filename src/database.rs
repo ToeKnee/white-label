@@ -1,6 +1,5 @@
 use anyhow::Context;
 use dotenvy::dotenv;
-use sqlx;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::OnceLock;
 
@@ -17,7 +16,7 @@ async fn create_pool() -> sqlx::PgPool {
     let database_url = match database_url {
         Ok(database_url) => database_url,
         Err(e) => {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             std::process::exit(1);
         }
     };

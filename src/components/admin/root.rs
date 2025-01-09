@@ -18,16 +18,16 @@ pub fn AdminRoot() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    set_user.set(user_context.0.get().clone());
-                    if !user.get().permissions.contains("admin") {
-                        view! { <Redirect path="/login" /> }.into_any()
-                    } else {
+                    set_user.set(user_context.0.get());
+                    if user.get().permissions.contains("admin") {
                         view! {
                             <article class="md:container md:mx-auto prose">
                                 <Outlet />
                             </article>
                         }
                             .into_any()
+                    } else {
+                        view! { <Redirect path="/login" /> }.into_any()
                     }
                 })}
             </ErrorBoundary>

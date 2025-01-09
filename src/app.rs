@@ -74,13 +74,14 @@ pub fn WhiteLabel() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match user_resource.await {
-                        Ok(this_user) => {
-                            *set_user.write() = this_user.clone().unwrap_or_default();
-                            this_user
-                        }
-                        Err(_) => Some(User::default()),
-                    };
+                    (user_resource.await)
+                        .map_or_else(
+                            |_| Some(User::default()),
+                            |this_user| {
+                                *set_user.write() = this_user.clone().unwrap_or_default();
+                                this_user
+                            },
+                        );
                 })}
             </ErrorBoundary>
         </Transition>

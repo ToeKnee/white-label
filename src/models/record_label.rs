@@ -44,7 +44,7 @@ impl RecordLabel {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 return Err(anyhow::anyhow!("Could not find label"));
             }
         };
@@ -73,7 +73,7 @@ impl RecordLabel {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 return Err(anyhow::anyhow!("Could not find label with id {}", id));
             }
         };
@@ -119,7 +119,7 @@ impl RecordLabel {
     // }
 
     #[cfg(feature = "ssr")]
-    pub async fn update(self: Self) -> anyhow::Result<Self> {
+    pub async fn update(self) -> anyhow::Result<Self> {
         use crate::utils::slugify;
         use sqlx::Row;
 
@@ -136,7 +136,7 @@ impl RecordLabel {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 return Err(anyhow::anyhow!("Could not update label."));
             }
         };
@@ -167,7 +167,7 @@ impl RecordLabel {
         let rows = match rows {
             Ok(rows) => rows,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 return Err(anyhow::anyhow!("Could not find artists"));
             }
         };

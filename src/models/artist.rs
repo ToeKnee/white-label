@@ -42,7 +42,7 @@ impl Artist {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 return Err(anyhow::anyhow!("Could not find artist with slug {}", slug));
             }
         };

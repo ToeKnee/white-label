@@ -4,21 +4,17 @@ use reactive_stores::Store;
 use crate::app::UserContext;
 use crate::components::utils::error::ErrorPage;
 use crate::components::utils::loading::Loading;
-use crate::models::auth::User;
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::get_record_label;
 use crate::store::GlobalState;
 use crate::store::GlobalStateStoreFields;
 
-/// Renders the record label page.
+/// Renders the page header.
 #[component]
 pub fn LabelHeader() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
     let (record_label, set_record_label) = signal(store.record_label().get());
     let record_label_resource = Resource::new(move || record_label.get(), |_| get_record_label());
-
-    let user_context = expect_context::<UserContext>();
-    let (user, set_user) = signal(User::default());
 
     view! {
         <div class="navbar bg-primary text-primary-content">
@@ -49,75 +45,83 @@ pub fn LabelHeader() -> impl IntoView {
                     })}
                 </ErrorBoundary>
             </Transition>
-            <Transition fallback=Loading>
-                <ErrorBoundary fallback=|_| {
-                    ErrorPage
-                }>
-                    {move || Suspend::new(async move {
-                        set_user.set(user_context.0.get().clone());
 
+            <div class="navbar-end">
+                <UserMenu />
+            </div>
+        </div>
+    }
+}
+
+/// Renders the user menu page.
+#[component]
+pub fn UserMenu() -> impl IntoView {
+    let user_context = expect_context::<UserContext>();
+    let (user, set_user) = signal(user_context.0.get());
+
+    view! {
+        <Transition fallback=Loading>
+            <ErrorBoundary fallback=|_| {
+                ErrorPage
+            }>
+                {move || {
+                    set_user.set(user_context.0.get());
+                    if user.get().is_authenticated() {
                         view! {
-                            <div class="navbar-end">
-                                {if user.get().is_authenticated() {
-                                    view! {
-                                        <div class="flex-none">
-                                            <ul class="px-1 menu menu-horizontal">
+                            <div class="flex-none">
+                                <ul class="px-1 menu menu-horizontal">
+                                    <li>
+                                        <details>
+                                            <summary>{user.get().username}</summary>
+                                            <ul
+                                                data-theme="light"
+                                                class="p-2 rounded-t-none bg-base-100"
+                                            >
                                                 <li>
-                                                    <details>
-                                                        <summary>{user.get().username}</summary>
-                                                        <ul
-                                                            data-theme="light"
-                                                            class="p-2 rounded-t-none bg-base-100"
-                                                        >
-                                                            <li>
-                                                                <a href="/profile" class="btn btn-ghost">
-                                                                    "Profile"
-                                                                </a>
-                                                            </li>
-                                                            {if user.get().permissions.contains("admin") {
-                                                                view! {
-                                                                    <li>
-                                                                        <a href="/admin" class="btn btn-ghost">
-                                                                            "Admin"
-                                                                        </a>
-                                                                    </li>
-                                                                }
-                                                                    .into_any()
-                                                            } else {
-                                                                view! { <li /> }.into_any()
-                                                            }}
+                                                    <a href="/profile" class="btn btn-ghost">
+                                                        "Profile"
+                                                    </a>
+                                                </li>
+                                                {if user.get().permissions.contains("admin") {
+                                                    view! {
+                                                        <li>
+                                                            <a href="/admin" class="btn btn-ghost">
+                                                                "Admin"
+                                                            </a>
+                                                        </li>
+                                                    }
+                                                        .into_any()
+                                                } else {
+                                                    view! { <li /> }.into_any()
+                                                }}
 
-                                                            <li>
-                                                                <a href="/logout" class="btn btn-ghost">
-                                                                    "Log out"
-                                                                </a>
-                                                            </li>
-                                                        </ul>
-                                                    </details>
+                                                <li>
+                                                    <a href="/logout" class="btn btn-ghost">
+                                                        "Log out"
+                                                    </a>
                                                 </li>
                                             </ul>
-                                        </div>
-                                    }
-                                        .into_any()
-                                } else {
-
-                                    view! {
-                                        <span>
-                                            <a href="/register" class="btn btn-ghost">
-                                                "Register"
-                                            </a>
-                                            <a href="/login" class="btn btn-ghost">
-                                                "Login"
-                                            </a>
-                                        </span>
-                                    }
-                                        .into_any()
-                                }}
+                                        </details>
+                                    </li>
+                                </ul>
                             </div>
                         }
-                    })}
-                </ErrorBoundary>
-            </Transition>
-        </div>
+                            .into_any()
+                    } else {
+                        view! {
+                            <span>
+                                <a href="/register" class="btn btn-ghost">
+                                    "Register"
+                                </a>
+                                <a href="/login" class="btn btn-ghost">
+                                    "Login"
+                                </a>
+                            </span>
+                        }
+                            .into_any()
+                    }
+                }}
+            </ErrorBoundary>
+        </Transition>
     }
 }

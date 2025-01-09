@@ -1,5 +1,7 @@
 use leptos::prelude::*;
 
+use crate::utils::split_at_colon;
+
 /// A generic error page.
 #[component]
 pub fn ErrorPage() -> impl IntoView {
@@ -38,4 +40,13 @@ pub fn InlineError(message: String) -> impl IntoView {
             {message}
         </div>
     }
+}
+
+/// Display ServerFnError as an inline error message.
+#[component]
+pub fn ServerErrors(server_errors: Option<ServerFnError>) -> impl IntoView {
+    server_errors.map_or_else(
+        || view! { "" }.into_any(),
+        |errors| view! { <InlineError message=split_at_colon(&errors.to_string()).1 /> }.into_any(),
+    )
 }

@@ -33,7 +33,7 @@ pub async fn login(
     let pool = pool()?;
     let auth = auth()?;
 
-    if username == "" || password == "" {
+    if username.is_empty() || password.is_empty() {
         return Err(ServerFnError::ServerError(
             "Username and password are required.".to_string(),
         ));
@@ -44,15 +44,14 @@ pub async fn login(
             .await
             .ok_or_else(|| ServerFnError::new("User does not exist."))?;
 
-    match verify(password, &expected_passhash)? {
-        true => {
-            auth.login_user(user.id);
-            auth.remember_user(remember.is_some());
-            Ok(user)
-        }
-        false => Err(ServerFnError::ServerError(
+    if verify(password, &expected_passhash)? {
+        auth.login_user(user.id);
+        auth.remember_user(remember.is_some());
+        Ok(user)
+    } else {
+        Err(ServerFnError::ServerError(
             "Password does not match.".to_string(),
-        )),
+        ))
     }
 }
 
@@ -66,7 +65,7 @@ pub async fn register(
     let pool = pool()?;
     let auth = auth()?;
 
-    if username == "" || password == "" {
+    if username.is_empty() || password.is_empty() {
         return Err(ServerFnError::ServerError(
             "Username and password are required.".to_string(),
         ));
@@ -81,8 +80,7 @@ pub async fn register(
     // Check if user already exists
     User::get_from_username(username.clone(), &pool)
         .await
-        .map(|_| Err(ServerFnError::new("User already exists.")))
-        .unwrap_or(Ok(()))?;
+        .map_or(Ok(()), |_| Err(ServerFnError::new("User already exists.")))?;
 
     let password_hashed = hash(password, DEFAULT_COST).unwrap();
 

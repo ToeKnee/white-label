@@ -1,6 +1,6 @@
 use leptos::form::ActionForm;
 use leptos::prelude::*;
-use leptos_router::hooks::use_navigate;
+use leptos_router::{hooks::use_navigate, NavigateOptions};
 
 use crate::app::UserContext;
 use crate::models::auth::User;
@@ -56,7 +56,7 @@ pub fn Login() -> impl IntoView {
                                 user_context.1.set(this_user.clone());
                                 if this_user.is_authenticated() {
                                     let navigate = use_navigate();
-                                    navigate("/", Default::default());
+                                    navigate("/", NavigateOptions::default());
                                 }
                             }
                         }}

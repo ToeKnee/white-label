@@ -25,15 +25,15 @@ impl Default for User {
 }
 
 impl User {
-    pub fn is_authenticated(&self) -> bool {
+    pub const fn is_authenticated(&self) -> bool {
         self.id != -1
     }
 
-    pub fn is_active(&self) -> bool {
+    pub const fn is_active(&self) -> bool {
         self.id != -1
     }
 
-    pub fn is_anonymous(&self) -> bool {
+    pub const fn is_anonymous(&self) -> bool {
         self.id == -1
     }
 }
@@ -41,7 +41,7 @@ impl User {
 #[cfg(feature = "ssr")]
 pub mod ssr {
     pub use super::{User, UserPasshash};
-    pub use axum_session_auth::{Authentication, HasPermission};
+    pub use axum_session_auth::Authentication;
     use axum_session_sqlx::SessionPgPool;
     pub use sqlx::PgPool;
     pub use std::collections::HashSet;
@@ -69,7 +69,7 @@ pub mod ssr {
         }
 
         pub async fn get(id: i64, pool: &PgPool) -> Option<Self> {
-            User::get_with_passhash(id, pool)
+            Self::get_with_passhash(id, pool)
                 .await
                 .map(|(user, _)| user)
         }
@@ -97,7 +97,7 @@ pub mod ssr {
         }
 
         pub async fn get_from_username(name: String, pool: &PgPool) -> Option<Self> {
-            User::get_from_username_with_passhash(name, pool)
+            Self::get_from_username_with_passhash(name, pool)
                 .await
                 .map(|(user, _)| user)
         }
@@ -109,11 +109,11 @@ pub mod ssr {
     }
 
     #[async_trait]
-    impl Authentication<User, i64, PgPool> for User {
-        async fn load_user(userid: i64, pool: Option<&PgPool>) -> Result<User, anyhow::Error> {
+    impl Authentication<Self, i64, PgPool> for User {
+        async fn load_user(userid: i64, pool: Option<&PgPool>) -> Result<Self, anyhow::Error> {
             let pool = pool.unwrap();
 
-            User::get(userid, pool)
+            Self::get(userid, pool)
                 .await
                 .ok_or_else(|| anyhow::anyhow!("Cannot get user"))
         }
@@ -128,13 +128,6 @@ pub mod ssr {
 
         fn is_anonymous(&self) -> bool {
             self.id == -1
-        }
-    }
-
-    #[async_trait]
-    impl HasPermission<PgPool> for User {
-        async fn has(&self, perm: &str, _pool: &Option<&PgPool>) -> bool {
-            self.permissions.contains(perm)
         }
     }
 
@@ -154,14 +147,12 @@ pub mod ssr {
                 User {
                     id: self.id,
                     username: self.username,
-                    permissions: if let Some(user_perms) = sql_user_perms {
+                    permissions: sql_user_perms.map_or_else(HashSet::<String>::new, |user_perms| {
                         user_perms
                             .into_iter()
                             .map(|x| x.token)
                             .collect::<HashSet<String>>()
-                    } else {
-                        HashSet::<String>::new()
-                    },
+                    }),
                 },
                 UserPasshash(self.password),
             )

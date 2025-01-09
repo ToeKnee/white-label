@@ -1,11 +1,11 @@
 use leptos::form::ActionForm;
 use leptos::prelude::*;
-use leptos_router::hooks::use_navigate;
+use leptos_router::{hooks::use_navigate, NavigateOptions};
 
 use crate::app::UserContext;
+use crate::components::utils::error::ServerErrors;
 use crate::models::auth::User;
 use crate::routes::auth::Register;
-use crate::utils::split_at_colon;
 
 /// Renders the register page.
 #[component]
@@ -17,6 +17,7 @@ pub fn Register() -> impl IntoView {
             .get()
             .unwrap_or_else(|| Ok(User::default()))
     });
+    let (server_errors, set_server_errors) = signal(Option::<ServerFnError>::None);
 
     let user_context = expect_context::<UserContext>();
 
@@ -25,46 +26,24 @@ pub fn Register() -> impl IntoView {
             <h1>Register</h1>
             <ActionForm action=register>
                 <div class="grid gap-6">
-                    <ErrorBoundary fallback=|errors| {
-                        view! {
-                            <div role="alert" class="alert alert-warning">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="w-6 h-6 stroke-current shrink-0"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                </svg>
-                                {move || {
-                                    errors
-                                        .get()
-                                        .into_iter()
-                                        .last()
-                                        .map(|(_, e)| {
-
-                                            view! { <span>{split_at_colon(&e.to_string()).1}</span> }
-                                        })
-                                }}
-                            </div>
-                        }
-                    }>
+                    <Suspense>
                         {move || {
-                            if value.get().ok().is_some() {
-                                let this_user = value.get().unwrap();
-                                user_context.1.set(this_user.clone());
-                                if this_user.is_authenticated() {
-                                    let navigate = use_navigate();
-                                    navigate("/", Default::default());
+                            match value.get() {
+                                Ok(user_result) => {
+                                    let this_user = user_result;
+                                    user_context.1.set(this_user.clone());
+                                    if this_user.is_authenticated() {
+                                        let navigate = use_navigate();
+                                        navigate("/", NavigateOptions::default());
+                                    }
+                                    set_server_errors.set(None);
+                                }
+                                Err(error) => {
+                                    set_server_errors.set(Some(error));
                                 }
                             }
-                        }}
-                    </ErrorBoundary>
+                        }} {move || view! { <ServerErrors server_errors=server_errors.get() /> }}
+                    </Suspense>
 
                     <label class="flex gap-2 items-center input input-bordered">
                         <svg

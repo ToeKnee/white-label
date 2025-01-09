@@ -50,7 +50,7 @@ pub fn Logout() -> impl IntoView {
                         {move || {
                             if value.get().is_some() {
                                 let this_user = value.get().unwrap().ok().unwrap();
-                                user_context.1.set(this_user.clone());
+                                user_context.1.set(this_user);
                             }
                         }}
                     </ErrorBoundary>

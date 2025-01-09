@@ -24,8 +24,8 @@ pub fn RecordLabel() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    set_user.set(user_context.0.get().clone());
-                    set_record_label.set(store.record_label().get().clone());
+                    set_user.set(user_context.0.get());
+                    set_record_label.set(store.record_label().get());
                     view! {
                         {if user.get().permissions.contains("label_owner") {
                             view! {

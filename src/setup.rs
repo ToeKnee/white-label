@@ -1,4 +1,5 @@
 //! This file is the entry point for the server. It sets up the server and runs it.
+//!
 //! It also sets up the database connection and the session store.
 //! It also sets up the routes and the handlers for the server.
 
@@ -13,7 +14,7 @@ use axum::{
 use axum_session::{SessionConfig, SessionLayer, SessionStore};
 use axum_session_auth::{AuthConfig, AuthSessionLayer};
 use axum_session_sqlx::SessionPgPool;
-use leptos::{config::get_configuration, logging::log, prelude::provide_context};
+use leptos::{config::get_configuration, logging, prelude::provide_context};
 use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
 use sqlx::PgPool;
 
@@ -28,8 +29,8 @@ async fn server_fn_handler(
     path: Path<String>,
     request: Request<AxumBody>,
 ) -> impl IntoResponse {
-    log!("{:?}", path);
-    log!("{:?}", request);
+    logging::debug_warn!("{:?}", path);
+    logging::debug_warn!("{:?}", request);
     handle_server_fns_with_context(
         move || {
             provide_context(auth_session.clone());
@@ -57,10 +58,15 @@ async fn leptos_routes_handler(
     handler(state, req).await.into_response()
 }
 
+/// Initialise the application.
+///
+/// # Panics
+///
+/// This function will panic if it can't initialise the logger.
 pub async fn init_app() {
     simple_logger::init().expect("Couldn't initialize logging.");
 
-    let _db = init_db().await.unwrap();
+    init_db().await.unwrap();
     let pool = get_db();
 
     // Auth section
@@ -100,7 +106,7 @@ pub async fn init_app() {
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
-    log!("Listening on http://{}", &addr);
+    logging::log!("Listening on http://{}", &addr);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app.into_make_service())
         .await

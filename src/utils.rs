@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn test_slugify_with_unicode() {
         assert_eq!(
-            slugify("Ἰοὺ ἰού· τὰ πάντʼ ἂν ἐξήκοι σαφῆ."),
+            slugify("Ἰοὺ ἰού· τὰ πάντʼ ἂν ἐξήκοι σαφῆ."),
             "iou-iou-ta-pant-an-exekoi-saphe"
         );
     }

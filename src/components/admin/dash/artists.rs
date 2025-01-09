@@ -31,8 +31,8 @@ pub fn ArtistsTable() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    set_user.set(user_context.0.get().clone());
-                    set_artists.set(store.artists().get().clone());
+                    set_user.set(user_context.0.get());
+                    set_artists.set(store.artists().get());
                     if store.artists().get().is_empty() {
                         match artists_resource.await {
                             Ok(these_artists) => {
@@ -67,7 +67,7 @@ pub fn ArtistsTable() -> impl IntoView {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {if artists.get().len() == 0 {
+                                            {if artists.get().is_empty() {
                                                 view! {
                                                     <tr>
                                                         <td colspan="5">No artists found.</td>
@@ -98,7 +98,7 @@ fn ArtistRow(#[prop(into)] artist: Artist) -> impl IntoView {
             <td>0</td>
             <td>0</td>
             <td>
-                <a href=format!("/admin/artist/{}", artist.slug.clone()) class="btn btn-primary">
+                <a href=format!("/admin/artist/{}", artist.slug) class="btn btn-primary">
                     Edit
                 </a>
             </td>
