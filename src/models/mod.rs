@@ -3,3 +3,5 @@
 pub mod artist;
 pub mod auth;
 pub mod record_label;
+#[cfg(test)]
+pub mod test_helpers;

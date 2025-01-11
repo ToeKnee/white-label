@@ -38,7 +38,11 @@ pub fn ArtistPage() -> impl IntoView {
                     view! {
                         <article class="md:container md:mx-auto prose">
                             <h1>{artist.get().name}</h1>
-                            <div inner_html=markdown::to_html(&artist.get().description) />
+                            <div inner_html=markdown::to_html_with_options(
+                                    &artist.get().description,
+                                    &markdown::Options::gfm(),
+                                )
+                                .unwrap() />
                         </article>
                     }
                 })}

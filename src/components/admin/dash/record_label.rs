@@ -7,7 +7,7 @@ use crate::components::utils::loading::Loading;
 use crate::models::auth::User;
 use crate::store::GlobalState;
 use crate::store::GlobalStateStoreFields;
-use crate::utils::shorten_string;
+use crate::utils::shorten_string::shorten_string;
 
 /// Renders the record label page.
 #[component]

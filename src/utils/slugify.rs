@@ -51,37 +51,6 @@ pub fn clean_whitespace(s: &str) -> String {
     new_str
 }
 
-/// Shorten a string. It will either be to the first . or the first new line
-#[must_use]
-pub fn shorten_string(s: String) -> String {
-    let mut new_str = s;
-    if let Some(index) = new_str.find('.') {
-        new_str.truncate(index + 1);
-    }
-    if let Some(index) = new_str.find('\n') {
-        new_str.truncate(index);
-    }
-
-    // Strip markdown
-    new_str = new_str.replace('*', "");
-    new_str = new_str.replace('#', "");
-    new_str = new_str.replace('[', "");
-    new_str = new_str.replace(']', "");
-    new_str = new_str.replace('(', "");
-    new_str = new_str.replace(')', "");
-
-    new_str
-}
-
-/// Split a string at the first occurrence of a colon
-/// Returns a tuple of the string before the colon and the string after the semi-colon
-pub fn split_at_colon(s: &str) -> (String, String) {
-    let mut split = s.splitn(2, ':');
-    let first = split.next().unwrap_or_default().trim().to_string();
-    let second = split.next().unwrap_or_default().trim().to_string();
-    (first, second)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

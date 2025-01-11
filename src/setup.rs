@@ -19,7 +19,7 @@ use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRou
 use sqlx::PgPool;
 
 use crate::app::{shell, WhiteLabel};
-use crate::database::{get_db, init_db};
+use crate::database::create_pool;
 use crate::models::auth::{ssr::AuthSession, User};
 use crate::state::AppState;
 
@@ -66,8 +66,8 @@ async fn leptos_routes_handler(
 pub async fn init_app() {
     simple_logger::init().expect("Couldn't initialize logging.");
 
-    init_db().await.unwrap();
-    let pool = get_db();
+    // Set up the database
+    let pool = create_pool().await;
 
     // Auth section
     let session_config = SessionConfig::default().with_table_name("axum_sessions");

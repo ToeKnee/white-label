@@ -5,7 +5,7 @@ use leptos_router::{hooks::use_navigate, NavigateOptions};
 use crate::app::UserContext;
 use crate::models::auth::User;
 use crate::routes::auth::Login;
-use crate::utils::split_at_colon;
+use crate::utils::split_at_colon::split_at_colon;
 
 /// Renders the login page.
 #[component]

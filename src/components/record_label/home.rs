@@ -9,7 +9,7 @@ use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::{get_label_artists, get_record_label};
 use crate::store::GlobalState;
 use crate::store::GlobalStateStoreFields;
-use crate::utils::shorten_string;
+use crate::utils::shorten_string::shorten_string;
 
 /// Renders the record label page.
 #[component]
@@ -39,7 +39,11 @@ pub fn RecordLabelHome() -> impl IntoView {
                     view! {
                         <article class="md:container md:mx-auto prose">
                             <h1>{record_label.name.clone()}</h1>
-                            <div inner_html=markdown::to_html(&record_label.description) />
+                            <div inner_html=markdown::to_html_with_options(
+                                    &record_label.description,
+                                    &markdown::Options::gfm(),
+                                )
+                                .unwrap() />
 
                             <h2>"Artists"</h2>
                             <ArtistList record_label />

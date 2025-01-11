@@ -3,6 +3,8 @@ use leptos::server;
 
 use crate::models::artist::Artist;
 use crate::models::record_label::RecordLabel;
+#[cfg(feature = "ssr")]
+use crate::state::pool;
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
 pub struct LabelResult {
@@ -11,8 +13,10 @@ pub struct LabelResult {
 
 #[server]
 pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
+    let pool = pool()?;
+
     Ok(LabelResult {
-        label: RecordLabel::first().await.map_err(|x| {
+        label: RecordLabel::first(&pool).await.map_err(|x| {
             let err = format!("Error while getting labels: {x:?}");
             tracing::error!("{err}");
             ServerFnError::new("Could not retrieve labels, try again later")
@@ -27,12 +31,15 @@ pub struct LabelArtistResult {
 
 #[server]
 pub async fn get_label_artists(record_label_id: i64) -> Result<LabelArtistResult, ServerFnError> {
-    let record_label = RecordLabel::get_by_id(record_label_id).await.map_err(|x| {
-        let err = format!("Error while getting label: {x:?}");
-        tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve label, try again later")
-    })?;
-    let artists = record_label.artists().await.map_err(|x| {
+    let pool = pool()?;
+    let record_label = RecordLabel::get_by_id(&pool, record_label_id)
+        .await
+        .map_err(|x| {
+            let err = format!("Error while getting label: {x:?}");
+            tracing::error!("{err}");
+            ServerFnError::new("Could not retrieve label, try again later")
+        })?;
+    let artists = record_label.artists(&pool).await.map_err(|x| {
         let err = format!("Error while getting artists: {x:?}");
         tracing::error!("{err}");
         ServerFnError::new("Could not retrieve artists, try again later")
@@ -50,6 +57,8 @@ pub async fn update_record_label(
     use crate::state::auth;
 
     let auth = auth()?;
+    let pool = pool()?;
+
     let current_user = auth
         .current_user
         .as_ref()
@@ -60,7 +69,7 @@ pub async fn update_record_label(
         ));
     }
 
-    let mut record_label = RecordLabel::get_by_id(id).await.map_err(|x| {
+    let mut record_label = RecordLabel::get_by_id(&pool, id).await.map_err(|x| {
         let err = format!("Error while getting label: {x:?}");
         tracing::error!("{err}");
         ServerFnError::new("Could not retrieve label, try again later")
@@ -69,12 +78,16 @@ pub async fn update_record_label(
     record_label.name = name;
     record_label.description = description;
     record_label.isrc_base = isrc_base;
-    record_label.clone().update().await.map_err(|x| {
-        let err = format!("Error while updating label: {x:?}");
-        tracing::error!("{err}");
-        ServerFnError::new("Could not update label, try again later")
-    })?;
-    Ok(LabelResult {
-        label: record_label,
-    })
+    match record_label.clone().update(&pool).await {
+        Ok(record_label) => Ok(LabelResult {
+            label: record_label,
+        }),
+        Err(e) => {
+            let err = format!("Error while updating label: {e}");
+            tracing::error!("{err}");
+            Err(ServerFnError::new(
+                "Could not update label, try again later",
+            ))
+        }
+    }
 }

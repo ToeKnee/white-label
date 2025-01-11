@@ -131,7 +131,7 @@ pub mod ssr {
         }
     }
 
-    #[derive(sqlx::FromRow, Clone)]
+    #[derive(sqlx::FromRow, Clone, Debug)]
     pub struct SqlUser {
         pub id: i64,
         pub username: String,
@@ -156,6 +156,134 @@ pub mod ssr {
                 },
                 UserPasshash(self.password),
             )
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_default() {
+        let user = User::default();
+        assert_eq!(user.id, -1);
+        assert_eq!(user.username, "Guest");
+        assert!(user.permissions.is_empty());
+    }
+
+    #[test]
+    fn test_user_is_authenticated() {
+        let user = User::default();
+        assert!(!user.is_authenticated());
+
+        let user = User {
+            id: 1,
+            username: "test".into(),
+            permissions: HashSet::new(),
+        };
+        assert!(user.is_authenticated());
+    }
+
+    #[test]
+    fn test_user_is_active() {
+        let user = User::default();
+        assert!(!user.is_active());
+
+        let user = User {
+            id: 1,
+            username: "test".into(),
+            permissions: HashSet::new(),
+        };
+        assert!(user.is_active());
+    }
+
+    #[test]
+    fn test_user_is_anonymous() {
+        let user = User::default();
+        assert!(user.is_anonymous());
+
+        let user = User {
+            id: 1,
+            username: "test".into(),
+            permissions: HashSet::new(),
+        };
+        assert!(!user.is_anonymous());
+    }
+
+    #[cfg(feature = "ssr")]
+    mod ssr_tests {
+        use super::*;
+        use axum_session_auth::Authentication;
+        use bcrypt::verify;
+        use sqlx::PgPool;
+        use std::collections::HashSet;
+
+        use crate::models::test_helpers::create_test_user;
+
+        #[sqlx::test]
+        async fn test_get_with_passhash(pool: PgPool) {
+            let test_user = create_test_user(&pool, 1).await.unwrap();
+            let (user, UserPasshash(passhash)) = User::get_with_passhash(1, &pool).await.unwrap();
+            assert_eq!(user.id, test_user.id);
+            assert_eq!(user.username, test_user.username);
+            assert_eq!(user.permissions, HashSet::new());
+            assert!(verify("password", &passhash).unwrap());
+        }
+
+        #[sqlx::test]
+        async fn test_get(pool: PgPool) {
+            let test_user = create_test_user(&pool, 1).await.unwrap();
+            let user = User::get(1, &pool).await.unwrap();
+            assert_eq!(user.id, test_user.id);
+            assert_eq!(user.username, test_user.username);
+            assert_eq!(user.permissions, HashSet::new());
+        }
+
+        #[sqlx::test]
+        async fn test_get_from_username_with_passhash(pool: PgPool) {
+            let test_user = create_test_user(&pool, 1).await.unwrap();
+            let (user, UserPasshash(passhash)) =
+                User::get_from_username_with_passhash("test-1".into(), &pool)
+                    .await
+                    .unwrap();
+            assert_eq!(user.id, test_user.id);
+            assert_eq!(user.username, test_user.username);
+            assert_eq!(user.permissions, HashSet::new());
+            assert!(verify("password", &passhash).unwrap());
+        }
+
+        #[sqlx::test]
+        async fn test_get_from_username(pool: PgPool) {
+            let test_user = create_test_user(&pool, 1).await.unwrap();
+            let user = User::get_from_username("test-1".into(), &pool)
+                .await
+                .unwrap();
+            assert_eq!(user.id, test_user.id);
+            assert_eq!(user.username, test_user.username);
+            assert_eq!(user.permissions, HashSet::new());
+        }
+
+        #[sqlx::test]
+        async fn test_load_user(pool: PgPool) {
+            let test_user = create_test_user(&pool, 1).await.unwrap();
+            let user = User::load_user(1, Some(&pool)).await.unwrap();
+            assert_eq!(user.id, test_user.id);
+            assert_eq!(user.username, test_user.username);
+            assert_eq!(user.permissions, HashSet::new());
+        }
+
+        #[sqlx::test]
+        async fn test_is_authenticated() {
+            let user = User::default();
+            assert!(!user.is_authenticated());
+
+            let user = User {
+                id: 1,
+                username: "test".into(),
+                permissions: HashSet::new(),
+            };
+            assert!(user.is_authenticated());
         }
     }
 }

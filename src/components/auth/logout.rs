@@ -3,7 +3,7 @@ use leptos::prelude::*;
 
 use crate::app::UserContext;
 use crate::routes::auth::Logout;
-use crate::utils::split_at_colon;
+use crate::utils::split_at_colon::split_at_colon;
 
 /// Renders the login page.
 #[component]

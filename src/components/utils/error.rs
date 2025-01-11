@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::utils::split_at_colon;
+use crate::utils::split_at_colon::split_at_colon;
 
 /// A generic error page.
 #[component]
