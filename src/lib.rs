@@ -15,13 +15,13 @@
 #![allow(clippy::must_use_candidate)]
 
 pub mod app;
-pub(crate) mod components;
+pub mod components;
 #[cfg(feature = "ssr")]
-pub(crate) mod database;
-pub(crate) mod models;
-pub(crate) mod routes;
+pub mod database;
+pub mod models;
+pub mod routes;
 #[cfg(feature = "ssr")]
-pub(crate) mod services;
+pub mod services;
 #[cfg(feature = "ssr")]
 pub mod setup;
 #[cfg(feature = "ssr")]

@@ -1,3 +1,7 @@
+//! Helper functions for authentication
+//!
+//! This module contains helper functions for authentication
+//! It will make your life a lot easier for handling authentication and authorisation
 use leptos::logging;
 use leptos::prelude::ServerFnError;
 

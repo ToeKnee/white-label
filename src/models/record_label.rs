@@ -30,7 +30,16 @@ pub struct RecordLabel {
 }
 
 impl RecordLabel {
-    /// Get a label by its slug
+    /// Get first record label
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    ///
+    /// # Returns
+    /// The record label
+    ///
+    /// # Errors
+    /// If the record label cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn first(pool: &PgPool) -> anyhow::Result<Self> {
         let row = sqlx::query("SELECT * FROM labels ORDER BY id ASC LIMIT 1")
@@ -56,7 +65,17 @@ impl RecordLabel {
         })
     }
 
-    /// Get a label by its slug
+    /// Get a record label by id
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `id` - The ID of the record label
+    ///
+    /// # Returns
+    /// The record label
+    ///
+    /// # Errors
+    /// If the record label cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
         let row = sqlx::query("SELECT * FROM labels WHERE id = $1")
@@ -83,6 +102,16 @@ impl RecordLabel {
         })
     }
 
+    /// Update a label
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    ///
+    /// # Returns
+    /// The updated label
+    ///
+    /// # Errors
+    /// If the label cannot be updated, return an error
     #[cfg(feature = "ssr")]
     pub async fn update(self, pool: &PgPool) -> anyhow::Result<Self> {
         use crate::utils::slugify::slugify;
@@ -116,6 +145,16 @@ impl RecordLabel {
         })
     }
 
+    /// Get a label by its slug
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    ///
+    /// # Returns
+    /// The artists signed to the label
+    ///
+    /// # Errors
+    /// If the artists cannot be retrieved, return an error
     #[cfg(feature = "ssr")]
     pub async fn artists(self, pool: &PgPool) -> anyhow::Result<Vec<Artist>> {
         let rows = sqlx::query("SELECT * FROM artists WHERE label_id = $1 ORDER BY name ASC")

@@ -6,6 +6,21 @@ use crate::models::auth::{ssr::SqlPermissionTokens, ssr::SqlUser, User};
 use crate::models::record_label::RecordLabel;
 
 /// Create test artist
+///
+/// # Arguments
+/// * `pool` - The database connection pool
+/// * `id` - The ID of the artist
+/// * `record_label` - The record label the artist is signed to (optional)
+///
+/// # Returns
+/// The created artist
+///
+/// # Errors
+/// If the artist cannot be created, return an error
+///
+/// # Panics
+/// If the artist cannot be created, panic
+/// If the record label is not found or cannot be created, panic
 #[cfg(feature = "ssr")]
 pub async fn create_test_artist(
     pool: &PgPool,
@@ -30,6 +45,19 @@ pub async fn create_test_artist(
 }
 
 /// Create test record label
+///
+/// # Arguments
+/// * `pool` - The database connection pool
+/// * `id` - The ID of the record label
+///
+/// # Returns
+/// The created record label
+///
+/// # Errors
+/// If the record label cannot be created, return an error
+///
+/// # Panics
+/// If the record label cannot be created, panic
 #[cfg(feature = "ssr")]
 pub async fn create_test_record_label(
     pool: &PgPool,
@@ -49,6 +77,19 @@ pub async fn create_test_record_label(
 }
 
 /// Create test user
+///
+/// # Arguments
+/// * `pool` - The database connection pool
+/// * `id` - The ID of the user
+///
+/// # Returns
+/// The created user
+///
+/// # Errors
+/// If the user cannot be created, return an error
+///
+/// # Panics
+/// If the user cannot be created, panic
 #[cfg(feature = "ssr")]
 pub async fn create_test_user(pool: &PgPool, id: usize) -> Result<SqlUser, sqlx::Error> {
     let user = sqlx::query_as::<_, SqlUser>(
@@ -62,7 +103,22 @@ pub async fn create_test_user(pool: &PgPool, id: usize) -> Result<SqlUser, sqlx:
     Ok(user)
 }
 
-/// Create test user with permissions
+/// Create test user with provided permissions
+///
+/// # Arguments
+/// * `pool` - The database connection pool
+/// * `id` - The ID of the user
+/// * `permissions` - The permissions to assign to the user
+///
+/// # Returns
+/// The created user with the provided permissions
+///
+/// # Errors
+/// If the user cannot be created, return an error
+/// If the permissions cannot be assigned to the user, return an error
+///
+/// # Panics
+/// If the user cannot be created, panic
 #[cfg(feature = "ssr")]
 pub async fn create_test_user_with_permissions(
     pool: &PgPool,

@@ -1,3 +1,4 @@
+//! Services for the artist routes
 use leptos::prelude::ServerFnError;
 use sqlx::PgPool;
 
@@ -5,6 +6,17 @@ use super::authentication_helpers::user_with_permissions;
 use crate::models::{artist::Artist, auth::User};
 use crate::routes::artist::ArtistResult;
 
+/// Get an artist by slug
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// slug: String - The slug of the artist
+///
+/// # Returns
+/// Result<`ArtistResult`, `ServerFnError`> - The artist
+///
+/// # Errors
+/// If the artist cannot be found, return an error
 pub async fn get_artist_service(pool: PgPool, slug: String) -> Result<ArtistResult, ServerFnError> {
     Ok(ArtistResult {
         artist: Artist::get_by_slug(&pool, slug).await.map_err(|x| {
@@ -15,6 +27,22 @@ pub async fn get_artist_service(pool: PgPool, slug: String) -> Result<ArtistResu
     })
 }
 
+/// Create a new artist
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// user: Option<&User> - The user creating the artist
+/// name: String - The name of the artist
+/// description: String - The description of the artist
+/// `record_label_id`: i64 - The ID of the record label the artist is signed to
+///
+/// # Returns
+/// Result<`ArtistResult`, `ServerFnError`> - The created artist
+///
+/// # Errors
+/// If the name is empty, return an error
+/// If the artist cannot be created, return an error
+/// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
 pub async fn create_artist_service(
     pool: PgPool,

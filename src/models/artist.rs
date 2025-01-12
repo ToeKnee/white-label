@@ -33,6 +33,19 @@ pub struct Artist {
 
 impl Artist {
     /// Create a new artist
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `name` - The name of the artist
+    /// * `description` - The description of the artist
+    /// * `record_label_id` - The ID of the record label the artist is signed to
+    ///
+    /// # Returns
+    /// The created artist
+    ///
+    /// # Errors
+    /// If the artist cannot be created, return an error
+    /// If the record label is not found, return an error
     #[cfg(feature = "ssr")]
     pub async fn create(
         pool: &PgPool,
@@ -66,7 +79,17 @@ impl Artist {
         Ok(artist)
     }
 
-    /// Get a artist by its slug
+    /// Get artist by slug
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `slug` - The slug of the artist
+    ///
+    /// # Returns
+    /// The artist
+    ///
+    /// # Errors
+    /// If the artist cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
         let row = sqlx::query("SELECT * FROM artists WHERE slug = $1")

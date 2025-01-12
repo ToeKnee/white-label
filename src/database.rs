@@ -2,6 +2,21 @@ use anyhow::Context;
 use dotenvy::dotenv;
 use sqlx::postgres::PgPoolOptions;
 
+/// Create a database connection pool.
+///
+/// # Returns
+///
+/// A `PgPool` connection pool.
+///
+/// # Errors
+///
+/// If the `.env` file is not found, return an error.
+/// If the `DATABASE_URL` environment variable is not set, return an error.
+/// If the migrations fail, return an error.
+///
+/// # Panics
+///
+/// If the database connection fails, the program will panic.
 pub async fn create_pool() -> sqlx::PgPool {
     // Load environment variables form env file.
     let _ = dotenv().context(".env file not found");
