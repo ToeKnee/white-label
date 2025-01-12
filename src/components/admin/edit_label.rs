@@ -46,7 +46,6 @@ pub fn EditLabel() -> impl IntoView {
                     view! {
                         <ActionForm action=update_record_label>
                             <div class="grid gap-6">
-
                                 {move || {
                                     match value.get() {
                                         Ok(label_result) => {
@@ -95,14 +94,15 @@ pub fn EditLabel() -> impl IntoView {
                                         class="grow input input-bordered"
                                         placeholder="ISRC prefix"
                                         name="isrc_base"
-                                        value=record_label.get().isrc_base
+                                        value=move || record_label.get().isrc_base
                                     />
                                     <div class="label">
                                         <span class="label-text-alt">
                                             "Country Code and First Registrant Code only"
                                         </span>
                                         <span class="label-text-alt">
-                                            "Example " {record_label.get().isrc_base} " 25 00001"
+                                            "Example " {move || record_label.get().isrc_base}
+                                            " 25 00001"
                                         </span>
                                     </div>
                                 </label> <button class="btn btn-primary">Update</button>

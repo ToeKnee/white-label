@@ -2,7 +2,7 @@ use sqlx::PgPool;
 
 use crate::models::artist::Artist;
 #[cfg(feature = "ssr")]
-use crate::models::auth::ssr::SqlUser;
+use crate::models::auth::{ssr::SqlPermissionTokens, ssr::SqlUser, User};
 use crate::models::record_label::RecordLabel;
 
 /// Create test artist
@@ -59,5 +59,30 @@ pub async fn create_test_user(pool: &PgPool, id: usize) -> Result<SqlUser, sqlx:
     .fetch_one(pool)
     .await?;
 
+    Ok(user)
+}
+
+/// Create test user with permissions
+#[cfg(feature = "ssr")]
+pub async fn create_test_user_with_permissions(
+    pool: &PgPool,
+    id: usize,
+    permissions: Vec<&str>,
+) -> Result<User, sqlx::Error> {
+    let user = create_test_user(pool, id).await.unwrap();
+
+    let mut permission_tokens = vec![];
+    for permission in permissions.clone() {
+        let token = sqlx::query_as::<_, SqlPermissionTokens>(
+            "INSERT INTO user_permissions (user_id, token) VALUES ($1, $2) RETURNING *",
+        )
+        .bind(user.id)
+        .bind(permission)
+        .fetch_one(pool)
+        .await?;
+        permission_tokens.push(token);
+    }
+
+    let (user, _) = user.into_user(Some(permission_tokens));
     Ok(user)
 }

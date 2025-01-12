@@ -6,6 +6,11 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use sqlx::{FromRow, PgPool, Row};
 
+#[cfg(feature = "ssr")]
+use super::record_label::RecordLabel;
+#[cfg(feature = "ssr")]
+use crate::utils::slugify::slugify;
+
 /// The Artist struct is used to represent a record artist in the database.
 #[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "ssr", derive(FromRow))]
@@ -27,9 +32,39 @@ pub struct Artist {
 }
 
 impl Artist {
-    // pub async fn create(name: String, description: String, isrc_base: String) -> Self {
-    //     let slug = slugify(&name);
-    // }
+    /// Create a new artist
+    #[cfg(feature = "ssr")]
+    pub async fn create(
+        pool: &PgPool,
+        name: String,
+        description: String,
+        record_label_id: i64,
+    ) -> anyhow::Result<Self> {
+        let slug = slugify(&name);
+
+        let record_label = match RecordLabel::get_by_id(pool, record_label_id).await {
+            Ok(record_label) => record_label,
+            Err(e) => {
+                eprintln!("{e}");
+                return Err(anyhow::anyhow!(
+                    "Could not find record label with id {}",
+                    record_label_id
+                ));
+            }
+        };
+
+        let artist = sqlx::query_as::<_, Self>(
+         "INSERT INTO artists (name, slug, description, label_id) VALUES ($1, $2, $3, $4) RETURNING *",
+     )
+         .bind(name)
+         .bind(slug)
+         .bind(description)
+         .bind(record_label.id)
+         .fetch_one(pool)
+         .await?;
+
+        Ok(artist)
+    }
 
     /// Get a artist by its slug
     #[cfg(feature = "ssr")]

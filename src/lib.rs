@@ -21,6 +21,8 @@ pub(crate) mod database;
 pub(crate) mod models;
 pub(crate) mod routes;
 #[cfg(feature = "ssr")]
+pub(crate) mod services;
+#[cfg(feature = "ssr")]
 pub mod setup;
 #[cfg(feature = "ssr")]
 pub mod state;

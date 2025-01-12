@@ -23,7 +23,7 @@ pub fn ArtistsTable() -> impl IntoView {
     );
 
     let user_context = expect_context::<UserContext>();
-    let (_user, set_user) = signal(User::default());
+    let (user, set_user) = signal(User::default());
 
     view! {
         <Transition fallback=Loading>
@@ -76,7 +76,21 @@ pub fn ArtistsTable() -> impl IntoView {
                                                     .into_any()
                                             } else {
                                                 view! { {artist_rows} }.into_any()
-                                            }}
+                                            }} <tr>
+                                                <td colspan="4"></td>
+                                                <td>
+                                                    {if user.get().permissions.contains("label_owner") {
+                                                        view! {
+                                                            <a href="/admin/artist" class="btn btn-primary">
+                                                                Add
+                                                            </a>
+                                                        }
+                                                            .into_any()
+                                                    } else {
+                                                        view! { "" }.into_any()
+                                                    }}
+                                                </td>
+                                            </tr>
                                         </tbody>
                                     </table>
                                 </div>
