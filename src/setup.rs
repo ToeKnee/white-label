@@ -30,7 +30,7 @@ async fn server_fn_handler(
     request: Request<AxumBody>,
 ) -> impl IntoResponse {
     logging::debug_warn!("{:?}", path);
-    logging::debug_warn!("{:?}", request);
+    // logging::debug_warn!("{:?}", request);
     handle_server_fns_with_context(
         move || {
             provide_context(auth_session.clone());

@@ -15,30 +15,30 @@ use deunicode::deunicode;
 #[must_use]
 pub fn slugify(text: &str) -> String {
     // Transliterates unicode text to ASCII
-    let mut slug = &text.to_ascii_lowercase();
-    let binding = &deunicode(slug);
-    slug = binding;
-
-    // Lowercase the text
-    let binding = &slug.to_lowercase();
+    let mut slug = deunicode(text);
+    let binding = slug.to_ascii_lowercase();
     slug = binding;
 
     // Remove all punctuation from the text
-    let binding = &slug
+    let binding = slug
         .chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace())
         .collect::<String>();
     slug = binding;
 
     // Remove double spaces from the text
-    let binding = clean_whitespace(slug);
-    slug = &binding;
+    let binding = clean_whitespace(&slug);
+    slug = binding;
+
+    // Replace new lines with hyphens
+    let binding = slug.replace('\n', "-");
+    slug = binding;
 
     // Replace spaces with hyphens
     slug.to_lowercase().replace(' ', "-")
 }
 
-/// Trim whitespace from a string
+/// Trim whitespace from a string without using regex
 #[must_use]
 pub fn clean_whitespace(s: &str) -> String {
     let mut new_str = s.trim().to_owned();
@@ -104,5 +104,30 @@ mod tests {
             slugify("The    Quick    Brown    Fox"),
             "the-quick-brown-fox"
         );
+    }
+
+    #[test]
+    fn test_trim_whitespace_with_leading_spaces() {
+        assert_eq!(slugify("   The Quick Brown Fox"), "the-quick-brown-fox");
+    }
+
+    #[test]
+    fn test_trim_whitespace_with_trailing_spaces() {
+        assert_eq!(slugify("The Quick Brown Fox   "), "the-quick-brown-fox");
+    }
+
+    #[test]
+    fn test_remove_trailing_hyphen() {
+        assert_eq!(slugify("The Quick Brown Fox-!-"), "the-quick-brown-fox");
+    }
+
+    #[test]
+    fn test_remove_leading_hyphen() {
+        assert_eq!(slugify("-!-The Quick Brown Fox"), "the-quick-brown-fox");
+    }
+
+    #[test]
+    fn test_new_line_character() {
+        assert_eq!(slugify("The\nQuick\nBrown\nFox\n"), "the-quick-brown-fox");
     }
 }

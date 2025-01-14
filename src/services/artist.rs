@@ -51,10 +51,17 @@ pub async fn create_artist_service(
     description: String,
     record_label_id: i64,
 ) -> Result<ArtistResult, ServerFnError> {
-    let _user = user_with_permissions(user, vec!["admin", "label_owner"]);
+    match user_with_permissions(user, vec!["admin", "label_owner"]) {
+        Ok(_) => (),
+        Err(e) => return Err(e),
+    }
 
     if name.is_empty() {
         return Err(ServerFnError::new("Name cannot be empty."));
+    }
+
+    if name.len() > 255 {
+        return Err(ServerFnError::new("Name too long."));
     }
 
     Ok(ArtistResult {
@@ -65,6 +72,59 @@ pub async fn create_artist_service(
                 tracing::error!("{err}");
                 ServerFnError::new("Could not create artist, try again later")
             })?,
+    })
+}
+
+/// Update an artist
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// user: Option<&User> - The user updating the artist
+/// name: String - The name of the artist
+/// description: String - The description of the artist
+///
+/// # Returns
+/// Result<`ArtistResult`, `ServerFnError`> - The updated artist
+///
+/// # Errors
+/// If the name is empty, return an error
+/// If the artist cannot be updated, return an error
+/// If the user does not have the required permissions, return an error
+#[cfg(feature = "ssr")]
+pub async fn update_artist_service(
+    pool: PgPool,
+    user: Option<&User>,
+    slug: String,
+    name: String,
+    description: String,
+) -> Result<ArtistResult, ServerFnError> {
+    match user_with_permissions(user, vec!["admin", "label_owner"]) {
+        Ok(_) => (),
+        Err(e) => return Err(e),
+    }
+
+    if name.is_empty() {
+        return Err(ServerFnError::new("Name cannot be empty."));
+    }
+
+    if name.len() > 255 {
+        return Err(ServerFnError::new("Name too long."));
+    }
+
+    let mut artist = Artist::get_by_slug(&pool, slug).await.map_err(|x| {
+        let err = format!("Error while getting artist: {x:?}");
+        tracing::error!("{err}");
+        ServerFnError::new("Could not retrieve artist, try again later")
+    })?;
+    artist.name = name;
+    artist.description = description;
+
+    Ok(ArtistResult {
+        artist: artist.update(&pool).await.map_err(|x| {
+            let err = format!("Error while updating artist: {x:?}");
+            tracing::error!("{err}");
+            ServerFnError::new("Could not update artist, try again later")
+        })?,
     })
 }
 
@@ -118,6 +178,29 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn test_create_artist_service_no_permission(pool: PgPool) {
+        let user = create_test_user_with_permissions(&pool, 1, vec!["admin"]) // but not label_owner
+            .await
+            .unwrap();
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+
+        let artist = create_artist_service(
+            pool,
+            Some(&user),
+            "Test Artist".to_string(),
+            "This is a test artist".to_string(),
+            record_label.id,
+        )
+        .await;
+
+        assert!(artist.is_err());
+        assert_eq!(
+            artist.unwrap_err().to_string(),
+            "error running server function: You do not have permission.".to_string()
+        );
+    }
+
+    #[sqlx::test]
     async fn test_create_artist_service_no_name(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
         let user = create_test_user_with_permissions(&pool, 1, permissions)
@@ -142,6 +225,31 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn test_create_artist_service_name_too_long(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+
+        let name = "a".repeat(256);
+        let artist = create_artist_service(
+            pool,
+            Some(&user),
+            name,
+            "This is a test artist".to_string(),
+            record_label.id,
+        )
+        .await;
+
+        assert!(artist.is_err());
+        assert_eq!(
+            artist.unwrap_err().to_string(),
+            "error running server function: Name too long.".to_string()
+        );
+    }
+
+    #[sqlx::test]
     async fn test_create_artist_service_no_record_label(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
         let user = create_test_user_with_permissions(&pool, 1, permissions)
@@ -161,6 +269,143 @@ mod tests {
         assert_eq!(
             artist.unwrap_err().to_string(),
             "error running server function: Could not create artist, try again later".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_update_artist_service(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let updated_artist = update_artist_service(
+            pool,
+            Some(&user),
+            artist.slug.clone(),
+            "Updated Artist".to_string(),
+            "This is an updated artist".to_string(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated_artist.artist.name, "Updated Artist".to_string());
+        assert_eq!(
+            updated_artist.artist.description,
+            "This is an updated artist".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_update_artist_service_name_is_empty(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let updated_artist = update_artist_service(
+            pool,
+            Some(&user),
+            artist.slug.clone(),
+            String::new(),
+            "This is an updated artist".to_string(),
+        )
+        .await;
+
+        assert!(updated_artist.is_err());
+        assert_eq!(
+            updated_artist.unwrap_err().to_string(),
+            "error running server function: Name cannot be empty.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_update_artist_service_name_too_long(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let name = "a".repeat(256);
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let updated_artist = update_artist_service(
+            pool,
+            Some(&user),
+            artist.slug.clone(),
+            name,
+            "This is an updated artist".to_string(),
+        )
+        .await;
+
+        assert!(updated_artist.is_err());
+        assert_eq!(
+            updated_artist.unwrap_err().to_string(),
+            "error running server function: Name too long.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_update_artist_service_no_artist(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let updated_artist = update_artist_service(
+            pool,
+            Some(&user),
+            "missing".to_string(),
+            "Updated Artist".to_string(),
+            "This is an updated artist".to_string(),
+        )
+        .await;
+
+        assert!(updated_artist.is_err());
+        assert_eq!(
+            updated_artist.unwrap_err().to_string(),
+            "error running server function: Could not retrieve artist, try again later".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_update_artist_service_no_user(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let updated_artist = update_artist_service(
+            pool,
+            Some(&User::default()),
+            artist.slug.clone(),
+            "Updated Artist".to_string(),
+            "This is an updated artist".to_string(),
+        )
+        .await;
+
+        assert!(updated_artist.is_err());
+        assert_eq!(
+            updated_artist.unwrap_err().to_string(),
+            "error running server function: You must be logged in to view this page.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_update_artist_service_no_permissions(pool: PgPool) {
+        let user = create_test_user_with_permissions(&pool, 1, vec![])
+            .await
+            .unwrap();
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let updated_artist = update_artist_service(
+            pool,
+            Some(&user),
+            artist.slug.clone(),
+            "Updated Artist".to_string(),
+            "This is an updated artist".to_string(),
+        )
+        .await;
+
+        assert!(updated_artist.is_err());
+        assert_eq!(
+            updated_artist.unwrap_err().to_string(),
+            "error running server function: You do not have permission.".to_string()
         );
     }
 }

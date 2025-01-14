@@ -116,8 +116,36 @@ impl Artist {
         })
     }
 
-    // #[cfg(feature = "ssr")]
-    // pub async fn update() -> Self {}
+    /// Update an artist
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    ///
+    /// # Returns
+    /// The updated artist
+    ///
+    /// # Errors
+    /// If the artist cannot be updated, return an error
+    ///
+    /// # Panics
+    /// If the artist cannot be updated, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn update(self, pool: &PgPool) -> anyhow::Result<Self> {
+        let slug = slugify(&self.name);
+        let artist = sqlx::query_as::<_, Self>(
+            "UPDATE artists SET name = $1, slug = $2, description = $3, updated_at = $4 WHERE id = $5 RETURNING *",
+        )
+        .bind(self.name)
+        .bind(slug)
+        .bind(self.description)
+        .bind(chrono::Utc::now())
+        .bind(self.id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+
+        Ok(artist)
+    }
 
     // #[cfg(feature = "ssr")]
     // pub async fn delete() -> Self {}
@@ -127,7 +155,7 @@ impl Artist {
 mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
-    use crate::models::test_helpers::create_test_artist;
+    use crate::models::test_helpers::{create_test_artist, create_test_record_label};
 
     #[test]
     fn test_init_artist() {
@@ -150,6 +178,23 @@ mod tests {
 
     #[cfg(feature = "ssr")]
     #[sqlx::test]
+    async fn test_create(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = Artist::create(
+            &pool,
+            "Test Artist".to_string(),
+            "This is a test artist".to_string(),
+            record_label.id,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(artist.name, "Test Artist".to_string());
+        assert_eq!(artist.description, "This is a test artist".to_string());
+    }
+
+    #[cfg(feature = "ssr")]
+    #[sqlx::test]
     async fn test_get_by_slug(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let artist_by_slug = Artist::get_by_slug(&pool, artist.slug.clone())
@@ -162,7 +207,6 @@ mod tests {
     #[cfg(feature = "ssr")]
     #[sqlx::test]
     async fn test_get_by_slug_not_found(pool: PgPool) {
-        create_test_artist(&pool, 1, None).await.unwrap();
         let artist = Artist::get_by_slug(&pool, "missing".to_string()).await;
 
         assert!(artist.is_err());
@@ -170,5 +214,23 @@ mod tests {
             artist.unwrap_err().to_string(),
             "Could not find artist with slug missing".to_string()
         );
+    }
+
+    #[cfg(feature = "ssr")]
+    #[sqlx::test]
+    async fn test_update(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let mut update_artist = artist.clone();
+        update_artist.name = "Updated Artist".to_string();
+        update_artist.description = "This is an updated artist".to_string();
+
+        let updated_artist = update_artist.update(&pool).await.unwrap();
+        assert_eq!(updated_artist.name, "Updated Artist".to_string());
+        assert_eq!(updated_artist.slug, "updated-artist".to_string());
+        assert_eq!(
+            updated_artist.description,
+            "This is an updated artist".to_string()
+        );
+        assert_ne!(updated_artist.updated_at, artist.updated_at);
     }
 }

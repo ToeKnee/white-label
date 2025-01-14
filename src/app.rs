@@ -15,7 +15,8 @@ use reactive_stores::Store;
 
 use crate::components::{
     admin::{
-        create_artist::CreateArtist, dashboard::Dashboard, edit_label::EditLabel, root::AdminRoot,
+        create_artist::CreateArtist, dashboard::Dashboard, edit_artist::EditArtist,
+        edit_label::EditLabel, root::AdminRoot,
     },
     artist::home::ArtistPage,
     auth::{login::Login, logout::Logout, register::Register},
@@ -105,6 +106,7 @@ pub fn WhiteLabel() -> impl IntoView {
                         <Route path=path!("") view=Dashboard />
                         <Route path=path!("label") view=EditLabel />
                         <Route path=path!("artist") view=CreateArtist />
+                        <Route path=path!("artist/:slug") view=EditArtist />
                     </ParentRoute>
                 </Routes>
             </main>
