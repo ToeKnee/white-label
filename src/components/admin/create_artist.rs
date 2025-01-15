@@ -1,5 +1,4 @@
 use leptos::prelude::*;
-use leptos_router::{hooks::use_navigate, NavigateOptions};
 use reactive_stores::Store;
 
 use crate::app::UserContext;
@@ -7,6 +6,7 @@ use crate::components::utils::{error::ErrorPage, error::ServerErrors, loading::L
 use crate::models::artist::Artist;
 use crate::routes::artist::{ArtistResult, CreateArtist};
 use crate::store::{GlobalState, GlobalStateStoreFields};
+use crate::utils::redirect::redirect;
 
 /// Renders the create artist page.
 #[component]
@@ -38,8 +38,7 @@ pub fn CreateArtist() -> impl IntoView {
 
     Effect::new_isomorphic(move || {
         if user.get().is_active() && !user.get().permissions.contains("label_owner") {
-            let navigate = use_navigate();
-            navigate("/", NavigateOptions::default());
+            redirect("/");
         }
     });
 
@@ -59,11 +58,7 @@ pub fn CreateArtist() -> impl IntoView {
                                         Ok(artist_result) => {
                                             let artist = artist_result.artist;
                                             if artist.id > 0 {
-                                                let navigate = use_navigate();
-                                                navigate(
-                                                    &format!("/admin/artist/{}", artist.slug),
-                                                    NavigateOptions::default(),
-                                                );
+                                                redirect(&format!("/admin/artist/{}", artist.slug));
                                             }
 
                                             view! { "" }

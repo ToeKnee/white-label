@@ -1,10 +1,10 @@
 use leptos::form::ActionForm;
 use leptos::prelude::*;
-use leptos_router::{hooks::use_navigate, NavigateOptions};
 
 use crate::app::UserContext;
 use crate::models::auth::User;
 use crate::routes::auth::Login;
+use crate::utils::redirect::redirect;
 use crate::utils::split_at_colon::split_at_colon;
 
 /// Renders the login page.
@@ -55,8 +55,7 @@ pub fn Login() -> impl IntoView {
                                 let this_user = value.get().unwrap();
                                 user_context.1.set(this_user.clone());
                                 if this_user.is_authenticated() {
-                                    let navigate = use_navigate();
-                                    navigate("/", NavigateOptions::default());
+                                    redirect("/");
                                 }
                             }
                         }}

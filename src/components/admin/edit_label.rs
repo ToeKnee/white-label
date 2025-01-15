@@ -1,5 +1,4 @@
 use leptos::prelude::*;
-use leptos_router::{hooks::use_navigate, NavigateOptions};
 use reactive_stores::Store;
 
 use crate::app::UserContext;
@@ -10,6 +9,7 @@ use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::LabelResult;
 use crate::routes::record_label::UpdateRecordLabel;
 use crate::store::{GlobalState, GlobalStateStoreFields};
+use crate::utils::redirect::redirect;
 
 /// Renders the edit record label page.
 #[component]
@@ -30,8 +30,7 @@ pub fn EditLabel() -> impl IntoView {
 
     Effect::new_isomorphic(move || {
         if user.get().is_active() && !user.get().permissions.contains("label_owner") {
-            let navigate = use_navigate();
-            navigate("/", NavigateOptions::default());
+            redirect("/");
         }
     });
 

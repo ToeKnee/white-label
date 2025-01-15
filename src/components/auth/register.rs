@@ -1,11 +1,11 @@
 use leptos::form::ActionForm;
 use leptos::prelude::*;
-use leptos_router::{hooks::use_navigate, NavigateOptions};
 
 use crate::app::UserContext;
 use crate::components::utils::error::ServerErrors;
 use crate::models::auth::User;
 use crate::routes::auth::Register;
+use crate::utils::redirect::redirect;
 
 /// Renders the register page.
 #[component]
@@ -33,8 +33,7 @@ pub fn Register() -> impl IntoView {
                                     let this_user = user_result;
                                     user_context.1.set(this_user.clone());
                                     if this_user.is_authenticated() {
-                                        let navigate = use_navigate();
-                                        navigate("/", NavigateOptions::default());
+                                        redirect("/");
                                     }
                                     set_server_errors.set(None);
                                 }
