@@ -29,6 +29,9 @@ pub struct Artist {
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// The date and time the artist was last updated
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// The date and time the artist was deleted
+    /// If this is None, the artist is not deleted
+    pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl Artist {
@@ -113,6 +116,7 @@ impl Artist {
             label_id: row.get("label_id"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            deleted_at: row.get("deleted_at"),
         })
     }
 
@@ -147,8 +151,38 @@ impl Artist {
         Ok(artist)
     }
 
-    // #[cfg(feature = "ssr")]
-    // pub async fn delete() -> Self {}
+    /// Delete an artist
+    /// This is a soft delete
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    ///
+    /// # Returns
+    /// The deleted artist
+    ///
+    /// # Errors
+    /// If the artist cannot be deleted, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<Self> {
+        let artist = sqlx::query_as::<_, Self>(
+            "UPDATE artists SET deleted_at = $1 WHERE id = $2 RETURNING *",
+        )
+        .bind(chrono::Utc::now())
+        .bind(self.id)
+        .fetch_one(pool)
+        .await;
+
+        match artist {
+            Ok(artist) => Ok(artist),
+            Err(e) => {
+                eprintln!("{e}");
+                Err(anyhow::anyhow!(
+                    "Could not delete artist with id {}.",
+                    self.id
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -167,6 +201,7 @@ mod tests {
             label_id: 1,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            deleted_at: None,
         };
 
         assert_eq!(artist.id, 1);
@@ -232,5 +267,26 @@ mod tests {
             "This is an updated artist".to_string()
         );
         assert_ne!(updated_artist.updated_at, artist.updated_at);
+    }
+
+    #[cfg(feature = "ssr")]
+    #[sqlx::test]
+    async fn test_delete(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let result = artist.delete(&pool).await.unwrap();
+        assert!(result.deleted_at.is_some());
+    }
+
+    #[cfg(feature = "ssr")]
+    #[sqlx::test]
+    async fn test_delete_not_found(pool: PgPool) {
+        let artist = Artist::default();
+        let result = artist.delete(&pool).await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not delete artist with id 0.".to_string()
+        );
     }
 }

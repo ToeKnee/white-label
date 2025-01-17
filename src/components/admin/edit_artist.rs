@@ -2,6 +2,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::app::UserContext;
+use crate::components::admin::delete_artist::DeleteArtist;
 use crate::components::utils::{
     error::ErrorPage, error::ServerErrors, loading::Loading, success::Success,
 };
@@ -38,7 +39,7 @@ pub fn EditArtist() -> impl IntoView {
     let (success, set_success) = signal(false);
 
     let var_name = view! {
-        <h1>Create Artist</h1>
+        <h1>"Edit "{move || view! { {artist.get().name} }}</h1>
 
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {
@@ -103,7 +104,12 @@ pub fn EditArtist() -> impl IntoView {
                                     />
                                 </label> <DescriptionFields artist=artist.get() />
                                 <div class="divider">Private</div>
-                                <button class="btn btn-primary">Update</button>
+                                <div class="flex flex-auto gap-6">
+                                    <button class="flex-1 btn btn-primary">Update</button>
+                                    {move || {
+                                        view! { <DeleteArtist artist=artist.get() /> }
+                                    }}
+                                </div>
                             </div>
                         </ActionForm>
                     }

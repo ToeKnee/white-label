@@ -157,33 +157,20 @@ impl RecordLabel {
     /// If the artists cannot be retrieved, return an error
     #[cfg(feature = "ssr")]
     pub async fn artists(self, pool: &PgPool) -> anyhow::Result<Vec<Artist>> {
-        let rows = sqlx::query("SELECT * FROM artists WHERE label_id = $1 ORDER BY name ASC")
-            .bind(self.id)
-            .fetch_all(pool)
-            .await;
+        let artists = sqlx::query_as::<_, Artist>(
+            "SELECT * FROM artists WHERE label_id = $1 AND deleted_at IS NULL ORDER BY name ASC",
+        )
+        .bind(self.id)
+        .fetch_all(pool)
+        .await;
 
-        let rows = match rows {
-            Ok(rows) => rows,
+        match artists {
+            Ok(artists) => Ok(artists),
             Err(e) => {
                 eprintln!("{e}");
-                return Err(anyhow::anyhow!("Could not find artists"));
+                Err(anyhow::anyhow!("Could not find artists"))
             }
-        };
-
-        let mut artists = Vec::new();
-        for row in rows {
-            artists.push(Artist {
-                id: row.get("id"),
-                name: row.get("name"),
-                slug: row.get("slug"),
-                description: row.get("description"),
-                label_id: row.get("label_id"),
-                created_at: row.get("created_at"),
-                updated_at: row.get("updated_at"),
-            });
         }
-
-        Ok(artists)
     }
 }
 

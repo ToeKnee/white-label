@@ -3,7 +3,9 @@ use leptos::server;
 
 use crate::models::artist::Artist;
 #[cfg(feature = "ssr")]
-use crate::services::artist::{create_artist_service, get_artist_service, update_artist_service};
+use crate::services::artist::{
+    create_artist_service, delete_artist_service, get_artist_service, update_artist_service,
+};
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
@@ -40,4 +42,12 @@ pub async fn update_artist(
     let auth = auth()?;
     let user = auth.current_user.as_ref();
     update_artist_service(pool, user, slug, name, description).await
+}
+
+#[server]
+pub async fn delete_artist(slug: String) -> Result<ArtistResult, ServerFnError> {
+    let pool = pool()?;
+    let auth = auth()?;
+    let user = auth.current_user.as_ref();
+    delete_artist_service(pool, user, slug).await
 }
