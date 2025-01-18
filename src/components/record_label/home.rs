@@ -56,8 +56,7 @@ pub fn RecordLabelHome() -> impl IntoView {
 /// Render a list of artists for a record label.
 #[component]
 pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
-    let store = expect_context::<Store<GlobalState>>();
-    let (artists, set_artists) = signal(store.artists().get());
+    let (artists, set_artists) = signal(vec![]);
 
     let artists_resource = Resource::new(
         move || artists.get(),
@@ -70,21 +69,18 @@ pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if store.artists().get().is_empty() {
-                        match artists_resource.await {
-                            Ok(these_artists) => {
-                                let artists = store.artists();
-                                (*artists.write()).clone_from(&these_artists.artists);
-                                (*set_artists.write()).clone_from(&these_artists.artists);
-                                these_artists.artists
-                            }
-                            Err(_) => vec![Artist::default()],
-                        };
-                    }
-                    let artists = store.artists().get();
+                    match artists_resource.await {
+                        Ok(these_artists) => {
+                            (*set_artists.write()).clone_from(&these_artists.artists);
+                            these_artists.artists
+                        }
+                        Err(_) => vec![Artist::default()],
+                    };
+                    let artists = artists.get();
                     let artist_rows = artists
                         .into_iter()
                         .map(|artist| {
+
                             view! { <ArtistBox artist /> }
                         })
                         .collect::<Vec<_>>();

@@ -17,7 +17,7 @@ pub fn ArtistsTable() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
     let (record_label, _set_record_label) = signal(store.record_label().get());
 
-    let (artists, set_artists) = signal(store.artists().get());
+    let (artists, set_artists) = signal(vec![]);
     let artists_resource = Resource::new(
         move || artists.get(),
         move |_artists| get_label_artists(record_label.get().id),
@@ -33,22 +33,18 @@ pub fn ArtistsTable() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     set_user.set(user_context.0.get());
-                    set_artists.set(store.artists().get());
-                    if store.artists().get().is_empty() {
-                        match artists_resource.await {
-                            Ok(these_artists) => {
-                                let artists = store.artists();
-                                (*artists.write()).clone_from(&these_artists.artists);
-                                (*set_artists.write()).clone_from(&these_artists.artists);
-                                these_artists.artists
-                            }
-                            Err(_) => vec![Artist::default()],
-                        };
-                    }
+                    match artists_resource.await {
+                        Ok(these_artists) => {
+                            (*set_artists.write()).clone_from(&these_artists.artists);
+                            these_artists.artists
+                        }
+                        Err(_) => vec![Artist::default()],
+                    };
                     let artist_rows = artists
                         .get()
                         .into_iter()
                         .map(|artist| {
+
                             view! { <ArtistRow artist /> }
                         })
                         .collect::<Vec<_>>();
