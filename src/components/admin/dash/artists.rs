@@ -3,7 +3,6 @@ use reactive_stores::Store;
 
 use crate::app::UserContext;
 use crate::components::utils::error::ErrorPage;
-use crate::components::utils::loading::Loading;
 use crate::components::utils::status_badge::StatusBadge;
 use crate::models::artist::Artist;
 use crate::models::auth::User;
@@ -19,52 +18,52 @@ pub fn ArtistsTable() -> impl IntoView {
 
     let (artists, set_artists) = signal(vec![]);
     let artists_resource = Resource::new(
-        move || artists.get(),
-        move |_artists| get_label_artists(record_label.get().id),
+        move || record_label.get(),
+        move |_| get_label_artists(record_label.get().id),
     );
 
     let user_context = expect_context::<UserContext>();
     let (user, set_user) = signal(User::default());
 
     view! {
-        <Transition fallback=Loading>
-            <ErrorBoundary fallback=|_| {
-                ErrorPage
-            }>
-                {move || Suspend::new(async move {
-                    set_user.set(user_context.0.get());
-                    match artists_resource.await {
-                        Ok(these_artists) => {
-                            (*set_artists.write()).clone_from(&these_artists.artists);
-                            these_artists.artists
-                        }
-                        Err(_) => vec![Artist::default()],
-                    };
-                    let artist_rows = artists
-                        .get()
-                        .into_iter()
-                        .map(|artist| {
+        <div class="basis-1/2">
+            <div class="overflow-x-auto shadow-xl card bg-base-100">
+                <div class="card-body">
+                    <h2 class="card-title">Artists</h2>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Slug</th>
+                                <th>Name</th>
+                                <th>Releases</th>
+                                <th>Tracks</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <Transition fallback=ArtistRowFallback>
+                                <ErrorBoundary fallback=|_| {
+                                    ErrorPage
+                                }>
+                                    {move || Suspend::new(async move {
+                                        set_user.set(user_context.0.get());
+                                        match artists_resource.await {
+                                            Ok(these_artists) => {
+                                                (*set_artists.write()).clone_from(&these_artists.artists);
+                                                these_artists.artists
+                                            }
+                                            Err(_) => vec![Artist::default()],
+                                        };
+                                        let artist_rows = artists
+                                            .get()
+                                            .into_iter()
+                                            .map(|artist| {
 
-                            view! { <ArtistRow artist /> }
-                        })
-                        .collect::<Vec<_>>();
-                    view! {
-                        <div class="basis-1/2">
-                            <div class="overflow-x-auto shadow-xl card bg-base-100">
-                                <div class="card-body">
-                                    <h2 class="card-title">Artists</h2>
-                                    <table class="table">
-                                        <thead>
-                                            <tr>
-                                                <th>Status</th>
-                                                <th>Slug</th>
-                                                <th>Name</th>
-                                                <th>Releases</th>
-                                                <th>Tracks</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
+                                                view! { <ArtistRow artist /> }
+                                            })
+                                            .collect::<Vec<_>>();
+                                        view! {
                                             {if artists.get().is_empty() {
                                                 view! {
                                                     <tr>
@@ -74,7 +73,8 @@ pub fn ArtistsTable() -> impl IntoView {
                                                     .into_any()
                                             } else {
                                                 view! { {artist_rows} }.into_any()
-                                            }} <tr>
+                                            }}
+                                            <tr>
                                                 <td colspan="5"></td>
                                                 <td>
                                                     {if user.get().permissions.contains("label_owner") {
@@ -89,15 +89,15 @@ pub fn ArtistsTable() -> impl IntoView {
                                                     }}
                                                 </td>
                                             </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    }
-                })}
-            </ErrorBoundary>
-        </Transition>
+                                        }
+                                    })}
+                                </ErrorBoundary>
+                            </Transition>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     }
 }
 
@@ -117,6 +117,38 @@ fn ArtistRow(#[prop(into)] artist: Artist) -> impl IntoView {
                     Edit
                 </a>
             </td>
+        </tr>
+    }
+}
+
+#[component]
+fn ArtistRowFallback() -> impl IntoView {
+    view! {
+        <tr>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+        </tr>
+        <tr>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+
+        </tr>
+        <tr>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+            <td class="w-full h-4 skeleton"></td>
+
         </tr>
     }
 }
