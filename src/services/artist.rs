@@ -19,10 +19,10 @@ use crate::routes::artist::ArtistResult;
 /// If the artist cannot be found, return an error
 pub async fn get_artist_service(pool: PgPool, slug: String) -> Result<ArtistResult, ServerFnError> {
     Ok(ArtistResult {
-        artist: Artist::get_by_slug(&pool, slug).await.map_err(|x| {
-            let err = format!("Error while getting artist: {x:?}");
+        artist: Artist::get_by_slug(&pool, slug).await.map_err(|e| {
+            let err = format!("Error while getting artist: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new("Could not retrieve artist, try again later")
+            ServerFnError::new(e)
         })?,
     })
 }
@@ -50,27 +50,20 @@ pub async fn create_artist_service(
     name: String,
     description: String,
     record_label_id: i64,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<ArtistResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    if name.is_empty() {
-        return Err(ServerFnError::new("Name cannot be empty."));
-    }
-
-    if name.len() > 255 {
-        return Err(ServerFnError::new("Name too long."));
-    }
-
     Ok(ArtistResult {
-        artist: Artist::create(&pool, name, description, record_label_id)
+        artist: Artist::create(&pool, name, description, record_label_id, published_at)
             .await
-            .map_err(|x| {
-                let err = format!("Error while creating artist: {x:?}");
+            .map_err(|e| {
+                let err = format!("Error while creating artist: {e:?}");
                 tracing::error!("{err}");
-                ServerFnError::new("Could not create artist, try again later")
+                ServerFnError::new(e)
             })?,
     })
 }
@@ -97,33 +90,27 @@ pub async fn update_artist_service(
     slug: String,
     name: String,
     description: String,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<ArtistResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    if name.is_empty() {
-        return Err(ServerFnError::new("Name cannot be empty."));
-    }
-
-    if name.len() > 255 {
-        return Err(ServerFnError::new("Name too long."));
-    }
-
-    let mut artist = Artist::get_by_slug(&pool, slug).await.map_err(|x| {
-        let err = format!("Error while getting artist: {x:?}");
+    let mut artist = Artist::get_by_slug(&pool, slug).await.map_err(|e| {
+        let err = format!("Error while getting artist: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve artist, try again later")
+        ServerFnError::new(e)
     })?;
     artist.name = name;
     artist.description = description;
+    artist.published_at = published_at;
 
     Ok(ArtistResult {
-        artist: artist.update(&pool).await.map_err(|x| {
-            let err = format!("Error while updating artist: {x:?}");
+        artist: artist.update(&pool).await.map_err(|e| {
+            let err = format!("Error while updating artist: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new("Could not update artist, try again later")
+            ServerFnError::new(e)
         })?,
     })
 }
@@ -152,17 +139,17 @@ pub async fn delete_artist_service(
         Err(e) => return Err(e),
     }
 
-    let artist = Artist::get_by_slug(&pool, slug).await.map_err(|x| {
-        let err = format!("Error while getting artist: {x:?}");
+    let artist = Artist::get_by_slug(&pool, slug).await.map_err(|e| {
+        let err = format!("Error while getting artist: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve artist, try again later")
+        ServerFnError::new(e)
     })?;
 
     Ok(ArtistResult {
-        artist: artist.delete(&pool).await.map_err(|x| {
-            let err = format!("Error while deleting artist: {x:?}");
+        artist: artist.delete(&pool).await.map_err(|e| {
+            let err = format!("Error while deleting artist: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new("Could not delete artist, try again later")
+            ServerFnError::new(e)
         })?,
     })
 }
@@ -188,7 +175,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "error running server function: Could not retrieve artist, try again later".to_string()
+            "error running server function: Could not find artist with slug missing.".to_string()
         );
     }
 
@@ -206,6 +193,7 @@ mod tests {
             "Test Artist".to_string(),
             "This is a test artist".to_string(),
             record_label.id,
+            Some(chrono::Utc::now()),
         )
         .await
         .unwrap();
@@ -229,6 +217,7 @@ mod tests {
             "Test Artist".to_string(),
             "This is a test artist".to_string(),
             record_label.id,
+            Some(chrono::Utc::now()),
         )
         .await;
 
@@ -253,13 +242,14 @@ mod tests {
             String::new(),
             "This is a test artist".to_string(),
             record_label.id,
+            Some(chrono::Utc::now()),
         )
         .await;
 
         assert!(artist.is_err());
         assert_eq!(
             artist.unwrap_err().to_string(),
-            "error running server function: Name cannot be empty.".to_string()
+            "error running server function: Name is required.".to_string()
         );
     }
 
@@ -278,13 +268,14 @@ mod tests {
             name,
             "This is a test artist".to_string(),
             record_label.id,
+            Some(chrono::Utc::now()),
         )
         .await;
 
         assert!(artist.is_err());
         assert_eq!(
             artist.unwrap_err().to_string(),
-            "error running server function: Name too long.".to_string()
+            "error running server function: Name must be less than 255 characters.".to_string()
         );
     }
 
@@ -301,13 +292,14 @@ mod tests {
             "Test Artist".to_string(),
             "This is a test artist".to_string(),
             0,
+            Some(chrono::Utc::now()),
         )
         .await;
 
         assert!(artist.is_err());
         assert_eq!(
             artist.unwrap_err().to_string(),
-            "error running server function: Could not create artist, try again later".to_string()
+            "error running server function: Record Label with id 0 does not exist.".to_string()
         );
     }
 
@@ -325,6 +317,7 @@ mod tests {
             artist.slug.clone(),
             "Updated Artist".to_string(),
             "This is an updated artist".to_string(),
+            Some(chrono::Utc::now()),
         )
         .await
         .unwrap();
@@ -349,13 +342,14 @@ mod tests {
             artist.slug.clone(),
             String::new(),
             "This is an updated artist".to_string(),
+            Some(chrono::Utc::now()),
         )
         .await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
             updated_artist.unwrap_err().to_string(),
-            "error running server function: Name cannot be empty.".to_string()
+            "error running server function: Name is required.".to_string()
         );
     }
 
@@ -374,13 +368,14 @@ mod tests {
             artist.slug.clone(),
             name,
             "This is an updated artist".to_string(),
+            Some(chrono::Utc::now()),
         )
         .await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
             updated_artist.unwrap_err().to_string(),
-            "error running server function: Name too long.".to_string()
+            "error running server function: Name must be less than 255 characters.".to_string()
         );
     }
 
@@ -397,13 +392,14 @@ mod tests {
             "missing".to_string(),
             "Updated Artist".to_string(),
             "This is an updated artist".to_string(),
+            Some(chrono::Utc::now()),
         )
         .await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
             updated_artist.unwrap_err().to_string(),
-            "error running server function: Could not retrieve artist, try again later".to_string()
+            "error running server function: Could not find artist with slug missing.".to_string()
         );
     }
 
@@ -416,6 +412,7 @@ mod tests {
             artist.slug.clone(),
             "Updated Artist".to_string(),
             "This is an updated artist".to_string(),
+            Some(chrono::Utc::now()),
         )
         .await;
 
@@ -438,6 +435,7 @@ mod tests {
             artist.slug.clone(),
             "Updated Artist".to_string(),
             "This is an updated artist".to_string(),
+            Some(chrono::Utc::now()),
         )
         .await;
 
@@ -473,7 +471,7 @@ mod tests {
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),
-            "error running server function: Could not retrieve artist, try again later".to_string()
+            "error running server function: Could not find artist with slug missing.".to_string()
         );
     }
 

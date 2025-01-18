@@ -26,6 +26,11 @@ pub struct Artist {
     pub description: String,
     /// The label id
     pub label_id: i64,
+    /// The date the artist is published.
+    /// If this is None, the artist is not published
+    /// If this is in the future, the artist is scheduled to be published
+    /// If this is in the past, the artist is published
+    pub published_at: Option<chrono::DateTime<chrono::Utc>>,
     /// The date and time the artist was created in the database
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// The date and time the artist was last updated
@@ -93,6 +98,7 @@ impl Artist {
         name: String,
         description: String,
         record_label_id: i64,
+        published_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> anyhow::Result<Self> {
         let slug = slugify(&name);
 
@@ -102,6 +108,7 @@ impl Artist {
             slug,
             description,
             label_id: record_label_id,
+            published_at,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             deleted_at: None,
@@ -109,12 +116,13 @@ impl Artist {
         artist.validate(pool).await?;
 
         let artist = sqlx::query_as::<_, Self>(
-         "INSERT INTO artists (name, slug, description, label_id) VALUES ($1, $2, $3, $4) RETURNING *",
+         "INSERT INTO artists (name, slug, description, label_id, published_at) VALUES ($1, $2, $3, $4, $5) RETURNING *",
      )
          .bind(artist.name)
          .bind(artist.slug)
          .bind(artist.description)
          .bind(artist.label_id)
+         .bind(artist.published_at)
          .fetch_one(pool)
          .await?;
 
@@ -153,6 +161,7 @@ impl Artist {
             slug: row.get("slug"),
             description: row.get("description"),
             label_id: row.get("label_id"),
+            published_at: row.get("published_at"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             deleted_at: row.get("deleted_at"),
@@ -178,11 +187,12 @@ impl Artist {
         self.validate(pool).await?;
 
         let artist = sqlx::query_as::<_, Self>(
-            "UPDATE artists SET name = $1, slug = $2, description = $3, updated_at = $4 WHERE id = $5 RETURNING *",
+            "UPDATE artists SET name = $1, slug = $2, description = $3, published_at = $4, updated_at = $5 WHERE id = $6 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
         .bind(self.description)
+        .bind(self.published_at)
         .bind(chrono::Utc::now())
         .bind(self.id)
         .fetch_one(pool)
@@ -240,6 +250,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             label_id: 1,
+            published_at: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             deleted_at: None,
@@ -261,6 +272,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             label_id: record_label.id,
+            published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             deleted_at: None,
@@ -279,6 +291,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             label_id: 1,
+            published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             deleted_at: None,
@@ -302,6 +315,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             label_id: 1,
+            published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             deleted_at: None,
@@ -325,6 +339,7 @@ mod tests {
             slug,
             description: "This is a test artist".to_string(),
             label_id: 1,
+            published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             deleted_at: None,
@@ -363,6 +378,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             label_id: 1,
+            published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             deleted_at: None,
@@ -385,6 +401,7 @@ mod tests {
             "Test Artist".to_string(),
             "This is a test artist".to_string(),
             record_label.id,
+            Some(chrono::Utc::now()),
         )
         .await
         .unwrap();
@@ -401,6 +418,7 @@ mod tests {
             String::new(),
             "This is a test artist".to_string(),
             record_label.id,
+            Some(chrono::Utc::now()),
         )
         .await;
 

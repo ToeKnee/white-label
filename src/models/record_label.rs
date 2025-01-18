@@ -8,7 +8,6 @@ use sqlx::{FromRow, PgPool, Row};
 
 #[cfg(feature = "ssr")]
 use super::artist::Artist;
-#[cfg(feature = "ssr")]
 use super::traits::Validate;
 #[cfg(feature = "ssr")]
 use crate::utils::slugify::slugify;
@@ -231,13 +230,27 @@ impl RecordLabel {
     /// # Errors
     /// If the artists cannot be retrieved, return an error
     #[cfg(feature = "ssr")]
-    pub async fn artists(self, pool: &PgPool) -> anyhow::Result<Vec<Artist>> {
-        let artists = sqlx::query_as::<_, Artist>(
-            "SELECT * FROM artists WHERE label_id = $1 AND deleted_at IS NULL ORDER BY name ASC",
-        )
-        .bind(self.id)
-        .fetch_all(pool)
-        .await;
+    pub async fn artists(self, pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Artist>> {
+        let query = if include_hidden {
+            "SELECT *
+             FROM artists
+             WHERE label_id = $1
+             ORDER BY deleted_at DESC, name ASC"
+        } else {
+            "SELECT *
+            FROM artists
+            WHERE label_id = $1
+              AND deleted_at IS NULL
+              AND published_at < NOW()
+              AND published_at IS NOT NULL
+            ORDER BY name ASC"
+        };
+
+        let artists = sqlx::query_as::<_, Artist>(query)
+            .bind(self.id)
+            //.bind(chrono::Utc::now())
+            .fetch_all(pool)
+            .await;
 
         match artists {
             Ok(artists) => Ok(artists),
@@ -477,13 +490,63 @@ mod tests {
 
     #[cfg(feature = "ssr")]
     #[sqlx::test]
-    async fn test_artists(pool: PgPool) {
+    async fn test_artists_hide_artists(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+        let mut unpublished_artist = create_test_artist(&pool, 1, Some(record_label.clone()))
             .await
             .unwrap();
-        let artists = record_label.artists(&pool).await.unwrap();
-        assert_eq!(artists.len(), 1);
-        assert_eq!(artists[0], artist);
+        unpublished_artist.published_at = None;
+        unpublished_artist.clone().update(&pool).await.unwrap();
+        let mut published_artist = create_test_artist(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        published_artist.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        let published_artist = published_artist.clone().update(&pool).await.unwrap();
+        let mut future_artist = create_test_artist(&pool, 3, Some(record_label.clone()))
+            .await
+            .unwrap();
+        future_artist.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        future_artist.clone().update(&pool).await.unwrap();
+        let deleted_artist = create_test_artist(&pool, 4, Some(record_label.clone()))
+            .await
+            .unwrap();
+        deleted_artist.clone().delete(&pool).await.unwrap();
+        let artists = record_label.artists(&pool, false).await.unwrap();
+        assert_eq!(artists, vec![published_artist]);
+    }
+
+    #[cfg(feature = "ssr")]
+    #[sqlx::test]
+    async fn test_artists_include_hidden_artists(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let mut unpublished_artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        unpublished_artist.published_at = None;
+        let unpublished_artist = unpublished_artist.clone().update(&pool).await.unwrap();
+        let mut published_artist = create_test_artist(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        published_artist.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        let published_artist = published_artist.clone().update(&pool).await.unwrap();
+        let mut future_artist = create_test_artist(&pool, 3, Some(record_label.clone()))
+            .await
+            .unwrap();
+        future_artist.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        let future_artist = future_artist.clone().update(&pool).await.unwrap();
+        let deleted_artist = create_test_artist(&pool, 4, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let deleted_artist = deleted_artist.clone().delete(&pool).await.unwrap();
+        let artists = record_label.artists(&pool, true).await.unwrap();
+        assert_eq!(
+            artists,
+            vec![
+                unpublished_artist,
+                published_artist,
+                future_artist,
+                deleted_artist,
+            ]
+        );
     }
 }

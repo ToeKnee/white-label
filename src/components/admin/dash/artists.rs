@@ -4,6 +4,7 @@ use reactive_stores::Store;
 use crate::app::UserContext;
 use crate::components::utils::error::ErrorPage;
 use crate::components::utils::loading::Loading;
+use crate::components::utils::status_badge::StatusBadge;
 use crate::models::artist::Artist;
 use crate::models::auth::User;
 use crate::routes::record_label::get_label_artists;
@@ -59,7 +60,8 @@ pub fn ArtistsTable() -> impl IntoView {
                                     <table class="table">
                                         <thead>
                                             <tr>
-                                                <th></th>
+                                                <th>Status</th>
+                                                <th>Slug</th>
                                                 <th>Name</th>
                                                 <th>Releases</th>
                                                 <th>Tracks</th>
@@ -77,7 +79,7 @@ pub fn ArtistsTable() -> impl IntoView {
                                             } else {
                                                 view! { {artist_rows} }.into_any()
                                             }} <tr>
-                                                <td colspan="4"></td>
+                                                <td colspan="5"></td>
                                                 <td>
                                                     {if user.get().permissions.contains("label_owner") {
                                                         view! {
@@ -107,6 +109,9 @@ pub fn ArtistsTable() -> impl IntoView {
 fn ArtistRow(#[prop(into)] artist: Artist) -> impl IntoView {
     view! {
         <tr>
+            <td>
+                <StatusBadge deleted_at=artist.deleted_at published_at=artist.published_at />
+            </td>
             <td>{artist.slug.clone()}</td>
             <td>{artist.name.clone()}</td>
             <td>0</td>

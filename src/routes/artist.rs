@@ -25,11 +25,12 @@ pub async fn create_artist(
     name: String,
     description: String,
     record_label_id: i64,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<ArtistResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
-    create_artist_service(pool, user, name, description, record_label_id).await
+    create_artist_service(pool, user, name, description, record_label_id, published_at).await
 }
 
 #[server]
@@ -37,11 +38,12 @@ pub async fn update_artist(
     slug: String,
     name: String,
     description: String,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<ArtistResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
-    update_artist_service(pool, user, slug, name, description).await
+    update_artist_service(pool, user, slug, name, description, published_at).await
 }
 
 #[server]

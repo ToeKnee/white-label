@@ -2,9 +2,10 @@ use leptos::prelude::ServerFnError;
 use leptos::server;
 
 use crate::models::artist::Artist;
+
 use crate::models::record_label::RecordLabel;
 #[cfg(feature = "ssr")]
-use crate::state::pool;
+use crate::state::{auth, pool};
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
 pub struct LabelResult {
@@ -31,7 +32,12 @@ pub struct LabelArtistResult {
 
 #[server]
 pub async fn get_label_artists(record_label_id: i64) -> Result<LabelArtistResult, ServerFnError> {
+    let auth = auth()?;
     let pool = pool()?;
+
+    let current_user = auth.current_user.unwrap_or_default();
+    let show_hidden = current_user.permissions.contains("label_owner");
+
     let record_label = RecordLabel::get_by_id(&pool, record_label_id)
         .await
         .map_err(|x| {
@@ -39,11 +45,14 @@ pub async fn get_label_artists(record_label_id: i64) -> Result<LabelArtistResult
             tracing::error!("{err}");
             ServerFnError::new("Could not retrieve label, try again later")
         })?;
-    let artists = record_label.artists(&pool).await.map_err(|x| {
-        let err = format!("Error while getting artists: {x:?}");
-        tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve artists, try again later")
-    })?;
+    let artists = record_label
+        .artists(&pool, show_hidden)
+        .await
+        .map_err(|x| {
+            let err = format!("Error while getting artists: {x:?}");
+            tracing::error!("{err}");
+            ServerFnError::new("Could not retrieve artists, try again later")
+        })?;
     Ok(LabelArtistResult { artists })
 }
 
@@ -54,8 +63,6 @@ pub async fn update_record_label(
     description: String,
     isrc_base: String,
 ) -> Result<LabelResult, ServerFnError> {
-    use crate::state::auth;
-
     let auth = auth()?;
     let pool = pool()?;
 

@@ -2,13 +2,11 @@ use leptos::prelude::*;
 use markdown;
 use reactive_stores::Store;
 
-use crate::components::utils::error::ErrorPage;
-use crate::components::utils::loading::Loading;
+use crate::components::utils::{error::ErrorPage, loading::Loading, status_badge::StatusBadge};
 use crate::models::artist::Artist;
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::{get_label_artists, get_record_label};
-use crate::store::GlobalState;
-use crate::store::GlobalStateStoreFields;
+use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::shorten_string::shorten_string;
 
 /// Renders the record label page.
@@ -101,7 +99,8 @@ pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
 fn ArtistBox(#[prop(into)] artist: Artist) -> impl IntoView {
     view! {
         <a href=format!("/artists/{}", artist.slug) class="no-underline">
-            <div class="w-96 shadow-xl card card-compact bg-base-100">
+            <div class="w-96 shadow-xl card card-compact bg-base-100 indicator">
+                <StatusBadge deleted_at=artist.deleted_at published_at=artist.published_at />
                 <figure>
                     <img
                         src="https://jankyswitch.com/images/Avatar240.webp"
