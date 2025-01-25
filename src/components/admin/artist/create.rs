@@ -1,8 +1,10 @@
 use leptos::prelude::*;
 use reactive_stores::Store;
 
-use crate::app::UserContext;
-use crate::components::utils::{error::ErrorPage, error::ServerErrors, loading::Loading};
+use super::shared::{DescriptionFields, PublishedAtField};
+use crate::components::utils::{
+    error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect,
+};
 use crate::models::artist::Artist;
 use crate::routes::artist::{ArtistResult, CreateArtist};
 use crate::store::{GlobalState, GlobalStateStoreFields};
@@ -11,11 +13,12 @@ use crate::utils::redirect::redirect;
 /// Renders the create artist page.
 #[component]
 pub fn CreateArtist() -> impl IntoView {
+    Effect::new_isomorphic(move || {
+        permission_or_redirect("label_owner", "/admin");
+    });
+
     let store = expect_context::<Store<GlobalState>>();
     let (record_label, _set_record_label) = signal(store.record_label().get());
-
-    let user_context = expect_context::<UserContext>();
-    let (user, _set_user) = signal(user_context.0.get());
 
     let (artist, set_artist) = signal(Artist::default());
 
@@ -34,12 +37,6 @@ pub fn CreateArtist() -> impl IntoView {
             .value()
             .get()
             .unwrap_or_else(|| Ok(ArtistResult::default()))
-    });
-
-    Effect::new_isomorphic(move || {
-        if user.get().is_active() && !user.get().permissions.contains("label_owner") {
-            redirect("/");
-        }
     });
 
     let var_name = view! {
@@ -74,7 +71,7 @@ pub fn CreateArtist() -> impl IntoView {
                                     type="text"
                                     class="hidden"
                                     placeholder=""
-                                    name="record_label_id"
+                                    name="artist_form[label_id]"
                                     value=record_label.get().id
                                 /> <div class="divider">Public</div>
                                 <label class="flex gap-2 items-center input input-bordered">
@@ -82,12 +79,16 @@ pub fn CreateArtist() -> impl IntoView {
                                         type="text"
                                         class="grow"
                                         placeholder="Artist name"
-                                        name="name"
+                                        name="artist_form[name]"
                                         value=artist.get().name
                                     />
                                 </label> <DescriptionFields artist=artist.get() />
                                 <div class="divider">Private</div>
-                                <button class="btn btn-primary">Create</button>
+                                {move || {
+                                    view! {
+                                        <PublishedAtField published_at=artist.get().published_at />
+                                    }
+                                }} <button class="btn btn-primary">Create</button>
                             </div>
                         </ActionForm>
                     }
@@ -96,44 +97,4 @@ pub fn CreateArtist() -> impl IntoView {
         </Transition>
     };
     var_name
-}
-
-/// Managed description so we can preview markdown
-#[component]
-pub fn DescriptionFields(artist: Artist) -> impl IntoView {
-    let (description, set_description) = signal(artist.description);
-    let (markdown_description, set_markdown_description) = signal(String::new());
-    Effect::new(move || {
-        set_markdown_description.set(
-            markdown::to_html_with_options(&description.get(), &markdown::Options::gfm()).unwrap(),
-        );
-    });
-
-    view! {
-        <div class="flex gap-6">
-            <label class="w-1/2 form-control">
-                <h2>Description</h2>
-                <textarea
-                    class="textarea textarea-bordered"
-                    rows="15"
-                    name="description"
-                    placeholder="Description"
-                    prop:value=move || description.get()
-                    on:input:target=move |ev| {
-                        set_description.set(ev.target().value());
-                    }
-                >
-                    {description}
-                </textarea>
-                <div class="label">
-                    <span class="label-text-alt"></span>
-                    <span class="label-text-alt">Markdown</span>
-                </div>
-            </label>
-            <div class="w-1/2">
-                <h2>Preview</h2>
-                <div inner_html=markdown_description />
-            </div>
-        </div>
-    }
 }

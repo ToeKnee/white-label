@@ -15,7 +15,7 @@ use reactive_stores::Store;
 
 use crate::components::{
     admin::{
-        create_artist::CreateArtist, dashboard::Dashboard, edit_artist::EditArtist,
+        artist::create::CreateArtist, artist::edit::EditArtist, dashboard::Dashboard,
         edit_label::EditLabel, root::AdminRoot,
     },
     artist::home::ArtistPage,

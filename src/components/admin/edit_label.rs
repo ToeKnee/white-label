@@ -1,24 +1,24 @@
 use leptos::prelude::*;
 use reactive_stores::Store;
 
-use crate::app::UserContext;
 use crate::components::utils::{
-    error::ErrorPage, error::ServerErrors, loading::Loading, success::Success,
+    error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect,
+    success::Success,
 };
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::LabelResult;
 use crate::routes::record_label::UpdateRecordLabel;
 use crate::store::{GlobalState, GlobalStateStoreFields};
-use crate::utils::redirect::redirect;
 
 /// Renders the edit record label page.
 #[component]
 pub fn EditLabel() -> impl IntoView {
+    Effect::new_isomorphic(move || {
+        permission_or_redirect("label_owner", "/admin");
+    });
+
     let store = expect_context::<Store<GlobalState>>();
     let (record_label, set_record_label) = signal(store.record_label().get());
-
-    let user_context = expect_context::<UserContext>();
-    let (user, _set_user) = signal(user_context.0.get());
 
     let update_record_label = ServerAction::<UpdateRecordLabel>::new();
     let value = Signal::derive(move || {
@@ -27,12 +27,7 @@ pub fn EditLabel() -> impl IntoView {
             .get()
             .unwrap_or_else(|| Ok(LabelResult::default()))
     });
-
-    Effect::new_isomorphic(move || {
-        if user.get().is_active() && !user.get().permissions.contains("label_owner") {
-            redirect("/");
-        }
-    });
+    let (success, set_success) = signal(false);
 
     let var_name = view! {
         <h1>Edit Record Label Details</h1>
@@ -52,22 +47,26 @@ pub fn EditLabel() -> impl IntoView {
                                             if record_label.id > 0 {
                                                 let store_record_label = store.record_label();
                                                 *store_record_label.write() = record_label.clone();
-                                                set_record_label.set(record_label.clone());
-                                                view! {
-                                                    <Success message=format!(
-                                                        "{} Updated!",
-                                                        record_label.name,
-                                                    ) />
-                                                }
-                                                    .into_any()
+                                                set_record_label.set(record_label);
+                                                set_success.set(true);
                                             } else {
-                                                view! { "" }.into_any()
+                                                set_success.set(false);
                                             }
+                                            view! { "" }.into_any()
                                         }
                                         Err(errors) => {
+                                            set_success.set(false);
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                    }
+                                }}
+                                {move || {
+                                    view! {
+                                        <Success
+                                            message=format!("{} Updated!", record_label.get().name)
+                                            show=success.get()
+                                        />
                                     }
                                 }}
                                 <input

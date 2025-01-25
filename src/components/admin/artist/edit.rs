@@ -1,10 +1,11 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::app::UserContext;
+use super::shared::{DescriptionFields, PublishedAtField};
 use crate::components::admin::delete_artist::DeleteArtist;
 use crate::components::utils::{
-    error::ErrorPage, error::ServerErrors, loading::Loading, success::Success,
+    error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect,
+    success::Success,
 };
 use crate::models::artist::Artist;
 use crate::routes::artist::{get_artist, ArtistResult, UpdateArtist};
@@ -13,18 +14,13 @@ use crate::utils::redirect::redirect;
 /// Renders the create artist page.
 #[component]
 pub fn EditArtist() -> impl IntoView {
+    Effect::new_isomorphic(move || {
+        permission_or_redirect("label_owner", "/admin");
+    });
+
     let params = use_params_map();
     let slug = params.read().get("slug").unwrap();
     let slug = RwSignal::new(slug);
-
-    let user_context = expect_context::<UserContext>();
-    let (user, _set_user) = signal(user_context.0.get());
-
-    Effect::new_isomorphic(move || {
-        if user.get().is_active() && !user.get().permissions.contains("label_owner") {
-            redirect("/");
-        }
-    });
 
     let (artist, set_artist) = signal(Artist::default());
     let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
@@ -71,7 +67,9 @@ pub fn EditArtist() -> impl IntoView {
                                             } else {
                                                 set_success.set(false);
                                             }
-                                            view! { "" }.into_any()
+
+                                            view! { "" }
+                                                .into_any()
                                         }
                                         Err(errors) => {
                                             set_success.set(false);
@@ -81,30 +79,34 @@ pub fn EditArtist() -> impl IntoView {
                                     }
                                 }}
                                 {move || {
-                                    if success.get() {
-                                        view! {
-                                            <Success message=format!(
-                                                "{} Updated!",
-                                                artist.get().name,
-                                            ) />
-                                        }
-                                            .into_any()
-                                    } else {
-                                        view! { "" }.into_any()
+                                    view! {
+                                        <Success
+                                            message=format!("{} Updated!", artist.get().name)
+                                            show=success.get()
+                                        />
                                     }
-                                }} <input type="text" class="hidden" name="slug" bind:value=slug />
-                                <div class="divider">Public</div>
+                                }}
+                                <input
+                                    type="text"
+                                    class="hidden"
+                                    name="artist_form[slug]"
+                                    bind:value=slug
+                                /> <div class="divider">Public</div>
                                 <label class="flex gap-2 items-center input input-bordered">
                                     <input
                                         type="text"
                                         class="grow"
                                         placeholder="Artist name"
-                                        name="name"
+                                        name="artist_form[name]"
                                         value=artist.get().name
                                     />
                                 </label> <DescriptionFields artist=artist.get() />
                                 <div class="divider">Private</div>
-                                <div class="flex flex-auto gap-6">
+                                {move || {
+                                    view! {
+                                        <PublishedAtField published_at=artist.get().published_at />
+                                    }
+                                }} <div class="flex flex-auto gap-6">
                                     <button class="flex-1 btn btn-primary">Update</button>
                                     {move || {
                                         view! { <DeleteArtist artist=artist.get() /> }
@@ -118,44 +120,4 @@ pub fn EditArtist() -> impl IntoView {
         </Transition>
     };
     var_name
-}
-
-/// Managed description so we can preview markdown
-#[component]
-pub fn DescriptionFields(artist: Artist) -> impl IntoView {
-    let (description, set_description) = signal(artist.description);
-    let (markdown_description, set_markdown_description) = signal(String::new());
-    Effect::new(move || {
-        set_markdown_description.set(
-            markdown::to_html_with_options(&description.get(), &markdown::Options::gfm()).unwrap(),
-        );
-    });
-
-    view! {
-        <div class="flex gap-6">
-            <label class="w-1/2 form-control">
-                <h2>Description</h2>
-                <textarea
-                    class="textarea textarea-bordered"
-                    rows="15"
-                    name="description"
-                    placeholder="Description"
-                    prop:value=move || description.get()
-                    on:input:target=move |ev| {
-                        set_description.set(ev.target().value());
-                    }
-                >
-                    {description}
-                </textarea>
-                <div class="label">
-                    <span class="label-text-alt"></span>
-                    <span class="label-text-alt">Markdown</span>
-                </div>
-            </label>
-            <div class="w-1/2">
-                <h2>Preview</h2>
-                <div inner_html=markdown_description />
-            </div>
-        </div>
-    }
 }

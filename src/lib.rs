@@ -18,6 +18,7 @@ pub mod app;
 pub mod components;
 #[cfg(feature = "ssr")]
 pub mod database;
+pub mod forms;
 pub mod models;
 pub mod routes;
 #[cfg(feature = "ssr")]
