@@ -2,10 +2,10 @@ use leptos::form::ActionForm;
 use leptos::prelude::*;
 
 use crate::app::UserContext;
+use crate::components::utils::{error::ErrorPage, error::ServerErrors};
 use crate::models::auth::User;
 use crate::routes::auth::Login;
 use crate::utils::redirect::redirect;
-use crate::utils::split_at_colon::split_at_colon;
 
 /// Renders the login page.
 #[component]
@@ -21,41 +21,21 @@ pub fn Login() -> impl IntoView {
 
             <ActionForm action=login>
                 <div class="grid gap-6">
-                    <ErrorBoundary fallback=|errors| {
-                        view! {
-                            <div role="alert" class="alert alert-warning">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="w-6 h-6 stroke-current shrink-0"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                </svg>
-                                {move || {
-                                    errors
-                                        .get()
-                                        .into_iter()
-                                        .last()
-                                        .map(|(_, e)| {
-
-                                            view! { <span>{split_at_colon(&e.to_string()).1}</span> }
-                                        })
-                                }}
-                            </div>
-                        }
+                    <ErrorBoundary fallback=|_| {
+                        ErrorPage
                     }>
                         {move || {
-                            if value.get().ok().is_some() {
-                                let this_user = value.get().unwrap();
-                                user_context.1.set(this_user.clone());
-                                if this_user.is_authenticated() {
-                                    redirect("/");
+                            match value.get() {
+                                Ok(user) => {
+                                    let this_user = value.get().unwrap();
+                                    user_context.1.set(this_user);
+                                    if user.is_authenticated() {
+                                        redirect("/");
+                                    }
+                                    view! { "" }.into_any()
+                                }
+                                Err(errors) => {
+                                    view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
                             }
                         }}
