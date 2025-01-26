@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos_meta::Title;
 use reactive_stores::Store;
 
 use crate::components::utils::{
@@ -30,14 +31,14 @@ pub fn EditLabel() -> impl IntoView {
     let (success, set_success) = signal(false);
 
     let var_name = view! {
-        <h1>Edit Record Label Details</h1>
-
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
                     view! {
+                        <Title text=format!("Edit {}", record_label.get().name) />
+                        <h1>"Edit "{record_label.get().name}" Details"</h1>
                         <ActionForm action=update_record_label>
                             <div class="grid gap-6">
                                 {move || {

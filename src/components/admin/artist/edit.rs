@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
 use super::shared::{DescriptionFields, PublishedAtField};
@@ -34,7 +35,8 @@ pub fn EditArtist() -> impl IntoView {
     });
     let (success, set_success) = signal(false);
 
-    let var_name = view! {
+    view! {
+        <Title text=move || format!("Edit {}", artist.get().name) />
         <h1>"Edit "{move || view! { {artist.get().name} }}</h1>
 
         <Transition fallback=Loading>
@@ -119,5 +121,4 @@ pub fn EditArtist() -> impl IntoView {
             </ErrorBoundary>
         </Transition>
     };
-    var_name
 }

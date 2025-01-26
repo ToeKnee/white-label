@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos_meta::Title;
 use markdown;
 use reactive_stores::Store;
 
@@ -15,6 +16,7 @@ pub fn RecordLabelHome() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
     let (record_label, set_record_label) = signal(store.record_label().get());
     let record_label_resource = Resource::new(move || record_label.get(), |_| get_record_label());
+
     view! {
         <Transition fallback=move || view! { <Loading /> }>
             <ErrorBoundary fallback=|_| {
@@ -35,6 +37,7 @@ pub fn RecordLabelHome() -> impl IntoView {
                     let record_label = store.record_label().get();
 
                     view! {
+                        <Title text=record_label.name.clone() />
                         <article class="md:container md:mx-auto prose">
                             <h1>{record_label.name.clone()}</h1>
                             <div inner_html=markdown::to_html_with_options(

@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos_meta::Title;
 
 use crate::components::admin::dash::{artists::ArtistsTable, record_label::RecordLabel};
 use crate::components::utils::error::ErrorPage;
@@ -14,6 +15,7 @@ pub fn Dashboard() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     view! {
+                        <Title text="Admin Dashboard" />
                         <div class="flex flex-row flex-wrap gap-4 justify-around">
                             <RecordLabel />
                             <ArtistsTable />

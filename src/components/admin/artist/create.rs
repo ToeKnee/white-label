@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos_meta::Title;
 use reactive_stores::Store;
 
 use super::shared::{DescriptionFields, PublishedAtField};
@@ -40,6 +41,7 @@ pub fn CreateArtist() -> impl IntoView {
     });
 
     let var_name = view! {
+        <Title text="Create Artist" />
         <h1>Create Artist</h1>
 
         <Transition fallback=Loading>

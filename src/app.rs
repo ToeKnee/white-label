@@ -63,13 +63,15 @@ pub fn WhiteLabel() -> impl IntoView {
     let user_resource = Resource::new(move || (user.get()), move |_| get_user());
     provide_context(UserContext(user, set_user));
 
+    let formatter = move |text: String| text;
+
     view! {
         // injects a stylesheet into the document <head>
         // id=leptos means cargo-leptos will hot-reload this stylesheet
         <Stylesheet id="leptos" href="/pkg/white-label.css" />
 
         // sets the document title
-        <Title text="Welcome to White-Label" />
+        <Title formatter />
 
         // This transition is used for loading the user and storing it in context.
         <Transition fallback=Loading>
