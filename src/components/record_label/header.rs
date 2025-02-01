@@ -57,7 +57,6 @@ pub fn LabelHeader() -> impl IntoView {
 #[component]
 pub fn UserMenu() -> impl IntoView {
     let user_context = expect_context::<UserContext>();
-    let (user, set_user) = signal(user_context.0.get());
 
     view! {
         <Transition fallback=Loading>
@@ -65,14 +64,13 @@ pub fn UserMenu() -> impl IntoView {
                 ErrorPage
             }>
                 {move || {
-                    set_user.set(user_context.0.get());
-                    if user.get().is_authenticated() {
+                    if user_context.0.get().is_authenticated() {
                         view! {
                             <div class="flex-none">
                                 <ul class="px-1 menu menu-horizontal">
                                     <li>
                                         <details>
-                                            <summary>{user.get().username}</summary>
+                                            <summary>{user_context.0.get().username}</summary>
                                             <ul
                                                 data-theme="light"
                                                 class="p-2 rounded-t-none bg-base-100"
@@ -82,7 +80,7 @@ pub fn UserMenu() -> impl IntoView {
                                                         "Profile"
                                                     </a>
                                                 </li>
-                                                {if user.get().permissions.contains("admin") {
+                                                {if user_context.0.get().permissions.contains("admin") {
                                                     view! {
                                                         <li>
                                                             <a href="/admin" class="btn btn-ghost">

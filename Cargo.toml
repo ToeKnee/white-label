@@ -14,7 +14,9 @@ axum = { version = "0.7", optional = true, features = ["macros"] }
 axum-login = "0.16.0"
 axum-macros = { version = "0.4.2", optional = true }
 axum_session = { version = "0.14.4", optional = true }
-axum_session_auth = { version = "0.14.1", optional = true }
+axum_session_auth = { version = "0.14.1", features = [
+    "advanced",
+], optional = true }
 axum_session_sqlx = { version = "0.3.0", optional = true }
 bcrypt = { version = "0.16.0", optional = true }
 chrono = { version = "0.4.39", features = ["serde"] }
@@ -161,3 +163,7 @@ lib-default-features = false
 #
 # Optional. Defaults to "release".
 lib-profile-release = "wasm-release"
+
+# [lints.clippy]
+# unwrap_used = "warn"
+# expect_used = "warn"

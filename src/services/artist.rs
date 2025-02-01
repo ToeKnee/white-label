@@ -33,9 +33,7 @@ pub async fn get_artist_service(pool: PgPool, slug: String) -> Result<ArtistResu
 /// # Arguments
 /// pool: `PgPool` - The database connection pool
 /// user: Option<&User> - The user creating the artist
-/// name: String - The name of the artist
-/// description: String - The description of the artist
-/// `record_label_id`: i64 - The ID of the record label the artist is signed to
+/// `artist_form`: `CreateArtistForm` - The form to create the artist
 ///
 /// # Returns
 /// Result<`ArtistResult`, `ServerFnError`> - The created artist
@@ -77,8 +75,7 @@ pub async fn create_artist_service(
 /// # Arguments
 /// pool: `PgPool` - The database connection pool
 /// user: Option<&User> - The user updating the artist
-/// name: String - The name of the artist
-/// description: String - The description of the artist
+/// `artist_form`: `UpdateArtistForm` - The form to update the artist
 ///
 /// # Returns
 /// Result<`ArtistResult`, `ServerFnError`> - The updated artist

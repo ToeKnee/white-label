@@ -120,5 +120,5 @@ pub fn EditArtist() -> impl IntoView {
                 })}
             </ErrorBoundary>
         </Transition>
-    };
+    }
 }

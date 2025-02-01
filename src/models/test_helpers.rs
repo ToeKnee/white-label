@@ -94,9 +94,10 @@ pub async fn create_test_record_label(
 #[cfg(feature = "ssr")]
 pub async fn create_test_user(pool: &PgPool, id: usize) -> Result<SqlUser, sqlx::Error> {
     let user = sqlx::query_as::<_, SqlUser>(
-        "INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *",
+        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *",
     )
     .bind(format!("test-{id}"))
+    .bind(format!("test-{id}@example.com"))
     .bind("$2b$12$bvHwxi3jnJC6/nzyFmKKBOZPHo/kn5KHPKxTeG0wiGOUlKuYYjZH.") // This is a valid bcrypt hash for the word "password"
     .fetch_one(pool)
     .await?;
