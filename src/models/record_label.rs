@@ -80,7 +80,7 @@ impl RecordLabel {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                eprintln!("{e}");
+                leptos::logging::error!("{e}");
                 return Err(anyhow::anyhow!("Could not find label"));
             }
         };
@@ -117,7 +117,7 @@ impl RecordLabel {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                eprintln!("{e}");
+                leptos::logging::error!("{e}");
                 return Err(anyhow::anyhow!(
                     "Could not find record label with id {}.",
                     id
@@ -157,7 +157,7 @@ impl RecordLabel {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                eprintln!("{e}");
+                leptos::logging::error!("{e}");
                 return Err(anyhow::anyhow!(
                     "Could not find record label with slug {}.",
                     slug
@@ -203,7 +203,7 @@ impl RecordLabel {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                eprintln!("{e}");
+                leptos::logging::error!("{e}");
                 return Err(anyhow::anyhow!("Could not update label."));
             }
         };

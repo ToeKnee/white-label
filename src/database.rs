@@ -28,7 +28,7 @@ pub async fn create_pool() -> sqlx::PgPool {
     let database_url = match database_url {
         Ok(database_url) => database_url,
         Err(e) => {
-            eprintln!("{e}");
+            leptos::logging::error!("{e}");
             std::process::exit(1);
         }
     };
@@ -40,7 +40,7 @@ pub async fn create_pool() -> sqlx::PgPool {
     {
         Ok(pool) => pool,
         Err(e) => {
-            eprintln!("Could not connect to database_url {database_url}: {e}");
+            leptos::logging::error!("Could not connect to database_url {database_url}: {e}");
             std::process::exit(1);
         }
     };

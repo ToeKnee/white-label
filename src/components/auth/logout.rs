@@ -52,7 +52,7 @@ pub fn Logout() -> impl IntoView {
                                 let this_user = match value.get() {
                                     Some(Ok(user)) => user,
                                     Some(Err(e)) => {
-                                        eprintln!("{e}");
+                                        leptos::logging::error!("{e}");
                                         User::default()
                                     }
                                     None => User::default(),
@@ -68,7 +68,7 @@ pub fn Logout() -> impl IntoView {
                             .is_some_and(|user| match user {
                                 Ok(user) => user.is_anonymous(),
                                 Err(e) => {
-                                    eprintln!("{e}");
+                                    leptos::logging::error!("{e}");
                                     false
                                 }
                             })
