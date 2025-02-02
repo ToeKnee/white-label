@@ -27,8 +27,7 @@ pub fn Login() -> impl IntoView {
                         {move || {
                             match value.get() {
                                 Ok(user) => {
-                                    let this_user = value.get().unwrap();
-                                    user_context.1.set(this_user);
+                                    user_context.1.set(user.clone());
                                     if user.is_authenticated() {
                                         redirect("/");
                                     }

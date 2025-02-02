@@ -44,7 +44,7 @@ pub fn RecordLabelHome() -> impl IntoView {
                                     &record_label.description,
                                     &markdown::Options::gfm(),
                                 )
-                                .unwrap() />
+                                .unwrap_or_default() />
 
                             <h2>"Artists"</h2>
                             <ArtistList record_label />

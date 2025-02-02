@@ -44,7 +44,7 @@ pub fn ArtistPage() -> impl IntoView {
                                     &artist.get().description,
                                     &markdown::Options::gfm(),
                                 )
-                                .unwrap() />
+                                .unwrap_or_default() />
                         </article>
                     }
                 })}

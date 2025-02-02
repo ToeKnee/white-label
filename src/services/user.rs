@@ -56,7 +56,15 @@ pub async fn register_user_service(
         return Err(ServerFnError::ServerError(error.to_string()));
     }
 
-    let password_hashed = hash(form.password, DEFAULT_COST).unwrap();
+    let password_hashed = match hash(form.password, DEFAULT_COST) {
+        Ok(hash) => hash,
+        Err(e) => {
+            leptos::logging::error!("{:?}", e);
+            return Err(ServerFnError::ServerError(
+                "Error hassing password.".to_string(),
+            ));
+        }
+    };
 
     sqlx::query("INSERT INTO users (username, email, password) VALUES ($1, $2, $3)")
         .bind(user.username.clone())

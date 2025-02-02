@@ -266,11 +266,13 @@ pub mod ssr {
     #[async_trait]
     impl Authentication<Self, i64, PgPool> for User {
         async fn load_user(userid: i64, pool: Option<&PgPool>) -> Result<Self, anyhow::Error> {
-            let pool = pool.unwrap();
+            let Some(pool) = pool else {
+                return Err(anyhow::anyhow!("No pool provided."));
+            };
 
             Self::get(userid, pool)
                 .await
-                .ok_or_else(|| anyhow::anyhow!("Cannot get user"))
+                .ok_or_else(|| anyhow::anyhow!("Cannot get user."))
         }
 
         fn is_authenticated(&self) -> bool {

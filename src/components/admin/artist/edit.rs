@@ -20,7 +20,7 @@ pub fn EditArtist() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let slug = params.read().get("slug").unwrap();
+    let slug = params.read().get("slug").unwrap_or_default();
     let slug = RwSignal::new(slug);
 
     let (artist, set_artist) = signal(Artist::default());

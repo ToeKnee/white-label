@@ -2,6 +2,7 @@ use leptos::form::ActionForm;
 use leptos::prelude::*;
 
 use crate::app::UserContext;
+use crate::models::auth::User;
 use crate::routes::auth::Logout;
 use crate::utils::split_at_colon::split_at_colon;
 
@@ -40,7 +41,6 @@ pub fn Logout() -> impl IntoView {
                                         .into_iter()
                                         .last()
                                         .map(|(_, e)| {
-
                                             view! { <span>{split_at_colon(&e.to_string()).1}</span> }
                                         })
                                 }}
@@ -49,15 +49,29 @@ pub fn Logout() -> impl IntoView {
                     }>
                         {move || {
                             if value.get().is_some() {
-                                let this_user = value.get().unwrap().ok().unwrap();
+                                let this_user = match value.get() {
+                                    Some(Ok(user)) => user,
+                                    Some(Err(e)) => {
+                                        eprintln!("{e}");
+                                        User::default()
+                                    }
+                                    None => User::default(),
+                                };
                                 user_context.1.set(this_user);
                             }
                         }}
                     </ErrorBoundary>
 
                     {move || {
-                        if value.get().is_some()
-                            && value.get().unwrap().ok().unwrap().is_anonymous()
+                        if value
+                            .get()
+                            .is_some_and(|user| match user {
+                                Ok(user) => user.is_anonymous(),
+                                Err(e) => {
+                                    eprintln!("{e}");
+                                    false
+                                }
+                            })
                         {
                             view! { Logged out }.into_any()
                         } else {

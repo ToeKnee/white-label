@@ -64,7 +64,13 @@ async fn leptos_routes_handler(
 ///
 /// This function will panic if it can't initialise the logger.
 pub async fn init_app() {
-    simple_logger::init().expect("Couldn't initialize logging.");
+    match simple_logger::init() {
+        Ok(()) => (),
+        Err(e) => {
+            eprintln!("Couldn't initialise logging: {e:?}");
+            return;
+        }
+    };
 
     // Set up the database
     let pool = create_pool().await;
@@ -72,13 +78,27 @@ pub async fn init_app() {
     // Auth section
     let session_config = SessionConfig::default().with_table_name("axum_sessions");
     let auth_config = AuthConfig::<i64>::default();
-    let session_store =
-        SessionStore::<SessionPgPool>::new(Some(SessionPgPool::from(pool.clone())), session_config)
-            .await
-            .unwrap();
+    let session_store = match SessionStore::<SessionPgPool>::new(
+        Some(SessionPgPool::from(pool.clone())),
+        session_config,
+    )
+    .await
+    {
+        Ok(store) => store,
+        Err(e) => {
+            logging::log!("Couldn't initialise session store: {:?}", e);
+            return;
+        }
+    };
 
     // Setting this to None means we'll be using cargo-leptos and its env vars
-    let conf = get_configuration(None).unwrap();
+    let conf = match get_configuration(None) {
+        Ok(conf) => conf,
+        Err(e) => {
+            logging::log!("Couldn't get configuration: {:?}", e);
+            return;
+        }
+    };
     let leptos_options = conf.leptos_options;
     let addr = leptos_options.site_addr;
     let routes = generate_route_list(WhiteLabel);
@@ -106,9 +126,19 @@ pub async fn init_app() {
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
-    logging::log!("Listening on http://{}", &addr);
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app.into_make_service())
-        .await
-        .unwrap();
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(listener) => {
+            logging::log!("Listening on http://{}", &addr);
+            listener
+        }
+        Err(e) => {
+            logging::log!("Couldn't bind address: {:?}", e);
+            return;
+        }
+    };
+    let serve = axum::serve(listener, app.into_make_service()).await;
+    match serve {
+        Ok(()) => logging::log!("Server stopped."),
+        Err(e) => logging::log!("Server Error: {:?}", e),
+    }
 }

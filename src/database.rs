@@ -33,11 +33,17 @@ pub async fn create_pool() -> sqlx::PgPool {
         }
     };
 
-    let pool = PgPoolOptions::new()
+    let pool = match PgPoolOptions::new()
         .max_connections(20)
         .connect(database_url.as_str())
         .await
-        .expect("Could not connect to database_url {database_url}.");
+    {
+        Ok(pool) => pool,
+        Err(e) => {
+            eprintln!("Could not connect to database_url {database_url}: {e}");
+            std::process::exit(1);
+        }
+    };
 
     match sqlx::migrate!().run(&pool).await {
         Ok(()) => (),

@@ -186,7 +186,7 @@ impl Artist {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
 
-        let artist = sqlx::query_as::<_, Self>(
+        let artist = match sqlx::query_as::<_, Self>(
             "UPDATE artists SET name = $1, slug = $2, description = $3, published_at = $4, updated_at = $5 WHERE id = $6 RETURNING *",
         )
         .bind(self.name)
@@ -196,8 +196,16 @@ impl Artist {
         .bind(chrono::Utc::now())
         .bind(self.id)
         .fetch_one(pool)
-        .await
-        .unwrap();
+        .await {
+            Ok(artist) => artist,
+            Err(e) => {
+                eprintln!("{e}");
+                return Err(anyhow::anyhow!(
+                    "Could not update artist with id {}.",
+                    self.id
+                ));
+            }
+        };
 
         Ok(artist)
     }

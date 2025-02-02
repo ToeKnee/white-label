@@ -9,7 +9,8 @@ pub fn DescriptionFields(artist: Artist) -> impl IntoView {
     let (markdown_description, set_markdown_description) = signal(String::new());
     Effect::new(move || {
         set_markdown_description.set(
-            markdown::to_html_with_options(&description.get(), &markdown::Options::gfm()).unwrap(),
+            markdown::to_html_with_options(&description.get(), &markdown::Options::gfm())
+                .unwrap_or_default(),
         );
     });
 

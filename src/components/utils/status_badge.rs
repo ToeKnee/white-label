@@ -12,10 +12,13 @@ pub fn StatusBadge(
         badge_text = "Deleted".to_string();
         badge_class = "indicator-item badge badge-error".to_string();
     } else if published_at.is_some() {
-        if published_at.unwrap() > chrono::Utc::now() {
-            badge_text = "Scheduled".to_string();
-            badge_class = "indicator-item badge badge-info".to_string();
-        }
+        match published_at {
+            Some(published_at) if published_at > chrono::Utc::now() => {
+                badge_text = "Scheduled".to_string();
+                badge_class = "indicator-item badge badge-info".to_string();
+            }
+            _ => (),
+        };
     } else {
         badge_text = "Draft".to_string();
         badge_class = "indicator-item badge badge-warning".to_string();

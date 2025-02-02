@@ -86,7 +86,9 @@ pub fn WhiteLabel() -> impl IntoView {
                                 if this_user.clone().unwrap_or_default().is_authenticated()
                                     && !user.get().is_authenticated()
                                 {
-                                    *set_user.write() = this_user.clone().unwrap();
+                                    if let Some(ref user) = this_user {
+                                        *set_user.write() = user.clone();
+                                    }
                                 }
                                 this_user
                             },
