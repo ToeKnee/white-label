@@ -19,7 +19,10 @@ use crate::components::{
         edit_label::EditLabel, root::AdminRoot,
     },
     artist::home::ArtistPage,
-    auth::{login::Login, logout::Logout, profile::EditProfile, register::Register},
+    auth::{
+        change_password::ChangePassword, login::Login, logout::Logout, profile::EditProfile,
+        register::Register,
+    },
     record_label::{footer::LabelFooter, header::LabelHeader, home::RecordLabelHome},
     utils::{error::ErrorPage, loading::Loading, not_found::NotFound},
 };
@@ -110,6 +113,7 @@ pub fn WhiteLabel() -> impl IntoView {
                     <Route path=path!("register") view=Register />
                     <Route path=path!("logout") view=Logout />
                     <Route path=path!("profile") view=EditProfile />
+                    <Route path=path!("profile/change-password") view=ChangePassword />
 
                     <ParentRoute path=path!("admin") view=AdminRoot>
                         <Route path=path!("") view=Dashboard />

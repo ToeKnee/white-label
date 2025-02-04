@@ -2,14 +2,12 @@
 use bcrypt::verify;
 use leptos::prelude::*;
 
-use crate::forms::user::{RegisterUserForm, UpdateUserForm};
+use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::models::auth::User;
 #[cfg(feature = "ssr")]
 use crate::models::auth::UserPasshash;
 #[cfg(feature = "ssr")]
-use crate::services::user::register_user_service;
-#[cfg(feature = "ssr")]
-use crate::services::user::update_user_service;
+use crate::services::user::{change_password_service, register_user_service, update_user_service};
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
@@ -68,7 +66,7 @@ pub async fn register(
     let pool = pool()?;
     let auth = auth()?;
 
-    let user = register_user_service(pool, form).await;
+    let user = register_user_service(&pool, form).await;
     match user {
         Ok(user) => {
             auth.login_user(user.id);
@@ -94,7 +92,16 @@ pub async fn update_user(user_form: UpdateUserForm) -> Result<User, ServerFnErro
     let mut auth = auth()?;
     let user = auth.current_user.as_ref();
 
-    let response = update_user_service(pool, user, user_form).await;
+    let response = update_user_service(&pool, user, user_form).await;
     auth.reload_user().await;
     response
+}
+
+#[server(ChangePassword, "/api")]
+pub async fn change_password(password_form: ChangePasswordForm) -> Result<User, ServerFnError> {
+    let pool = pool()?;
+    let auth = auth()?;
+    let user = auth.current_user.as_ref();
+
+    change_password_service(&pool, user, password_form).await
 }

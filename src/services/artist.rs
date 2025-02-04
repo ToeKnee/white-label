@@ -18,9 +18,12 @@ use crate::routes::artist::ArtistResult;
 ///
 /// # Errors
 /// If the artist cannot be found, return an error
-pub async fn get_artist_service(pool: PgPool, slug: String) -> Result<ArtistResult, ServerFnError> {
+pub async fn get_artist_service(
+    pool: &PgPool,
+    slug: String,
+) -> Result<ArtistResult, ServerFnError> {
     Ok(ArtistResult {
-        artist: Artist::get_by_slug(&pool, slug).await.map_err(|e| {
+        artist: Artist::get_by_slug(pool, slug).await.map_err(|e| {
             let err = format!("Error while getting artist: {e:?}");
             tracing::error!("{err}");
             ServerFnError::new(e)
@@ -44,7 +47,7 @@ pub async fn get_artist_service(pool: PgPool, slug: String) -> Result<ArtistResu
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
 pub async fn create_artist_service(
-    pool: PgPool,
+    pool: &PgPool,
     user: Option<&User>,
     artist_form: CreateArtistForm,
 ) -> Result<ArtistResult, ServerFnError> {
@@ -55,7 +58,7 @@ pub async fn create_artist_service(
 
     Ok(ArtistResult {
         artist: Artist::create(
-            &pool,
+            pool,
             artist_form.name,
             artist_form.description,
             artist_form.label_id,
@@ -86,7 +89,7 @@ pub async fn create_artist_service(
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
 pub async fn update_artist_service(
-    pool: PgPool,
+    pool: &PgPool,
     user: Option<&User>,
     artist_form: UpdateArtistForm,
 ) -> Result<ArtistResult, ServerFnError> {
@@ -95,7 +98,7 @@ pub async fn update_artist_service(
         Err(e) => return Err(e),
     }
 
-    let mut artist = Artist::get_by_slug(&pool, artist_form.slug)
+    let mut artist = Artist::get_by_slug(pool, artist_form.slug)
         .await
         .map_err(|e| {
             let err = format!("Error while getting artist: {e:?}");
@@ -107,7 +110,7 @@ pub async fn update_artist_service(
     artist.published_at = artist_form.published_at;
 
     Ok(ArtistResult {
-        artist: artist.update(&pool).await.map_err(|e| {
+        artist: artist.update(pool).await.map_err(|e| {
             let err = format!("Error while updating artist: {e:?}");
             tracing::error!("{err}");
             ServerFnError::new(e)
@@ -130,7 +133,7 @@ pub async fn update_artist_service(
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
 pub async fn delete_artist_service(
-    pool: PgPool,
+    pool: &PgPool,
     user: Option<&User>,
     slug: String,
 ) -> Result<ArtistResult, ServerFnError> {
@@ -139,14 +142,14 @@ pub async fn delete_artist_service(
         Err(e) => return Err(e),
     }
 
-    let artist = Artist::get_by_slug(&pool, slug).await.map_err(|e| {
+    let artist = Artist::get_by_slug(pool, slug).await.map_err(|e| {
         let err = format!("Error while getting artist: {e:?}");
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;
 
     Ok(ArtistResult {
-        artist: artist.delete(&pool).await.map_err(|e| {
+        artist: artist.delete(pool).await.map_err(|e| {
             let err = format!("Error while deleting artist: {e:?}");
             tracing::error!("{err}");
             ServerFnError::new(e)
@@ -165,13 +168,15 @@ mod tests {
     #[sqlx::test]
     async fn test_get_artist_service(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
-        let artist_by_slug = get_artist_service(pool, artist.slug.clone()).await.unwrap();
+        let artist_by_slug = get_artist_service(&pool, artist.slug.clone())
+            .await
+            .unwrap();
         assert_eq!(artist, artist_by_slug.artist);
     }
 
     #[sqlx::test]
     async fn test_get_artist_service_no_artist(pool: PgPool) {
-        let result = get_artist_service(pool, "missing".to_string()).await;
+        let result = get_artist_service(&pool, "missing".to_string()).await;
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -194,7 +199,7 @@ mod tests {
             published_at: None,
         };
 
-        let artist = create_artist_service(pool, Some(&user), artist_form)
+        let artist = create_artist_service(&pool, Some(&user), artist_form)
             .await
             .unwrap();
         assert_eq!(artist.artist.name, "Test Artist".to_string());
@@ -218,7 +223,7 @@ mod tests {
             published_at: None,
         };
 
-        let artist = create_artist_service(pool, Some(&user), artist_form).await;
+        let artist = create_artist_service(&pool, Some(&user), artist_form).await;
 
         assert!(artist.is_err());
         assert_eq!(
@@ -242,7 +247,7 @@ mod tests {
             published_at: None,
         };
 
-        let artist = create_artist_service(pool, Some(&user), artist_form).await;
+        let artist = create_artist_service(&pool, Some(&user), artist_form).await;
 
         assert!(artist.is_err());
         assert_eq!(
@@ -266,7 +271,7 @@ mod tests {
             label_id: record_label.id,
             published_at: None,
         };
-        let artist = create_artist_service(pool, Some(&user), artist_form).await;
+        let artist = create_artist_service(&pool, Some(&user), artist_form).await;
 
         assert!(artist.is_err());
         assert_eq!(
@@ -289,7 +294,7 @@ mod tests {
             published_at: None,
         };
 
-        let artist = create_artist_service(pool, Some(&user), artist_form).await;
+        let artist = create_artist_service(&pool, Some(&user), artist_form).await;
 
         assert!(artist.is_err());
         assert_eq!(
@@ -312,7 +317,7 @@ mod tests {
             description: "This is an updated artist".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_artist = update_artist_service(pool, Some(&user), artist_form)
+        let updated_artist = update_artist_service(&pool, Some(&user), artist_form)
             .await
             .unwrap();
         assert_eq!(updated_artist.artist.name, "Updated Artist".to_string());
@@ -336,7 +341,7 @@ mod tests {
             description: "This is an updated artist".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_artist = update_artist_service(pool, Some(&user), artist_form).await;
+        let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
@@ -360,7 +365,7 @@ mod tests {
             description: "This is an updated artist".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_artist = update_artist_service(pool, Some(&user), artist_form).await;
+        let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
@@ -382,7 +387,7 @@ mod tests {
             description: "This is an updated artist".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_artist = update_artist_service(pool, Some(&user), artist_form).await;
+        let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
@@ -400,7 +405,8 @@ mod tests {
             description: "This is an updated artist".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_artist = update_artist_service(pool, Some(&User::default()), artist_form).await;
+        let updated_artist =
+            update_artist_service(&pool, Some(&User::default()), artist_form).await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
@@ -421,7 +427,7 @@ mod tests {
             description: "This is an updated artist".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_artist = update_artist_service(pool, Some(&user), artist_form).await;
+        let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
@@ -438,7 +444,7 @@ mod tests {
             .unwrap();
 
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
-        let deleted_artist = delete_artist_service(pool, Some(&user), artist.slug.clone())
+        let deleted_artist = delete_artist_service(&pool, Some(&user), artist.slug.clone())
             .await
             .unwrap();
         assert!(deleted_artist.artist.deleted_at.is_some());
@@ -451,7 +457,7 @@ mod tests {
             .await
             .unwrap();
 
-        let deleted_artist = delete_artist_service(pool, Some(&user), "missing".to_string()).await;
+        let deleted_artist = delete_artist_service(&pool, Some(&user), "missing".to_string()).await;
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),
@@ -463,7 +469,7 @@ mod tests {
     async fn test_delete_artist_service_no_user(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let deleted_artist =
-            delete_artist_service(pool, Some(&User::default()), artist.slug.clone()).await;
+            delete_artist_service(&pool, Some(&User::default()), artist.slug.clone()).await;
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),
@@ -477,7 +483,7 @@ mod tests {
             .await
             .unwrap();
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
-        let deleted_artist = delete_artist_service(pool, Some(&user), artist.slug.clone()).await;
+        let deleted_artist = delete_artist_service(&pool, Some(&user), artist.slug.clone()).await;
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),

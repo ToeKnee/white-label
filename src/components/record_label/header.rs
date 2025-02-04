@@ -80,6 +80,11 @@ pub fn UserMenu() -> impl IntoView {
                                                         "Profile"
                                                     </a>
                                                 </li>
+                                                <li>
+                                                    <a href="/profile/change-password" class="btn btn-ghost">
+                                                        "Change Password"
+                                                    </a>
+                                                </li>
                                                 {if user_context.0.get().permissions.contains("admin") {
                                                     view! {
                                                         <li>

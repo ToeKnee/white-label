@@ -18,7 +18,8 @@ pub struct UpdateUserForm {
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone, Default)]
-pub struct PasswordChangeForm {
+pub struct ChangePasswordForm {
     pub password: String,
-    pub password_confirmation: String,
+    pub new_password: String,
+    pub new_password_confirmation: String,
 }

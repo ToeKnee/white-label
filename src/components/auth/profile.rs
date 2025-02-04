@@ -88,7 +88,7 @@ pub fn EditProfile() -> impl IntoView {
 
 /// The HTML form for editing a user's profile.
 #[component]
-pub fn Form(user: User, username: RwSignal<String>) -> impl IntoView {
+fn Form(user: User, username: RwSignal<String>) -> impl IntoView {
     view! {
         <input type="text" class="hidden" name="user_form[original_username]" bind:value=username />
         <div class="divider">Public</div>

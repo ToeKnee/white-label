@@ -19,7 +19,7 @@ pub struct ArtistResult {
 #[server]
 pub async fn get_artist(slug: String) -> Result<ArtistResult, ServerFnError> {
     let pool = pool()?;
-    get_artist_service(pool, slug).await
+    get_artist_service(&pool, slug).await
 }
 
 #[server]
@@ -27,7 +27,7 @@ pub async fn create_artist(artist_form: CreateArtistForm) -> Result<ArtistResult
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
-    create_artist_service(pool, user, artist_form).await
+    create_artist_service(&pool, user, artist_form).await
 }
 
 #[server]
@@ -35,7 +35,7 @@ pub async fn update_artist(artist_form: UpdateArtistForm) -> Result<ArtistResult
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
-    update_artist_service(pool, user, artist_form).await
+    update_artist_service(&pool, user, artist_form).await
 }
 
 #[server]
@@ -43,5 +43,5 @@ pub async fn delete_artist(slug: String) -> Result<ArtistResult, ServerFnError> 
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
-    delete_artist_service(pool, user, slug).await
+    delete_artist_service(&pool, user, slug).await
 }
