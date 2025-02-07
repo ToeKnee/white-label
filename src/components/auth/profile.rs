@@ -18,7 +18,9 @@ pub fn EditProfile() -> impl IntoView {
     });
 
     let user_context = expect_context::<UserContext>();
-    let username = RwSignal::new(user_context.0.get().username);
+    // We are using an untracked signal here because we don't want to change this value -
+    // it should be the original username.
+    let username = RwSignal::new(user_context.0.get_untracked().username);
 
     let update_user = ServerAction::<UpdateUser>::new();
     let value = Signal::derive(move || {
@@ -75,7 +77,12 @@ pub fn EditProfile() -> impl IntoView {
                                                 show=success.get()
                                             />
                                         }
-                                    }} <Form user=user_context.0.get() username=username />
+                                    }}
+                                    {move || {
+                                        view! {
+                                            <Form user=user_context.0.get() username=username />
+                                        }
+                                    }}
                                 </div>
                             </ActionForm>
                         }
