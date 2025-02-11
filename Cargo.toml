@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow = "1.0.94"
+async-broadcast = { version = "0.7.2", optional = true }
 async-trait = "0.1.83"
 axum = { version = "0.7", optional = true, features = ["macros"] }
 axum-login = "0.16.0"
@@ -21,8 +22,10 @@ axum_session_sqlx = { version = "0.3.0", optional = true }
 bcrypt = { version = "0.16.0", optional = true }
 chrono = { version = "0.4.39", features = ["serde"] }
 console_error_panic_hook = { version = "0.1", optional = true }
+dashmap = { version = "6.1.0", optional = true }
 deunicode = "1.6.0"
 dotenvy = "0.15.7"
+futures = "0.3.31"
 getrandom = { version = "0.2.15", features = ["js"] }
 http = "1"
 leptos = { version = "0.7.0" }
@@ -30,11 +33,17 @@ leptos_axum = { version = "0.7.0", optional = true }
 leptos_meta = { version = "0.7.0" }
 leptos_router = { version = "0.7.0" }
 markdown = "1.0.0-alpha.21"
+once_cell = { version = "1.20.2", optional = true }
 password-auth = "1.0.0"
 reactive_stores = "0.1.0"
 reactive_stores_macro = "0.1.0"
 regex = "1.11.1"
 serde = { version = "1.0.215", features = ["derive"] }
+server_fn = { version = "0.7.5", features = [
+    "serde-lite",
+    "rkyv",
+    "multipart",
+] }
 simple_logger = "5.0.0"
 sqlx = { version = "0.8.2", features = [
     "postgres",
@@ -47,7 +56,7 @@ thiserror = "2"
 time = "0.3.37"
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 tower = { version = "0.5", optional = true }
-tower-http = { version = "0.6", features = ["fs"], optional = true }
+tower-http = { version = "0.6", features = ["fs", "limit"], optional = true }
 tower-sessions = "0.13.0"
 tower-sessions-sqlx-store = { version = "0.14.2", features = [
     "postgres",
@@ -56,18 +65,22 @@ tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
 tracing-wasm = { version = "0.2.1", optional = true }
 wasm-bindgen = "=0.2.99"
+web-sys = { version = "0.3.67", features = ["FileList", "File"] }
 
 [features]
 default = ["ssr"]
 hydrate = ["leptos/hydrate", "dep:tracing-wasm", "dep:console_error_panic_hook"]
 ssr = [
+    "dep:async-broadcast",
     "dep:axum",
     "dep:axum-macros",
     "dep:axum_session",
     "dep:axum_session_auth",
     "dep:axum_session_sqlx",
     "dep:bcrypt",
+    "dep:dashmap",
     "dep:leptos_axum",
+    "dep:once_cell",
     "dep:sqlx",
     "dep:tokio",
     "dep:tower",

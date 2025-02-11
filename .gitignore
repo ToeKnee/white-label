@@ -15,3 +15,6 @@ node_modules
 # end2end tests
 end2end/playwright-report
 end2end/test-results
+
+# Public uploads
+uploads/

@@ -3,6 +3,7 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 
 use crate::app::UserContext;
+use crate::components::files::upload::FileUploadWithProgress;
 use crate::components::utils::{
     error::ErrorPage, error::ServerErrors, loading::Loading,
     permissions::authenticated_or_redirect, success::Success,
@@ -35,6 +36,8 @@ pub fn EditProfile() -> impl IntoView {
         <Title text="Edit Profile" />
         <article class="md:container md:mx-auto prose">
             <h1>"Edit Profile"</h1>
+
+            <FileUploadWithProgress />
 
             <Transition fallback=Loading>
                 <ErrorBoundary fallback=|_| {
