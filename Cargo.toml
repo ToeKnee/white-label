@@ -43,6 +43,7 @@ server_fn = { version = "0.7.5", features = [
     "serde-lite",
     "rkyv",
     "multipart",
+    "cbor",
 ] }
 simple_logger = "5.0.0"
 sqlx = { version = "0.8.2", features = [

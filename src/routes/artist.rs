@@ -1,5 +1,6 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
+use server_fn::codec::Cbor;
 
 use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
 use crate::models::artist::Artist;
@@ -16,13 +17,13 @@ pub struct ArtistResult {
     pub artist: Artist,
 }
 
-#[server]
+#[server(GetArtist, "/api", endpoint="get_artist", output = Cbor)]
 pub async fn get_artist(slug: String) -> Result<ArtistResult, ServerFnError> {
     let pool = pool()?;
     get_artist_service(&pool, slug).await
 }
 
-#[server]
+#[server(CreateArtist, "/api", endpoint="create_artist", output = Cbor)]
 pub async fn create_artist(artist_form: CreateArtistForm) -> Result<ArtistResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
@@ -30,7 +31,7 @@ pub async fn create_artist(artist_form: CreateArtistForm) -> Result<ArtistResult
     create_artist_service(&pool, user, artist_form).await
 }
 
-#[server]
+#[server(UpdateArtist, "/api", endpoint="update_artist", output = Cbor)]
 pub async fn update_artist(artist_form: UpdateArtistForm) -> Result<ArtistResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
@@ -38,7 +39,7 @@ pub async fn update_artist(artist_form: UpdateArtistForm) -> Result<ArtistResult
     update_artist_service(&pool, user, artist_form).await
 }
 
-#[server]
+#[server(DeleteArtist, "/api", endpoint="delete_artist", output = Cbor)]
 pub async fn delete_artist(slug: String) -> Result<ArtistResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;

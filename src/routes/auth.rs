@@ -1,6 +1,7 @@
 #[cfg(feature = "ssr")]
 use bcrypt::verify;
 use leptos::prelude::*;
+use server_fn::codec::Cbor;
 
 use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::models::auth::User;
@@ -11,14 +12,7 @@ use crate::services::user::{change_password_service, register_user_service, upda
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-// #[cfg(feature = "ssr")]
-// use axum_session_sqlx::SessionPgPool;
-// #[cfg(feature = "ssr")]
-// use sqlx::PgPool;
-// #[cfg(feature = "ssr")]
-// pub type AuthSession = axum_session_auth::AuthSession<User, i64, SessionPgPool, PgPool>;
-
-#[server]
+#[server(GetUser, "/api", output = Cbor)]
 pub async fn get_user() -> Result<Option<User>, ServerFnError> {
     use crate::state::auth;
 
@@ -27,7 +21,7 @@ pub async fn get_user() -> Result<Option<User>, ServerFnError> {
     Ok(auth.current_user)
 }
 
-#[server(Login, "/api")]
+#[server(Login, "/api", endpoint="login", output = Cbor)]
 pub async fn login(
     username: String,
     password: String,
@@ -58,7 +52,7 @@ pub async fn login(
     }
 }
 
-#[server(Register, "/api")]
+#[server(Register, "/api", endpoint="register", output = Cbor)]
 pub async fn register(
     form: RegisterUserForm,
     remember: Option<String>,
@@ -77,7 +71,7 @@ pub async fn register(
     }
 }
 
-#[server(Logout, "/api")]
+#[server(Logout, "/api", endpoint="logout", output = Cbor)]
 pub async fn logout() -> Result<User, ServerFnError> {
     let auth = auth()?;
 
@@ -86,7 +80,7 @@ pub async fn logout() -> Result<User, ServerFnError> {
     Ok(User::default())
 }
 
-#[server(UpdateUser, "/api")]
+#[server(UpdateUser, "/api", endpoint="update_profile", output = Cbor)]
 pub async fn update_user(user_form: UpdateUserForm) -> Result<User, ServerFnError> {
     let pool = pool()?;
     let mut auth = auth()?;
@@ -97,7 +91,7 @@ pub async fn update_user(user_form: UpdateUserForm) -> Result<User, ServerFnErro
     response
 }
 
-#[server(ChangePassword, "/api")]
+#[server(ChangePassword, "/api", endpoint="change_password", output = Cbor)]
 pub async fn change_password(password_form: ChangePasswordForm) -> Result<User, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;

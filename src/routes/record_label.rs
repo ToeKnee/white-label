@@ -1,8 +1,8 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
+use server_fn::codec::Cbor;
 
 use crate::models::artist::Artist;
-
 use crate::models::record_label::RecordLabel;
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
@@ -12,7 +12,7 @@ pub struct LabelResult {
     pub label: RecordLabel,
 }
 
-#[server]
+#[server(GetRecordLabel, "/api", endpoint="recprd_label", output = Cbor)]
 pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
     let pool = pool()?;
 
@@ -30,7 +30,7 @@ pub struct LabelArtistResult {
     pub artists: Vec<Artist>,
 }
 
-#[server]
+#[server(GetLabelArtists, "/api", endpoint="record_label_artists", output = Cbor)]
 pub async fn get_label_artists(record_label_id: i64) -> Result<LabelArtistResult, ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;
@@ -56,7 +56,7 @@ pub async fn get_label_artists(record_label_id: i64) -> Result<LabelArtistResult
     Ok(LabelArtistResult { artists })
 }
 
-#[server]
+#[server(UpdateRecordLabel, "/api", endpoint="update_record_label", output = Cbor)]
 pub async fn update_record_label(
     id: i64,
     name: String,
