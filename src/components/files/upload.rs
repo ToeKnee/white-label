@@ -3,12 +3,16 @@ use leptos::{prelude::*, task::spawn_local};
 use wasm_bindgen::JsCast;
 use web_sys::{FormData, HtmlFormElement, SubmitEvent};
 
+use crate::app::UserContext;
+use crate::config::upload::UploadConfiguration;
 use crate::routes::files::upload::{file_progress, upload_file};
 
 /// This component uses server functions to upload a file, while streaming updates on the upload
 /// progress.
 #[component]
-pub fn FileUploadWithProgress() -> impl IntoView {
+pub fn FileUploadWithProgress(config: UploadConfiguration) -> impl IntoView {
+    let user_context = expect_context::<UserContext>();
+
     let (filename, set_filename) = signal(None);
     let (max, set_max) = signal(None);
     let (current, set_current) = signal(None);
@@ -66,7 +70,7 @@ pub fn FileUploadWithProgress() -> impl IntoView {
         });
         spawn_local(async move {
             match upload_file(form_data.into()).await {
-                Ok(()) => leptos::logging::log!("File uploaded."),
+                Ok(()) => leptos::logging::log!("File uploaded."), // TODO: Refresh the page or user or something
                 Err(e) => leptos::logging::error!("Couldn't upload file: {e}"),
             }
         });
@@ -76,6 +80,8 @@ pub fn FileUploadWithProgress() -> impl IntoView {
         <form on:submit=on_submit>
             <div class="grid gap-6">
                 <div class="flex flex-auto gap-6">
+                    <input type="hidden" name="type" value=config.to_string() />
+                    <input type="hidden" name="slug" value=move || user_context.0.get().username />
                     <input
                         type="file"
                         class="w-full file-input file-input-bordered file-input-primary"

@@ -13,6 +13,7 @@ pub struct User {
     pub last_name: Option<String>,
     pub email: String,
     pub description: Option<String>,
+    pub avatar: Option<String>,
     pub permissions: HashSet<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -33,6 +34,7 @@ impl Default for User {
             last_name: None,
             email: "hello@example.com".into(),
             description: None,
+            avatar: None,
             permissions,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -94,6 +96,14 @@ impl User {
         self.id == -1
     }
 
+    pub fn avatar_url(&self) -> String {
+        let avatar_file = self
+            .avatar
+            .clone()
+            .unwrap_or_else(|| "default-avatar.jpg".to_string());
+        format!("/uploads/avatars/{avatar_file}")
+    }
+
     /// Get user by username
     ///
     /// # Arguments
@@ -149,13 +159,14 @@ impl User {
         leptos::logging::log!("Updating user: {:?}", self);
         self.updated_at = chrono::Utc::now();
         sqlx::query(
-            "UPDATE users SET username = $1, email = $2, description = $3, first_name = $4, last_name = $5, updated_at = $6 WHERE id = $7",
+            "UPDATE users SET username = $1, email = $2, description = $3, first_name = $4, last_name = $5, avatar = $6, updated_at = $7 WHERE id = $8",
         )
         .bind(self.username.clone())
         .bind(self.email.clone())
         .bind(self.description.clone())
         .bind(self.first_name.clone())
         .bind(self.last_name.clone())
+        .bind(self.avatar.clone())
         .bind(self.updated_at)
         .bind(self.id)
         .execute(pool)
@@ -296,6 +307,7 @@ pub mod ssr {
         pub last_name: Option<String>,
         pub email: String,
         pub description: Option<String>,
+        pub avatar: Option<String>,
         pub password: String,
         pub created_at: chrono::DateTime<chrono::Utc>,
         pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -314,6 +326,7 @@ pub mod ssr {
                     last_name: self.last_name,
                     email: self.email,
                     description: self.description,
+                    avatar: self.avatar,
                     permissions: sql_user_perms.map_or_else(HashSet::<String>::new, |user_perms| {
                         user_perms
                             .into_iter()
@@ -447,6 +460,7 @@ mod tests {
             last_name: None,
             email: "test@example.com".into(),
             description: None,
+            avatar: None,
             permissions: HashSet::new(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -466,6 +480,7 @@ mod tests {
             last_name: None,
             email: "test@example.com".into(),
             description: None,
+            avatar: None,
             permissions: HashSet::new(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -485,6 +500,7 @@ mod tests {
             last_name: None,
             email: "test@example.com".into(),
             description: None,
+            avatar: None,
             permissions: HashSet::new(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -541,6 +557,7 @@ mod tests {
             user.first_name = Some("Test".into());
             user.last_name = Some("User".into());
             user.description = Some("A description".into());
+            user.avatar = Some("avatar.jpg".into());
             let updated_user = user.update(&pool).await.unwrap();
             assert_eq!(updated_user.id, test_user.id);
             assert_eq!(updated_user.username, "test-2");
@@ -614,6 +631,7 @@ mod tests {
                 last_name: None,
                 email: "test@example.com".into(),
                 description: None,
+                avatar: None,
                 permissions: HashSet::new(),
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),

@@ -2,12 +2,11 @@ use leptos::prelude::*;
 use reactive_stores::Store;
 
 use crate::app::UserContext;
-use crate::components::utils::error::ErrorPage;
-use crate::components::utils::loading::Loading;
+use crate::components::utils::{error::ErrorPage, loading::Loading};
+use crate::models::auth::User;
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::get_record_label;
-use crate::store::GlobalState;
-use crate::store::GlobalStateStoreFields;
+use crate::store::{GlobalState, GlobalStateStoreFields};
 
 /// Renders the page header.
 #[component]
@@ -56,6 +55,11 @@ pub fn LabelHeader() -> impl IntoView {
 #[component]
 pub fn UserMenu() -> impl IntoView {
     let user_context = expect_context::<UserContext>();
+    let (user, set_user) = signal(User::default());
+
+    Effect::new(move || {
+        set_user.set(user_context.0.get());
+    });
 
     view! {
         <Transition fallback=Loading>
@@ -63,13 +67,23 @@ pub fn UserMenu() -> impl IntoView {
                 ErrorPage
             }>
                 {move || {
-                    if user_context.0.get().is_authenticated() {
+                    if user.get().is_authenticated() {
                         view! {
                             <div class="flex-none">
                                 <ul class="px-1 menu menu-horizontal">
                                     <li>
                                         <details>
-                                            <summary>{user_context.0.get().username}</summary>
+                                            <summary>
+                                                <div class="avatar">
+                                                    <div class="w-10 rounded-full">
+                                                        <img
+                                                            alt=format!("{}'s Avatar", user.get().username)
+                                                            src=user.get().avatar_url()
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {user.get().username}
+                                            </summary>
                                             <ul
                                                 data-theme="light"
                                                 class="p-2 rounded-t-none bg-base-100"
@@ -84,7 +98,7 @@ pub fn UserMenu() -> impl IntoView {
                                                         "Change Password"
                                                     </a>
                                                 </li>
-                                                {if user_context.0.get().permissions.contains("admin") {
+                                                {if user.get().permissions.contains("admin") {
                                                     view! {
                                                         <li>
                                                             <a href="/admin" class="btn btn-ghost">
@@ -110,6 +124,7 @@ pub fn UserMenu() -> impl IntoView {
                         }
                             .into_any()
                     } else {
+
                         view! {
                             <span>
                                 <a href="/register" class="btn btn-ghost">

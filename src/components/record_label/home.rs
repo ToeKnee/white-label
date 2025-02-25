@@ -14,8 +14,7 @@ use crate::utils::shorten_string::shorten_string;
 #[component]
 pub fn RecordLabelHome() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
-    let (record_label, set_record_label) = signal(store.record_label().get());
-    let record_label_resource = Resource::new(move || record_label.get(), |_| get_record_label());
+    let record_label_resource = Resource::new(move || {}, |()| get_record_label());
 
     view! {
         <Transition fallback=move || view! { <Loading /> }>
@@ -28,7 +27,6 @@ pub fn RecordLabelHome() -> impl IntoView {
                             Ok(label) => {
                                 let record_label = store.record_label();
                                 *record_label.write() = label.label.clone();
-                                *set_record_label.write() = label.label.clone();
                                 label.label
                             }
                             Err(_) => RecordLabel::default(),

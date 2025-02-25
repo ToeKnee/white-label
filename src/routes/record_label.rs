@@ -12,7 +12,7 @@ pub struct LabelResult {
     pub label: RecordLabel,
 }
 
-#[server(GetRecordLabel, "/api", endpoint="recprd_label", output = Cbor)]
+#[server(GetRecordLabel, "/api", endpoint="record_label", output = Cbor)]
 pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
     let pool = pool()?;
 

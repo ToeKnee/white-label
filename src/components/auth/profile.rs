@@ -8,6 +8,7 @@ use crate::components::utils::{
     error::ErrorPage, error::ServerErrors, loading::Loading,
     permissions::authenticated_or_redirect, success::Success,
 };
+use crate::config::upload::UploadConfiguration;
 use crate::models::auth::User;
 use crate::routes::auth::UpdateUser;
 
@@ -37,7 +38,7 @@ pub fn EditProfile() -> impl IntoView {
         <article class="md:container md:mx-auto prose">
             <h1>"Edit Profile"</h1>
 
-            <FileUploadWithProgress />
+            <FileUploadWithProgress config=UploadConfiguration::Avatar />
 
             <Transition fallback=Loading>
                 <ErrorBoundary fallback=|_| {

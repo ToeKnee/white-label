@@ -17,6 +17,7 @@ use axum_session_sqlx::SessionPgPool;
 use leptos::{config::get_configuration, logging, prelude::provide_context};
 use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
 use sqlx::PgPool;
+use tower_http::services::ServeDir;
 
 use crate::app::{shell, WhiteLabel};
 use crate::database::create_pool;
@@ -29,7 +30,7 @@ async fn server_fn_handler(
     path: Path<String>,
     request: Request<AxumBody>,
 ) -> impl IntoResponse {
-    logging::debug_warn!("{:?}", path);
+    logging::debug_warn!("server_fn_handler {:?}", path);
     // logging::debug_warn!("{:?}", request);
     handle_server_fns_with_context(
         move || {
@@ -55,6 +56,7 @@ async fn leptos_routes_handler(
         },
         move || shell(app_state.leptos_options.clone()),
     );
+    logging::debug_warn!("leptos_routes_handler {:?}", req);
     handler(state, req).await.into_response()
 }
 
@@ -109,12 +111,18 @@ pub async fn init_app() {
         routes: routes.clone(),
     };
 
+    let Ok(upload_path) = std::env::var("UPLOAD_PATH") else {
+        logging::error!("UPLOAD_PATH not set.");
+        return;
+    };
+
     // build our application with a route
     let app = Router::new()
         .route(
             "/api/*fn_name",
             get(server_fn_handler).post(server_fn_handler),
         )
+        .nest_service("/uploads", ServeDir::new(upload_path))
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
         .layer(

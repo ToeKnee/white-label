@@ -4,7 +4,7 @@ use reactive_stores::Store;
 use crate::app::UserContext;
 use crate::components::utils::error::ErrorPage;
 use crate::components::utils::loading::Loading;
-use crate::models::auth::User;
+use crate::models::{auth::User, record_label::RecordLabel};
 use crate::store::GlobalState;
 use crate::store::GlobalStateStoreFields;
 use crate::utils::shorten_string::shorten_string;
@@ -13,7 +13,7 @@ use crate::utils::shorten_string::shorten_string;
 #[component]
 pub fn RecordLabel() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
-    let (record_label, set_record_label) = signal(store.record_label().get());
+    let (record_label, set_record_label) = signal(RecordLabel::default());
 
     let user_context = expect_context::<UserContext>();
     let (user, set_user) = signal(User::default());

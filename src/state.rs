@@ -1,10 +1,12 @@
 //! Global state for the application.
-use crate::models::auth::ssr::AuthSession;
 use axum::extract::FromRef;
 use leptos::prelude::LeptosOptions;
 use leptos::prelude::*;
 use leptos_axum::AxumRouteListing;
 use sqlx::PgPool;
+
+use crate::app::UserContext;
+use crate::models::auth::ssr::AuthSession;
 
 /// The global state for the application.
 ///
@@ -34,4 +36,14 @@ pub fn pool() -> Result<PgPool, ServerFnError> {
 pub fn auth() -> Result<AuthSession, ServerFnError> {
     use_context::<AuthSession>()
         .ok_or_else(|| ServerFnError::ServerError("Auth session missing.".into()))
+}
+
+/// This gets the user context from state
+///
+/// # Errors
+///
+/// Will return a `ServerError` error if the user state is missing.
+pub fn user_context() -> Result<UserContext, ServerFnError> {
+    use_context::<UserContext>()
+        .ok_or_else(|| ServerFnError::ServerError("User context missing.".into()))
 }

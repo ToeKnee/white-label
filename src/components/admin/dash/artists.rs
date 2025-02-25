@@ -14,12 +14,11 @@ use crate::store::GlobalStateStoreFields;
 #[component]
 pub fn ArtistsTable() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
-    let (record_label, _set_record_label) = signal(store.record_label().get());
 
     let (artists, set_artists) = signal(vec![]);
     let artists_resource = Resource::new(
-        move || record_label.get(),
-        move |_| get_label_artists(record_label.get().id),
+        move || store.record_label().get(),
+        move |_| get_label_artists(store.record_label().get().id),
     );
 
     let user_context = expect_context::<UserContext>();

@@ -16,6 +16,7 @@
 
 pub mod app;
 pub mod components;
+pub mod config;
 #[cfg(feature = "ssr")]
 pub mod database;
 pub mod forms;

@@ -12,7 +12,7 @@ use crate::services::user::{change_password_service, register_user_service, upda
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-#[server(GetUser, "/api", output = Cbor)]
+#[server(GetUser, "/api", endpoint="user", output = Cbor)]
 pub async fn get_user() -> Result<Option<User>, ServerFnError> {
     use crate::state::auth;
 
