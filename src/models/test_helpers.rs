@@ -2,7 +2,7 @@ use sqlx::PgPool;
 
 use crate::models::artist::Artist;
 #[cfg(feature = "ssr")]
-use crate::models::auth::{ssr::SqlPermissionTokens, ssr::SqlUser, User};
+use crate::models::auth::{User, ssr::SqlPermissionTokens, ssr::SqlUser};
 use crate::models::record_label::RecordLabel;
 
 /// Create test artist

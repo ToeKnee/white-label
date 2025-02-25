@@ -1,5 +1,5 @@
 #[cfg(feature = "ssr")]
-use bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::{DEFAULT_COST, hash, verify};
 use leptos::prelude::ServerFnError;
 use sqlx::PgPool;
 
@@ -158,7 +158,7 @@ pub async fn change_password_service(
         None => {
             return Err(ServerFnError::new(
                 "User does not have the required permissions.",
-            ))
+            ));
         }
     };
 

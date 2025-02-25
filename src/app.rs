@@ -6,10 +6,11 @@
 //! If it is in the app, it should be rendering html at some point.
 
 use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
+use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
+    StaticSegment,
     components::{ParentRoute, Route, Router, Routes},
-    path, StaticSegment,
+    path,
 };
 use reactive_stores::Store;
 

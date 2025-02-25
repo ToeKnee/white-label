@@ -10,7 +10,7 @@ use crate::models::auth::User;
 #[cfg(feature = "ssr")]
 use crate::services::{
     authentication_helpers::user_with_permissions,
-    files::progress::{add_chunk, progress_for_file, FILES},
+    files::progress::{FILES, add_chunk, progress_for_file},
 };
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool, user_context};

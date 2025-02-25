@@ -13,7 +13,7 @@
 /// This requires us to store some global state of all the uploads. In a real app, you probably
 /// shouldn't do exactly what I'm doing here in the demo. For example, this map just
 /// distinguishes between files by filename, not by user.
-use async_broadcast::{broadcast, Receiver, Sender};
+use async_broadcast::{Receiver, Sender, broadcast};
 use dashmap::DashMap;
 use futures::Stream;
 use once_cell::sync::Lazy;
@@ -60,7 +60,7 @@ pub async fn add_chunk(filename: &str, len: usize, username: &str) -> usize {
 /// This function will return a stream of the current length of the file.
 /// The stream will be a series of `usize` values.
 /// Each value will be the total length of the file at that point in time.
-pub fn progress_for_file(filename: &str, username: &str) -> impl Stream<Item = usize> {
+pub fn progress_for_file(filename: &str, username: &str) -> impl Stream<Item = usize> + use<> {
     let id = format!("{username}-{filename}");
     let entry = FILES.entry(id).or_insert_with(|| {
         leptos::logging::log!("[{}]\tInserting channel.", filename.to_string());

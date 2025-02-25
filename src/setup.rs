@@ -4,24 +4,24 @@
 //! It also sets up the routes and the handlers for the server.
 
 use axum::{
+    Router,
     body::Body as AxumBody,
     extract::{Path, State},
     http::Request,
     response::{IntoResponse, Response},
     routing::get,
-    Router,
 };
 use axum_session::{SessionConfig, SessionLayer, SessionStore};
 use axum_session_auth::{AuthConfig, AuthSessionLayer};
 use axum_session_sqlx::SessionPgPool;
 use leptos::{config::get_configuration, logging, prelude::provide_context};
-use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
+use leptos_axum::{LeptosRoutes, generate_route_list, handle_server_fns_with_context};
 use sqlx::PgPool;
 use tower_http::services::ServeDir;
 
-use crate::app::{shell, WhiteLabel};
+use crate::app::{WhiteLabel, shell};
 use crate::database::create_pool;
-use crate::models::auth::{ssr::AuthSession, User};
+use crate::models::auth::{User, ssr::AuthSession};
 use crate::state::AppState;
 
 async fn server_fn_handler(

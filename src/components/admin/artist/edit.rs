@@ -9,7 +9,7 @@ use crate::components::utils::{
     success::Success,
 };
 use crate::models::artist::Artist;
-use crate::routes::artist::{get_artist, ArtistResult, UpdateArtist};
+use crate::routes::artist::{ArtistResult, UpdateArtist, get_artist};
 use crate::utils::redirect::redirect;
 
 /// Renders the create artist page.
@@ -20,12 +20,10 @@ pub fn EditArtist() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let slug = params.read().get("slug").unwrap_or_default();
-    let slug = RwSignal::new(slug);
+    let slug = RwSignal::new(params.read().get("slug").unwrap_or_default());
 
     let (artist, set_artist) = signal(Artist::default());
     let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
-
     let update_artist = ServerAction::<UpdateArtist>::new();
     let value = Signal::derive(move || {
         update_artist
@@ -44,10 +42,13 @@ pub fn EditArtist() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if let Ok(this_artist) = artist_resource.await {
-                        set_artist.set(this_artist.artist);
-                    } else {
-                        redirect("/admin/artists");
+                    match artist_resource.await {
+                        Ok(this_artist) => {
+                            set_artist.set(this_artist.artist);
+                        }
+                        _ => {
+                            redirect("/admin/artists");
+                        }
                     };
                     view! {
                         <ActionForm action=update_artist>
@@ -87,38 +88,41 @@ pub fn EditArtist() -> impl IntoView {
                                             show=success.get()
                                         />
                                     }
-                                }}
-                                <input
-                                    type="text"
-                                    class="hidden"
-                                    name="artist_form[slug]"
-                                    bind:value=slug
-                                /> <div class="divider">Public</div>
-                                <label class="flex gap-2 items-center input input-bordered">
-                                    <input
-                                        type="text"
-                                        class="grow"
-                                        placeholder="Artist name"
-                                        name="artist_form[name]"
-                                        value=artist.get().name
-                                    />
-                                </label> <DescriptionFields artist=artist.get() />
-                                <div class="divider">Private</div>
-                                {move || {
-                                    view! {
-                                        <PublishedAtField published_at=artist.get().published_at />
-                                    }
-                                }} <div class="flex flex-auto gap-6">
-                                    <button class="flex-1 btn btn-primary">Update</button>
-                                    {move || {
-                                        view! { <DeleteArtist artist=artist.get() /> }
-                                    }}
-                                </div>
+                                }} <Form artist=artist slug=slug />
+
                             </div>
                         </ActionForm>
                     }
                 })}
             </ErrorBoundary>
         </Transition>
+    }
+}
+
+#[component]
+fn Form(artist: ReadSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
+    view! {
+        <input type="text" class="hidden" name="artist_form[slug]" bind:value=slug />
+        <div class="divider">Public</div>
+        <label class="flex gap-2 items-center input input-bordered">
+            <input
+                type="text"
+                class="grow"
+                placeholder="Artist name"
+                name="artist_form[name]"
+                value=artist.get().name
+            />
+        </label>
+        <DescriptionFields artist=artist.get() />
+        <div class="divider">Private</div>
+        {move || {
+            view! { <PublishedAtField published_at=artist.get().published_at /> }
+        }}
+        <div class="flex flex-auto gap-6">
+            <button class="flex-1 btn btn-primary">Update</button>
+            {move || {
+                view! { <DeleteArtist artist=artist.get() /> }
+            }}
+        </div>
     }
 }
