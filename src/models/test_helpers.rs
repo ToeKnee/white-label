@@ -3,6 +3,7 @@ use sqlx::PgPool;
 use crate::models::artist::Artist;
 #[cfg(feature = "ssr")]
 use crate::models::auth::{User, ssr::SqlPermissionTokens, ssr::SqlUser};
+use crate::models::page::Page;
 use crate::models::record_label::RecordLabel;
 
 /// Create test artist
@@ -43,6 +44,47 @@ pub async fn create_test_artist(
     .await?;
 
     Ok(artist)
+}
+
+/// Create test page
+///
+/// # Arguments
+/// * `pool` - The database connection pool
+/// * `id` - The ID of the page
+/// * `record_label` - The record label the page is signed to (optional)
+///
+/// # Returns
+/// The created page
+///
+/// # Errors
+/// If the page cannot be created, return an error
+///
+/// # Panics
+/// If the page cannot be created, panic
+/// If the record label is not found or cannot be created, panic
+#[cfg(feature = "ssr")]
+pub async fn create_test_page(
+    pool: &PgPool,
+    id: usize,
+    record_label: Option<RecordLabel>,
+) -> Result<Page, sqlx::Error> {
+    let record_label = match record_label {
+        Some(label) => label,
+        None => create_test_record_label(pool, id).await.unwrap(),
+    };
+    let page = sqlx::query_as::<_, Page>(
+    "INSERT INTO pages (name, slug, description, body, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+)
+    .bind(format!("Test Artist {id}"))
+    .bind(format!("test-page-{id}"))
+    .bind(format!("A page for testing purposes with the id of {id}"))
+    .bind(format!("# A page for testing purposes with the id of {id}"))
+    .bind(record_label.id)
+    .bind(Some(chrono::Utc::now()))
+    .fetch_one(pool)
+    .await?;
+
+    Ok(page)
 }
 
 /// Create test record label
