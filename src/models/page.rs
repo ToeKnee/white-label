@@ -66,6 +66,13 @@ impl Validate for Page {
             }
         }
 
+        // Check that the description is less than 255 characters
+        if self.description.len() > 255 {
+            return Err(anyhow::anyhow!(
+                "Description must be less than 255 characters.".to_string()
+            ));
+        }
+
         // Check that the record label exists
         if let Err(e) = RecordLabel::get_by_id(pool, self.label_id).await {
             leptos::logging::error!("{e}");
@@ -125,7 +132,7 @@ impl Page {
          .bind(page.name)
          .bind(page.slug)
          .bind(page.description)
-        .bind(page.body)
+         .bind(page.body)
          .bind(page.label_id)
          .bind(page.published_at)
          .fetch_one(pool)
@@ -386,6 +393,31 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             "Slug must be unique.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_validate_description_length(pool: PgPool) {
+        let description = "a".repeat(256);
+        let page = Page {
+            id: 1,
+            name: "Test Page".to_string(),
+            slug: "test-page".to_string(),
+            description,
+            body: "This is a test page".to_string(),
+            label_id: 1,
+            published_at: Some(chrono::Utc::now()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            deleted_at: None,
+        };
+
+        let result = page.validate(&pool).await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Description must be less than 255 characters.".to_string()
         );
     }
 

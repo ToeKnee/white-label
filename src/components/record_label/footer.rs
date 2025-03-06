@@ -43,10 +43,15 @@ pub fn LabelFooter() -> impl IntoView {
                             </nav>
                             <nav>
                                 <h6 class="footer-title">{record_label.name}</h6>
-                                <a class="link link-hover">About us</a>
-                                <a class="link link-hover">Contact</a>
-                                <a class="link link-hover">Jobs</a>
-                                <a class="link link-hover">Press kit</a>
+                                <a href="/pages/about-us" class="link link-hover">
+                                    About us
+                                </a>
+                                <a href="/pages/contact" class="link link-hover">
+                                    Contact
+                                </a>
+                                <a href="/pages/press-kit" class="link link-hover">
+                                    Press kit
+                                </a>
                             </nav>
                             <nav>
                                 <h6 class="footer-title">Legal</h6>

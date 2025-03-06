@@ -9,43 +9,41 @@ use crate::components::{
         permissions::permission_or_redirect,
     },
 };
-use crate::models::artist::Artist;
-use crate::routes::artist::{ArtistResult, CreateArtist};
+use crate::models::page::Page;
+use crate::routes::page::{CreatePage, PageResult};
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
-/// Renders the create artist page.
+/// Renders the create page page.
 #[component]
-pub fn CreateArtist() -> impl IntoView {
+pub fn CreatePage() -> impl IntoView {
     Effect::new_isomorphic(move || {
         permission_or_redirect("label_owner", "/admin");
     });
 
     let store = expect_context::<Store<GlobalState>>();
-    let (record_label, _set_record_label) = signal(store.record_label().get());
+    let (page, set_page) = signal(Page::default());
 
-    let (artist, set_artist) = signal(Artist::default());
-
-    // Set the record label id to the artist
+    // Set the record label id to the page
     Effect::new_isomorphic(move || {
-        let mut a = artist.get();
-        if a.label_id == 0 && record_label.get().id > 0 {
-            a.label_id = record_label.get().id;
-            set_artist.set(a);
+        let mut a = page.get();
+        if a.label_id == 0 && store.record_label().get().id > 0 {
+            a.label_id = store.record_label().get().id;
+            set_page.set(a);
         }
     });
 
-    let create_artist = ServerAction::<CreateArtist>::new();
+    let create_page = ServerAction::<CreatePage>::new();
     let value = Signal::derive(move || {
-        create_artist
+        create_page
             .value()
             .get()
-            .unwrap_or_else(|| Ok(ArtistResult::default()))
+            .unwrap_or_else(|| Ok(PageResult::default()))
     });
 
     let var_name = view! {
-        <Title text="Create Artist" />
-        <h1>Create Artist</h1>
+        <Title text="Create Page" />
+        <h1>Create Page</h1>
 
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {
@@ -53,14 +51,14 @@ pub fn CreateArtist() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     view! {
-                        <ActionForm action=create_artist>
+                        <ActionForm action=create_page>
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(artist_result) => {
-                                            let artist = artist_result.artist;
-                                            if artist.id > 0 {
-                                                redirect(&format!("/admin/artist/{}", artist.slug));
+                                        Ok(page_result) => {
+                                            let page = page_result.page;
+                                            if page.id > 0 {
+                                                redirect(&format!("/admin/page/{}", page.slug));
                                             }
 
                                             view! { "" }
@@ -76,30 +74,36 @@ pub fn CreateArtist() -> impl IntoView {
                                     type="text"
                                     class="hidden"
                                     placeholder=""
-                                    name="artist_form[label_id]"
-                                    value=record_label.get().id
+                                    name="page_form[label_id]"
+                                    value=store.record_label().get().id
                                 /> <div class="divider">Public</div>
                                 <label class="flex gap-2 items-center input input-bordered">
                                     <input
                                         type="text"
                                         class="grow"
-                                        placeholder="Artist name"
-                                        name="artist_form[name]"
-                                        value=artist.get().name
+                                        placeholder="Page name"
+                                        name="page_form[name]"
+                                        value=page.get().name
                                     />
-                                </label>
-                                <label class="flex gap-2 items-center input input-bordered">
-                                    <MarkdownField
-                                        title="Description".to_string()
-                                        field="artist_form[description]".to_string()
-                                        markdown_text=artist.get().description
-                                    />
-                                </label> <div class="divider">Private</div>
+                                </label> <h2>Meta Description</h2>
+                                <textarea
+                                    class="textarea textarea-bordered"
+                                    rows="5"
+                                    name="page_form[description]"
+                                    placeholder="Meta Description\nA short description of the page used for search engines."
+                                >
+                                    {page.get().description}
+                                </textarea>
+                                <MarkdownField
+                                    title="Body".to_string()
+                                    field="page_form[body]".to_string()
+                                    markdown_text=page.get().body
+                                /> <div class="divider">Private</div>
                                 {move || {
                                     view! {
                                         <PublishedAtField
-                                            field="artist_form[published_at]".to_string()
-                                            published_at=artist.get().published_at
+                                            field="page_form[published_at]".to_string()
+                                            published_at=page.get().published_at
                                         />
                                     }
                                 }} <button class="btn btn-primary">Create</button>

@@ -5,19 +5,19 @@ use markdown;
 
 use crate::components::utils::error::ErrorPage;
 use crate::components::utils::loading::Loading;
-use crate::models::artist::Artist;
-use crate::routes::artist::get_artist;
+use crate::models::page::Page;
+use crate::routes::page::get_page;
 
-/// Renders the artist home page.
+/// Renders the page.
 #[component]
-pub fn ArtistPage() -> impl IntoView {
+pub fn PageDetails() -> impl IntoView {
     let params = use_params_map();
     let slug = move || params.read().get("slug");
 
-    let (artist, set_artist) = signal(Artist::default());
-    let artist_resource = Resource::new(
-        move || artist.get(),
-        move |_| slug().map_or_else(|| get_artist(String::new()), get_artist),
+    let (page, set_page) = signal(Page::default());
+    let page_resource = Resource::new(
+        move || page.get(),
+        move |_| slug().map_or_else(|| get_page(String::new()), get_page),
     );
     view! {
         <Transition fallback=Loading>
@@ -25,20 +25,20 @@ pub fn ArtistPage() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            *set_artist.write() = this_artist.artist.clone();
-                            this_artist.artist
+                    match page_resource.await {
+                        Ok(this_page) => {
+                            *set_page.write() = this_page.page.clone();
+                            this_page.page
                         }
-                        Err(_) => Artist::default(),
+                        Err(_) => Page::default(),
                     };
 
                     view! {
-                        <Title text=artist.get().name />
+                        <Title text=page.get().name />
                         <article class="md:container md:mx-auto prose">
-                            <h1>{artist.get().name}</h1>
+                            <h1>{page.get().name}</h1>
                             <div inner_html=markdown::to_html_with_options(
-                                    &artist.get().description,
+                                    &page.get().body,
                                     &markdown::Options::gfm(),
                                 )
                                 .unwrap_or_default() />

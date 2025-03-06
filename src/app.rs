@@ -17,13 +17,14 @@ use reactive_stores::Store;
 use crate::components::{
     admin::{
         artist::create::CreateArtist, artist::edit::EditArtist, dashboard::Dashboard,
-        edit_label::EditLabel, root::AdminRoot,
+        edit_label::EditLabel, page::create::CreatePage, page::edit::EditPage, root::AdminRoot,
     },
     artist::home::ArtistPage,
     auth::{
         change_password::ChangePassword, login::Login, logout::Logout, profile::EditProfile,
         register::Register,
     },
+    page::PageDetails,
     record_label::{footer::LabelFooter, header::LabelHeader, home::RecordLabelHome},
     utils::{error::ErrorPage, loading::Loading, not_found::NotFound},
 };
@@ -109,6 +110,7 @@ pub fn WhiteLabel() -> impl IntoView {
                     <Route path=StaticSegment("") view=RecordLabelHome />
                     <Route path=path!("artists") view=RecordLabelHome />
                     <Route path=path!("artists/:slug") view=ArtistPage />
+                    <Route path=path!("pages/:slug") view=PageDetails />
 
                     <Route path=path!("login") view=Login />
                     <Route path=path!("register") view=Register />
@@ -121,6 +123,8 @@ pub fn WhiteLabel() -> impl IntoView {
                         <Route path=path!("label") view=EditLabel />
                         <Route path=path!("artist") view=CreateArtist />
                         <Route path=path!("artist/:slug") view=EditArtist />
+                        <Route path=path!("page") view=CreatePage />
+                        <Route path=path!("page/:slug") view=EditPage />
                     </ParentRoute>
                 </Routes>
             </main>

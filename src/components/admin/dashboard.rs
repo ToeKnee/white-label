@@ -1,7 +1,9 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 
-use crate::components::admin::dash::{artists::ArtistsTable, record_label::RecordLabel};
+use crate::components::admin::dash::{
+    artists::ArtistsTable, pages::PagesTable, record_label::RecordLabel,
+};
 use crate::components::utils::error::ErrorPage;
 use crate::components::utils::loading::Loading;
 
@@ -19,6 +21,7 @@ pub fn Dashboard() -> impl IntoView {
                         <div class="flex flex-row flex-wrap gap-4 justify-around">
                             <RecordLabel />
                             <ArtistsTable />
+                            <PagesTable />
                             <div class="basis-auto">
                                 <div class="shadow-xl card bg-base-100">
                                     <div class="card-body">

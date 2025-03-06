@@ -2,8 +2,7 @@ use leptos::prelude::ServerFnError;
 use leptos::server;
 use server_fn::codec::Cbor;
 
-use crate::models::artist::Artist;
-use crate::models::record_label::RecordLabel;
+use crate::models::{artist::Artist, page::Page, record_label::RecordLabel};
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
@@ -54,6 +53,33 @@ pub async fn get_label_artists(record_label_id: i64) -> Result<LabelArtistResult
             ServerFnError::new("Could not retrieve artists, try again later")
         })?;
     Ok(LabelArtistResult { artists })
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone, Default)]
+pub struct LabelPageResult {
+    pub pages: Vec<Page>,
+}
+#[server(GetLabelPages, "/api", endpoint="record_label_pages", output = Cbor)]
+pub async fn get_label_pages(record_label_id: i64) -> Result<LabelPageResult, ServerFnError> {
+    let auth = auth()?;
+    let pool = pool()?;
+
+    let current_user = auth.current_user.unwrap_or_default();
+    let show_hidden = current_user.permissions.contains("label_owner");
+
+    let record_label = RecordLabel::get_by_id(&pool, record_label_id)
+        .await
+        .map_err(|x| {
+            let err = format!("Error while getting label: {x:?}");
+            tracing::error!("{err}");
+            ServerFnError::new("Could not retrieve label, try again later")
+        })?;
+    let pages = record_label.pages(&pool, show_hidden).await.map_err(|x| {
+        let err = format!("Error while getting pages: {x:?}");
+        tracing::error!("{err}");
+        ServerFnError::new("Could not retrieve pages, try again later")
+    })?;
+    Ok(LabelPageResult { pages })
 }
 
 #[server(UpdateRecordLabel, "/api", endpoint="update_record_label", output = Cbor)]

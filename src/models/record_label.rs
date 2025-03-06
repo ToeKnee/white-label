@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use sqlx::{FromRow, PgPool, Row};
 
-#[cfg(feature = "ssr")]
-use super::artist::Artist;
 use super::traits::Validate;
+#[cfg(feature = "ssr")]
+use super::{artist::Artist, page::Page};
 #[cfg(feature = "ssr")]
 use crate::utils::slugify::slugify;
 
@@ -219,7 +219,7 @@ impl RecordLabel {
         })
     }
 
-    /// Get a label by its slug
+    /// Get a labels artists
     ///
     /// # Arguments
     /// * `pool` - The database connection pool
@@ -260,13 +260,57 @@ impl RecordLabel {
             }
         }
     }
+
+    /// Get a labels pages
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    ///
+    /// # Returns
+    /// The pages signed to the label
+    ///
+    /// # Errors
+    /// If the pages cannot be retrieved, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn pages(self, pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Page>> {
+        let query = if include_hidden {
+            "SELECT *
+             FROM pages
+             WHERE label_id = $1
+             ORDER BY deleted_at DESC, name ASC"
+        } else {
+            "SELECT *
+            FROM pages
+            WHERE label_id = $1
+              AND deleted_at IS NULL
+              AND published_at < NOW()
+              AND published_at IS NOT NULL
+            ORDER BY name ASC"
+        };
+
+        let pages = sqlx::query_as::<_, Page>(query)
+            .bind(self.id)
+            //.bind(chrono::Utc::now())
+            .fetch_all(pool)
+            .await;
+
+        match pages {
+            Ok(pages) => Ok(pages),
+            Err(e) => {
+                eprintln!("{e}");
+                Err(anyhow::anyhow!("Could not find pages"))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
-    use crate::models::test_helpers::{create_test_artist, create_test_record_label};
+    use crate::models::test_helpers::{
+        create_test_artist, create_test_page, create_test_record_label,
+    };
 
     #[test]
     fn test_init() {
@@ -547,6 +591,63 @@ mod tests {
                 future_artist,
                 deleted_artist,
             ]
+        );
+    }
+
+    #[cfg(feature = "ssr")]
+    #[sqlx::test]
+    async fn test_pages_hide_pages(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let mut unpublished_page = create_test_page(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        unpublished_page.published_at = None;
+        unpublished_page.clone().update(&pool).await.unwrap();
+        let mut published_page = create_test_page(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        published_page.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        let published_page = published_page.clone().update(&pool).await.unwrap();
+        let mut future_page = create_test_page(&pool, 3, Some(record_label.clone()))
+            .await
+            .unwrap();
+        future_page.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        future_page.clone().update(&pool).await.unwrap();
+        let deleted_page = create_test_page(&pool, 4, Some(record_label.clone()))
+            .await
+            .unwrap();
+        deleted_page.clone().delete(&pool).await.unwrap();
+        let pages = record_label.pages(&pool, false).await.unwrap();
+        assert_eq!(pages, vec![published_page]);
+    }
+
+    #[cfg(feature = "ssr")]
+    #[sqlx::test]
+    async fn test_pages_include_hidden_pages(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let mut unpublished_page = create_test_page(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        unpublished_page.published_at = None;
+        let unpublished_page = unpublished_page.clone().update(&pool).await.unwrap();
+        let mut published_page = create_test_page(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        published_page.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        let published_page = published_page.clone().update(&pool).await.unwrap();
+        let mut future_page = create_test_page(&pool, 3, Some(record_label.clone()))
+            .await
+            .unwrap();
+        future_page.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        let future_page = future_page.clone().update(&pool).await.unwrap();
+        let deleted_page = create_test_page(&pool, 4, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let deleted_page = deleted_page.clone().delete(&pool).await.unwrap();
+        let pages = record_label.pages(&pool, true).await.unwrap();
+        assert_eq!(
+            pages,
+            vec![unpublished_page, published_page, future_page, deleted_page,]
         );
     }
 }
