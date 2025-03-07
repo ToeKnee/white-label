@@ -14,7 +14,7 @@ use axum::{
 use axum_session::{SessionConfig, SessionLayer, SessionStore};
 use axum_session_auth::{AuthConfig, AuthSessionLayer};
 use axum_session_sqlx::SessionPgPool;
-use leptos::{config::get_configuration, logging, prelude::provide_context};
+use leptos::{config::get_configuration, prelude::provide_context};
 use leptos_axum::{LeptosRoutes, generate_route_list, handle_server_fns_with_context};
 use sqlx::PgPool;
 use tower_http::services::ServeDir;
@@ -30,8 +30,8 @@ async fn server_fn_handler(
     path: Path<String>,
     request: Request<AxumBody>,
 ) -> impl IntoResponse {
-    logging::debug_warn!("server_fn_handler {:?}", path);
-    // logging::debug_warn!("{:?}", request);
+    tracing::debug!("server_fn_handler {:?}", path);
+    // tracing::debug!("{:?}", request);
     handle_server_fns_with_context(
         move || {
             provide_context(auth_session.clone());
@@ -56,7 +56,7 @@ async fn leptos_routes_handler(
         },
         move || shell(app_state.leptos_options.clone()),
     );
-    logging::debug_warn!("leptos_routes_handler {:?}", req);
+    tracing::debug!("leptos_routes_handler {:?}", req);
     handler(state, req).await.into_response()
 }
 
@@ -65,14 +65,10 @@ async fn leptos_routes_handler(
 /// # Panics
 ///
 /// This function will panic if it can't initialise the logger.
+#[allow(clippy::cognitive_complexity)]
 pub async fn init_app() {
-    match simple_logger::init() {
-        Ok(()) => (),
-        Err(e) => {
-            eprintln!("Couldn't initialise logging: {e:?}");
-            return;
-        }
-    };
+    // Initialise the logger
+    tracing_subscriber::fmt::init();
 
     // Set up the database
     let pool = create_pool().await;
@@ -88,7 +84,7 @@ pub async fn init_app() {
     {
         Ok(store) => store,
         Err(e) => {
-            logging::log!("Couldn't initialise session store: {:?}", e);
+            tracing::error!("Couldn't initialise session store: {:?}", e);
             return;
         }
     };
@@ -97,7 +93,7 @@ pub async fn init_app() {
     let conf = match get_configuration(None) {
         Ok(conf) => conf,
         Err(e) => {
-            logging::log!("Couldn't get configuration: {:?}", e);
+            tracing::error!("Couldn't get configuration: {:?}", e);
             return;
         }
     };
@@ -112,7 +108,7 @@ pub async fn init_app() {
     };
 
     let Ok(upload_path) = std::env::var("UPLOAD_PATH") else {
-        logging::error!("UPLOAD_PATH not set.");
+        tracing::error!("UPLOAD_PATH not set.");
         return;
     };
 
@@ -136,17 +132,17 @@ pub async fn init_app() {
     // `axum::Server` is a re-export of `hyper::Server`
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(listener) => {
-            logging::log!("Listening on http://{}", &addr);
+            tracing::info!("Listening on http://{}", &addr);
             listener
         }
         Err(e) => {
-            logging::log!("Couldn't bind address: {:?}", e);
+            tracing::error!("Couldn't bind address: {:?}", e);
             return;
         }
     };
     let serve = axum::serve(listener, app.into_make_service()).await;
     match serve {
-        Ok(()) => logging::log!("Server stopped."),
-        Err(e) => logging::log!("Server Error: {:?}", e),
+        Ok(()) => tracing::info!("Server stopped."),
+        Err(e) => tracing::error!("Server Error: {:?}", e),
     }
 }

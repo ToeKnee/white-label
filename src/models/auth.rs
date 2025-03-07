@@ -156,7 +156,7 @@ impl User {
     #[cfg(feature = "ssr")]
     pub async fn update(mut self, pool: &PgPool) -> anyhow::Result<Self> {
         self.validate(pool).await?;
-        leptos::logging::log!("Updating user: {:?}", self);
+        tracing::info!("Updating user: {:?}", self);
         self.updated_at = chrono::Utc::now();
         sqlx::query(
             "UPDATE users SET username = $1, email = $2, description = $3, first_name = $4, last_name = $5, avatar = $6, updated_at = $7 WHERE id = $8",

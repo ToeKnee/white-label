@@ -28,7 +28,7 @@ fn upload_details(config_str: &str) -> Result<UploadDetails, ServerFnError> {
     let upload_config = match config_str.parse::<UploadConfiguration>() {
         Ok(config) => config,
         Err(e) => {
-            leptos::logging::error!("Invalid upload configuration: {e}");
+            tracing::error!("Invalid upload configuration: {e}");
             return Err(ServerFnError::new(
                 "Invalid upload configuration.".to_string(),
             ));
@@ -44,7 +44,7 @@ fn upload_details(config_str: &str) -> Result<UploadDetails, ServerFnError> {
 #[allow(clippy::too_many_lines)]
 #[server(UploadFile, "/api", endpoint="upload_file", input = MultipartFormData,)]
 pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
-    leptos::logging::log!("\t* Error handling");
+    tracing::warn!("TODO: Error handling");
 
     let Some(mut data) = data.into_inner() else {
         return Err(ServerFnError::new("No data in request.".to_string()));
@@ -146,7 +146,7 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
                 };
 
                 let tmp_path = format!("{upload_path}/tmp/{file_name}");
-                leptos::logging::log!("Uploading {file_name} to {tmp_path}");
+                tracing::info!("Uploading {file_name} to {tmp_path}");
                 let mut f = File::create(tmp_path.clone())?;
                 let mut chunk_more = true;
                 while chunk_more {
@@ -169,7 +169,6 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
                         }
                         Ok(Some(chunk)) => {
                             let len = chunk.len();
-                            // leptos::logging::log!("Adding chunk of length {len}");
                             let total_so_far =
                                 add_chunk(&original_file_name, len, &user.username).await;
 
@@ -227,7 +226,7 @@ async fn finalise_file_upload(
     let path = format!("{upload_path}/{}/{file_name}", upload_details.path);
     match std::fs::rename(tmp_path.clone(), path) {
         Ok(()) => {
-            leptos::logging::log!("File uploaded.");
+            tracing::info!("File uploaded.");
             let id = format!("{}-{original_file_name}", user.username);
             FILES.remove(&id);
         }
@@ -266,7 +265,7 @@ async fn store_file_to_object(
             let mut user = match User::get_by_username(&pool, slug_field.to_string()).await {
                 Ok(user) => user,
                 Err(e) => {
-                    leptos::logging::error!("Couldn't get user: {e}");
+                    tracing::error!("Couldn't get user: {e}");
                     return Err(ServerFnError::new(e));
                 }
             };
@@ -278,7 +277,7 @@ async fn store_file_to_object(
                     user_context.1.set(user);
                 }
                 Err(e) => {
-                    leptos::logging::error!("Couldn't update user: {e}");
+                    tracing::error!("Couldn't update user: {e}");
                     return Err(ServerFnError::new(e));
                 }
             };
@@ -302,7 +301,7 @@ pub async fn file_progress(filename: String) -> Result<TextStream, ServerFnError
         Err(e) => return Err(ServerFnError::new(e)),
     };
 
-    leptos::logging::log!("Getting progress on {filename}");
+    tracing::debug!("Getting progress on {filename}");
     // Get the stream of current length for the file
     let progress = progress_for_file(&filename, &user.username);
     // Separate each number with a newline

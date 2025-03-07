@@ -33,7 +33,7 @@ pub fn ChangePassword() -> impl IntoView {
                             <ActionForm action=change_password>
                                 <div class="grid gap-6">
                                     {move || {
-                                        leptos::logging::log!("{:?}", value.get());
+                                        tracing::info!("User: {:?}", value.get());
                                         match value.get() {
                                             Ok(user) => {
                                                 if user.is_authenticated() && !success.get() {

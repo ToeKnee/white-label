@@ -66,7 +66,7 @@ impl Validate for Artist {
 
         // Check that the record label exists
         if let Err(e) = RecordLabel::get_by_id(pool, self.label_id).await {
-            leptos::logging::error!("{e}");
+            tracing::error!("{e}");
             return Err(anyhow::anyhow!(
                 "Record Label with id {} does not exist.",
                 self.label_id
@@ -150,7 +150,7 @@ impl Artist {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                leptos::logging::error!("{e}");
+                tracing::error!("{e}");
                 return Err(anyhow::anyhow!("Could not find artist with slug {}.", slug));
             }
         };
@@ -199,7 +199,7 @@ impl Artist {
         .await {
             Ok(artist) => artist,
             Err(e) => {
-                leptos::logging::error!("{e}");
+                tracing::error!("{e}");
                 return Err(anyhow::anyhow!(
                     "Could not update artist with id {}.",
                     self.id

@@ -75,7 +75,7 @@ impl Validate for Page {
 
         // Check that the record label exists
         if let Err(e) = RecordLabel::get_by_id(pool, self.label_id).await {
-            leptos::logging::error!("{e}");
+            tracing::error!("{e}");
             return Err(anyhow::anyhow!(
                 "Record Label with id {} does not exist.",
                 self.label_id
@@ -162,7 +162,7 @@ impl Page {
         let row = match row {
             Ok(row) => row,
             Err(e) => {
-                leptos::logging::error!("{e}");
+                tracing::error!("{e}");
                 return Err(anyhow::anyhow!("Could not find page with slug {}.", slug));
             }
         };
@@ -213,7 +213,7 @@ impl Page {
         .await {
             Ok(page) => page,
             Err(e) => {
-                leptos::logging::error!("{e}");
+                tracing::error!("{e}");
                 return Err(anyhow::anyhow!(
                     "Could not update page with id {}.",
                     self.id

@@ -30,10 +30,10 @@ pub static FILES: Lazy<DashMap<String, File>> = Lazy::new(DashMap::new);
 /// This function will update the total length of the file and send a message to the stream.
 /// The message will be the new total length of the file.
 pub async fn add_chunk(filename: &str, len: usize, username: &str) -> usize {
-    //leptos::logging::log!("[{filename}]\tadding chunk {len}");
+    tracing::debug!("[{filename}]\tadding chunk {len}");
     let id = format!("{username}-{filename}");
     let mut entry = FILES.entry(id).or_insert_with(|| {
-        leptos::logging::log!("[{filename}]\tInserting channel");
+        tracing::debug!("[{filename}]\tInserting channel");
         let (tx, rx) = broadcast(4096);
         File { total: 0, tx, rx }
     });
@@ -48,7 +48,7 @@ pub async fn add_chunk(filename: &str, len: usize, username: &str) -> usize {
     match tx.broadcast(new_total).await {
         Ok(_) => {}
         Err(e) => {
-            leptos::logging::error!("[{filename}]\tCouldn't send a message over channel: {e}");
+            tracing::error!("[{filename}]\tCouldn't send a message over channel: {e}");
         }
     };
 
@@ -63,7 +63,7 @@ pub async fn add_chunk(filename: &str, len: usize, username: &str) -> usize {
 pub fn progress_for_file(filename: &str, username: &str) -> impl Stream<Item = usize> + use<> {
     let id = format!("{username}-{filename}");
     let entry = FILES.entry(id).or_insert_with(|| {
-        leptos::logging::log!("[{}]\tInserting channel.", filename.to_string());
+        tracing::debug!("[{}]\tInserting channel.", filename.to_string());
         // This limits the amount of chunks we can store in the channel
         // If we don't limit it, we could potentially run out of memory
         // if the client is sending data very slowly

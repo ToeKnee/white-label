@@ -59,7 +59,7 @@ pub async fn register_user_service(
     let password_hashed = match hash(form.password, DEFAULT_COST) {
         Ok(hash) => hash,
         Err(e) => {
-            leptos::logging::error!("{:?}", e);
+            tracing::error!("{:?}", e);
             return Err(ServerFnError::ServerError(
                 "Error hassing password.".to_string(),
             ));
@@ -177,7 +177,7 @@ pub async fn change_password_service(
         let password_hashed = match hash(form.new_password, DEFAULT_COST) {
             Ok(hash) => hash,
             Err(e) => {
-                leptos::logging::error!("{:?}", e);
+                tracing::error!("{:?}", e);
                 return Err(ServerFnError::ServerError(
                     "Error hassing password.".to_string(),
                 ));

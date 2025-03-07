@@ -21,13 +21,13 @@ pub fn FileUploadWithProgress(config: UploadConfiguration) -> impl IntoView {
         let target = if let Some(target) = ev.target() {
             target.unchecked_into::<HtmlFormElement>()
         } else {
-            leptos::logging::error!("Couldn't get form target.");
+            tracing::error!("Couldn't get form target.");
             return;
         };
         let form_data = match FormData::new_with_form(&target) {
             Ok(form_data) => form_data,
             Err(e) => {
-                leptos::logging::error!("Couldn't get form data: {:?}", e);
+                tracing::error!("Couldn't get form data: {:?}", e);
                 return;
             }
         };
@@ -36,7 +36,7 @@ pub fn FileUploadWithProgress(config: UploadConfiguration) -> impl IntoView {
             .unchecked_into::<web_sys::File>();
         let filename = file.name();
         let size = file.size();
-        leptos::logging::log!("Size {}", size);
+        tracing::debug!("Size {}", size);
         set_filename.set(Some(filename.clone()));
         set_max.set(Some(size));
         set_current.set(None);
@@ -45,7 +45,7 @@ pub fn FileUploadWithProgress(config: UploadConfiguration) -> impl IntoView {
             let mut progress = match file_progress(filename).await {
                 Ok(progress) => progress.into_inner(),
                 Err(e) => {
-                    leptos::logging::error!("Couldn't get progress stream: {e}");
+                    tracing::error!("Couldn't get progress stream: {e}");
                     return;
                 }
             };
@@ -59,7 +59,7 @@ pub fn FileUploadWithProgress(config: UploadConfiguration) -> impl IntoView {
                     Some(len) => match len.parse::<usize>() {
                         Ok(len) => len,
                         Err(e) => {
-                            leptos::logging::error!("Couldn't parse length: {e}");
+                            tracing::error!("Couldn't parse length: {e}");
                             continue;
                         }
                     },
@@ -70,8 +70,8 @@ pub fn FileUploadWithProgress(config: UploadConfiguration) -> impl IntoView {
         });
         spawn_local(async move {
             match upload_file(form_data.into()).await {
-                Ok(()) => leptos::logging::log!("File uploaded."), // TODO: Refresh the page or user or something
-                Err(e) => leptos::logging::error!("Couldn't upload file: {e}"),
+                Ok(()) => tracing::debug!("File uploaded."), // TODO: Refresh the page or user or something
+                Err(e) => tracing::error!("Couldn't upload file: {e}"),
             }
         });
     };

@@ -45,7 +45,6 @@ server_fn = { version = "0.7.5", features = [
     "multipart",
     "cbor",
 ] }
-simple_logger = "5.0.0"
 sqlx = { version = "0.8.2", features = [
     "postgres",
     "migrate",
@@ -70,7 +69,12 @@ web-sys = { version = "0.3.67", features = ["FileList", "File"] }
 
 [features]
 default = ["ssr"]
-hydrate = ["leptos/hydrate", "dep:tracing-wasm", "dep:console_error_panic_hook"]
+hydrate = [
+    "leptos/hydrate",
+    "dep:tracing",
+    "dep:tracing-wasm",
+    "dep:console_error_panic_hook",
+]
 ssr = [
     "dep:async-broadcast",
     "dep:axum",
@@ -92,7 +96,7 @@ ssr = [
     "leptos_meta/ssr",
     "leptos_router/ssr",
 ]
-tracing-wasm = ["dep:tracing-wasm"]
+tracing-wasm = ["dep:tracing", "dep:tracing-wasm"]
 
 # Defines a size-optimized profile for the WASM bundle in release mode
 [profile.wasm-release]

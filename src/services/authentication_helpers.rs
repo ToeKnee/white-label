@@ -2,7 +2,6 @@
 //!
 //! This module contains helper functions for authentication
 //! It will make your life a lot easier for handling authentication and authorisation
-use leptos::logging;
 use leptos::prelude::ServerFnError;
 
 use crate::models::auth::User;
@@ -25,7 +24,7 @@ pub fn user_with_permissions(
     permissions: Vec<&str>,
 ) -> Result<User, ServerFnError> {
     let Some(user) = user else {
-        logging::error!("User not supplied");
+        tracing::error!("User not supplied");
         return Err(ServerFnError::new("User not supplied."));
     };
     // Check if the user is authenticated
@@ -40,7 +39,7 @@ pub fn user_with_permissions(
     // If the user does not have the required permissions, return an error
     for permission in permissions {
         if !user.permissions.contains(permission) {
-            logging::error!("User does not have the required permission {permission}");
+            tracing::error!("User does not have the required permission {permission}");
             return Err(ServerFnError::new("You do not have permission."));
         }
     }
