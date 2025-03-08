@@ -80,6 +80,8 @@ impl Validate for Artist {
 }
 
 impl Artist {
+    /// Get the primary image URL
+    /// If the primary image is None, return the default image
     pub fn primary_image_url(&self) -> String {
         let primary_image_file = self
             .primary_image

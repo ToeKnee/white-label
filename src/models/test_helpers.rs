@@ -5,6 +5,7 @@ use crate::models::artist::Artist;
 use crate::models::auth::{User, ssr::SqlPermissionTokens, ssr::SqlUser};
 use crate::models::page::Page;
 use crate::models::record_label::RecordLabel;
+use crate::models::release::Release;
 
 /// Create test artist
 ///
@@ -75,7 +76,7 @@ pub async fn create_test_page(
     let page = sqlx::query_as::<_, Page>(
     "INSERT INTO pages (name, slug, description, body, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
 )
-    .bind(format!("Test Artist {id}"))
+    .bind(format!("Test Page {id}"))
     .bind(format!("test-page-{id}"))
     .bind(format!("A page for testing purposes with the id of {id}"))
     .bind(format!("# A page for testing purposes with the id of {id}"))
@@ -117,6 +118,48 @@ pub async fn create_test_record_label(
     .await?;
 
     Ok(label)
+}
+
+/// Create test release
+///
+/// # Arguments
+/// * `pool` - The database connection pool
+/// * `id` - The ID of the release
+/// * `record_label` - The record label the release is signed to (optional)
+///
+/// # Returns
+/// The created release
+///
+/// # Errors
+/// If the release cannot be created, return an error
+///
+/// # Panics
+/// If the release cannot be created, panic
+/// If the record label is not found or cannot be created, panic
+#[cfg(feature = "ssr")]
+pub async fn create_test_release(
+    pool: &PgPool,
+    id: usize,
+    record_label: Option<RecordLabel>,
+) -> Result<Release, sqlx::Error> {
+    let record_label = match record_label {
+        Some(label) => label,
+        None => create_test_record_label(pool, id).await.unwrap(),
+    };
+    let release = sqlx::query_as::<_, Release>(
+    "INSERT INTO releases (name, slug, description, catalogue_number, release_date, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+)
+    .bind(format!("Test Release {id}"))
+    .bind(format!("test-release-{id}"))
+    .bind(format!("A release for testing purposes with the id of {id}"))
+    .bind(format!("TEST-{id}"))
+    .bind(chrono::Utc::now())
+    .bind(record_label.id)
+    .bind(Some(chrono::Utc::now()))
+    .fetch_one(pool)
+    .await?;
+
+    Ok(release)
 }
 
 /// Create test user

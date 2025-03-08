@@ -3,6 +3,7 @@
 //! It also sets up the database connection and the session store.
 //! It also sets up the routes and the handlers for the server.
 
+use anyhow::Context;
 use axum::{
     Router,
     body::Body as AxumBody,
@@ -14,6 +15,7 @@ use axum::{
 use axum_session::{SessionConfig, SessionLayer, SessionStore};
 use axum_session_auth::{AuthConfig, AuthSessionLayer};
 use axum_session_sqlx::SessionPgPool;
+use dotenvy::dotenv;
 use leptos::{config::get_configuration, prelude::provide_context};
 use leptos_axum::{LeptosRoutes, generate_route_list, handle_server_fns_with_context};
 use sqlx::PgPool;
@@ -69,6 +71,9 @@ async fn leptos_routes_handler(
 pub async fn init_app() {
     // Initialise the logger
     tracing_subscriber::fmt::init();
+
+    // Load environment variables form env file.
+    let _ = dotenv().context(".env file not found");
 
     // Set up the database
     let pool = create_pool().await;

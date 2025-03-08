@@ -1,5 +1,4 @@
 use anyhow::Context;
-use dotenvy::dotenv;
 use sqlx::postgres::PgPoolOptions;
 
 /// Create a database connection pool.
@@ -18,9 +17,6 @@ use sqlx::postgres::PgPoolOptions;
 ///
 /// If the database connection fails, the program will panic.
 pub async fn create_pool() -> sqlx::PgPool {
-    // Load environment variables form env file.
-    let _ = dotenv().context(".env file not found");
-
     // Set up database connection
     let database_url =
         std::env::var("DATABASE_URL").context("DATABASE_URL environment variable must be set.");
@@ -28,8 +24,7 @@ pub async fn create_pool() -> sqlx::PgPool {
     let database_url = match database_url {
         Ok(database_url) => database_url,
         Err(e) => {
-            tracing::error!("{e}");
-            std::process::exit(1);
+            handle_error(e);
         }
     };
 
@@ -40,18 +35,23 @@ pub async fn create_pool() -> sqlx::PgPool {
     {
         Ok(pool) => pool,
         Err(e) => {
-            tracing::error!("Could not connect to database_url {database_url}: {e}");
-            std::process::exit(1);
+            handle_error(format!(
+                "Could not connect to database_url {database_url}: {e}"
+            ));
         }
     };
 
     match sqlx::migrate!().run(&pool).await {
         Ok(()) => (),
         Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(1);
+            handle_error(e);
         }
     }
 
     pool
+}
+
+fn handle_error(e: impl std::fmt::Display) -> ! {
+    tracing::error!("{e}");
+    std::process::exit(1)
 }
