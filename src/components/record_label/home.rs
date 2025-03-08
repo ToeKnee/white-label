@@ -99,10 +99,7 @@ fn ArtistBox(#[prop(into)] artist: Artist) -> impl IntoView {
             <div class="w-96 shadow-xl card card-compact bg-base-100 indicator">
                 <StatusBadge deleted_at=artist.deleted_at published_at=artist.published_at />
                 <figure>
-                    <img
-                        src="https://jankyswitch.com/images/Avatar240.webp"
-                        alt=artist.name.clone()
-                    />
+                    <img src=artist.primary_image_url() alt=artist.name.clone() />
                 </figure>
                 <div class="card-body">
                     <h2 class="card-title">{artist.name}</h2>

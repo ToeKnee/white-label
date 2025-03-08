@@ -5,11 +5,13 @@ use leptos_router::hooks::use_params_map;
 use super::delete::DeleteArtist;
 use crate::components::{
     admin::shared::{MarkdownField, PublishedAtField},
+    files::upload::FileUploadWithProgress,
     utils::{
         error::ErrorPage, error::ServerErrors, loading::Loading,
         permissions::permission_or_redirect, success::Success,
     },
 };
+use crate::config::upload::UploadConfiguration;
 use crate::models::artist::Artist;
 use crate::routes::artist::{ArtistResult, UpdateArtist, get_artist};
 use crate::utils::redirect::redirect;
@@ -120,6 +122,11 @@ fn Form(artist: ReadSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
             field="artist_form[description]".to_string()
             markdown_text=artist.get().description
         />
+
+        <div class="divider">Images</div>
+        <FileUploadWithProgress config=UploadConfiguration::Artist slug=artist.get().slug />
+        <img src=artist.get().primary_image_url() alt=artist.get().name />
+
         <div class="divider">Private</div>
         {move || {
             view! {

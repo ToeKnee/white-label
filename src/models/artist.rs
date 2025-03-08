@@ -24,6 +24,8 @@ pub struct Artist {
     pub slug: String,
     /// The description of the artist
     pub description: String,
+    /// The primary image of the artist
+    pub primary_image: Option<String>,
     /// The label id
     pub label_id: i64,
     /// The date the artist is published.
@@ -78,6 +80,14 @@ impl Validate for Artist {
 }
 
 impl Artist {
+    pub fn primary_image_url(&self) -> String {
+        let primary_image_file = self
+            .primary_image
+            .clone()
+            .unwrap_or_else(|| "default-artist.jpg".to_string());
+        format!("/uploads/artists/{primary_image_file}")
+    }
+
     /// Create a new artist
     ///
     /// # Arguments
@@ -107,6 +117,7 @@ impl Artist {
             name,
             slug,
             description,
+            primary_image: None,
             label_id: record_label_id,
             published_at,
             created_at: chrono::Utc::now(),
@@ -160,6 +171,7 @@ impl Artist {
             name: row.get("name"),
             slug: row.get("slug"),
             description: row.get("description"),
+            primary_image: row.get("primary_image"),
             label_id: row.get("label_id"),
             published_at: row.get("published_at"),
             created_at: row.get("created_at"),
@@ -187,11 +199,12 @@ impl Artist {
         self.validate(pool).await?;
 
         let artist = match sqlx::query_as::<_, Self>(
-            "UPDATE artists SET name = $1, slug = $2, description = $3, published_at = $4, updated_at = $5 WHERE id = $6 RETURNING *",
+            "UPDATE artists SET name = $1, slug = $2, description = $3, primary_image = $4, published_at = $5, updated_at = $6 WHERE id = $7 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
         .bind(self.description)
+        .bind(self.primary_image)
         .bind(self.published_at)
         .bind(chrono::Utc::now())
         .bind(self.id)
@@ -257,6 +270,7 @@ mod tests {
             name: "Test Artist".to_string(),
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
+            primary_image: None,
             label_id: 1,
             published_at: None,
             created_at: chrono::Utc::now(),
@@ -279,6 +293,7 @@ mod tests {
             name: "Test Artist".to_string(),
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
+            primary_image: None,
             label_id: record_label.id,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -298,6 +313,7 @@ mod tests {
             name: String::new(),
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
+            primary_image: None,
             label_id: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -322,6 +338,7 @@ mod tests {
             name,
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
+            primary_image: None,
             label_id: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -346,6 +363,7 @@ mod tests {
             name: "Test Artist".to_string(),
             slug,
             description: "This is a test artist".to_string(),
+            primary_image: None,
             label_id: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -385,6 +403,7 @@ mod tests {
             name: "Test Artist".to_string(),
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
+            primary_image: None,
             label_id: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -464,6 +483,7 @@ mod tests {
         let mut update_artist = artist.clone();
         update_artist.name = "Updated Artist".to_string();
         update_artist.description = "This is an updated artist".to_string();
+        update_artist.primary_image = Some("an-image.jpg".to_string());
 
         let updated_artist = update_artist.update(&pool).await.unwrap();
         assert_eq!(updated_artist.name, "Updated Artist".to_string());
@@ -471,6 +491,10 @@ mod tests {
         assert_eq!(
             updated_artist.description,
             "This is an updated artist".to_string()
+        );
+        assert_eq!(
+            updated_artist.primary_image,
+            Some("an-image.jpg".to_string())
         );
         assert_ne!(updated_artist.updated_at, artist.updated_at);
     }

@@ -6,7 +6,7 @@ use std::{fs::File, io::Write};
 #[cfg(feature = "ssr")]
 use crate::config::upload::{UploadConfiguration, UploadDetails};
 #[cfg(feature = "ssr")]
-use crate::models::auth::User;
+use crate::models::{artist::Artist, auth::User};
 #[cfg(feature = "ssr")]
 use crate::services::{
     authentication_helpers::user_with_permissions,
@@ -133,7 +133,7 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
 
                 let file_name = match valid_file_name(
                     &original_file_name,
-                    Some(user.username.clone()),
+                    Some(slug_field.clone()),
                     &upload_details.path,
                     true,
                 ) {
@@ -253,35 +253,80 @@ async fn store_file_to_object(
     upload_config_type: &str,
     slug_field: &str,
 ) -> Result<(), ServerFnError> {
+    if upload_config_type == "Artist" {
+        store_artist_primary_image(file_name, slug_field).await?;
+    } else if upload_config_type == "Avatar" {
+        store_avatar(file_name, slug_field).await?;
+    } else {
+        return Err(ServerFnError::new(
+            "Invalid upload configuration.".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn store_artist_primary_image(
+    file_name: &str,
+    slug_field: &str,
+) -> Result<(), ServerFnError> {
+    let auth = auth()?;
+    let pool = pool()?;
+    let _user =
+        match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"]) {
+            Ok(user) => user,
+            Err(e) => return Err(ServerFnError::new(e)),
+        };
+
+    // Store the file to the artist
+    let mut artist = match Artist::get_by_slug(&pool, slug_field.to_string()).await {
+        Ok(artist) => artist,
+        Err(e) => {
+            tracing::error!("Couldn't get artist: {e}");
+            return Err(ServerFnError::new(e));
+        }
+    };
+    artist.primary_image = Some(file_name.to_string());
+    match artist.update(&pool).await {
+        Ok(artist) => {
+            tracing::info!("{:?} primary image updated.", artist.name);
+        }
+        Err(e) => {
+            tracing::error!("Couldn't update artist: {e}");
+            return Err(ServerFnError::new(e));
+        }
+    };
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn store_avatar(file_name: &str, slug_field: &str) -> Result<(), ServerFnError> {
     let mut auth = auth()?;
     let pool = pool()?;
-
-    if upload_config_type == "Avatar" {
-        let Some(current_user) = auth.current_user.as_ref() else {
-            return Err(ServerFnError::new("No user found.".to_string()));
+    let Some(current_user) = auth.current_user.as_ref() else {
+        return Err(ServerFnError::new("No user found.".to_string()));
+    };
+    if slug_field == current_user.username {
+        // Store the file to the user
+        let mut user = match User::get_by_username(&pool, slug_field.to_string()).await {
+            Ok(user) => user,
+            Err(e) => {
+                tracing::error!("Couldn't get user: {e}");
+                return Err(ServerFnError::new(e));
+            }
         };
-        if slug_field == current_user.username {
-            // Store the file to the user
-            let mut user = match User::get_by_username(&pool, slug_field.to_string()).await {
-                Ok(user) => user,
-                Err(e) => {
-                    tracing::error!("Couldn't get user: {e}");
-                    return Err(ServerFnError::new(e));
-                }
-            };
-            user.avatar = Some(file_name.to_string());
-            match user.update(&pool).await {
-                Ok(user) => {
-                    auth.reload_user().await;
-                    let user_context = user_context()?;
-                    user_context.1.set(user);
-                }
-                Err(e) => {
-                    tracing::error!("Couldn't update user: {e}");
-                    return Err(ServerFnError::new(e));
-                }
-            };
-        }
+        user.avatar = Some(file_name.to_string());
+        match user.update(&pool).await {
+            Ok(user) => {
+                auth.reload_user().await;
+                let user_context = user_context()?;
+                user_context.1.set(user);
+            }
+            Err(e) => {
+                tracing::error!("Couldn't update user: {e}");
+                return Err(ServerFnError::new(e));
+            }
+        };
     }
     Ok(())
 }
