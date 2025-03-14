@@ -2,7 +2,10 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
-use super::delete::DeleteArtist;
+use super::{
+    delete::DeleteArtist,
+    menu::{Menu, Page},
+};
 use crate::components::{
     admin::shared::{MarkdownField, PublishedAtField},
     files::upload::FileUploadWithProgress,
@@ -38,9 +41,6 @@ pub fn EditArtist() -> impl IntoView {
     let (success, set_success) = signal(false);
 
     view! {
-        <Title text=move || format!("Edit {}", artist.get().name) />
-        <h1>"Edit "{move || view! { {artist.get().name} }}</h1>
-
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {
                 ErrorPage
@@ -55,6 +55,11 @@ pub fn EditArtist() -> impl IntoView {
                         }
                     };
                     view! {
+                        <Title text=move || format!("Edit {}", artist.get().name) />
+                        <h1>"Edit "{move || view! { {artist.get().name} }}</h1>
+
+                        <Menu slug=slug selected=&Page::Profile />
+
                         <ActionForm action=update_artist>
                             <div class="grid gap-6">
                                 {move || {
