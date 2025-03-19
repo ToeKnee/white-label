@@ -110,9 +110,9 @@ pub async fn create_test_record_label(
     let label = sqlx::query_as::<_, RecordLabel>(
     "INSERT INTO labels (name, slug, description, isrc_base) VALUES ($1, $2, $3, $4) RETURNING *",
 )
-    .bind(format!("Test User {id}"))
-    .bind(format!("test-user-{id}"))
-    .bind(format!("A user for testing purposes with the id of {id}"))
+    .bind(format!("Test Record Label {id}"))
+    .bind(format!("test-record-label-{id}"))
+    .bind(format!("A record label for testing purposes with the id of {id}"))
     .bind(format!("UK AAA {id}"))
     .fetch_one(pool)
     .await?;
@@ -140,13 +140,14 @@ pub async fn create_test_record_label(
 pub async fn create_test_release(
     pool: &PgPool,
     id: usize,
-    record_label: Option<RecordLabel>,
+    artist: Option<Artist>,
 ) -> Result<Release, sqlx::Error> {
-    let record_label = match record_label {
-        Some(label) => label,
-        None => create_test_record_label(pool, id).await.unwrap(),
+    let artist = match artist {
+        Some(artist) => artist,
+        None => create_test_artist(pool, id, None).await.unwrap(),
     };
-    let release = sqlx::query_as::<_, Release>(
+
+    let release =  sqlx::query_as::<_, Release>(
     "INSERT INTO releases (name, slug, description, catalogue_number, release_date, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
 )
     .bind(format!("Test Release {id}"))
@@ -154,8 +155,16 @@ pub async fn create_test_release(
     .bind(format!("A release for testing purposes with the id of {id}"))
     .bind(format!("TEST-{id}"))
     .bind(chrono::Utc::now())
-    .bind(record_label.id)
+    .bind(artist.label_id)
     .bind(Some(chrono::Utc::now()))
+    .fetch_one(pool)
+    .await?;
+
+    let _release_artists = sqlx::query(
+        "INSERT INTO release_artists (release_id, artist_id) VALUES ($1, $2) RETURNING *",
+    )
+    .bind(release.id)
+    .bind(artist.id)
     .fetch_one(pool)
     .await?;
 

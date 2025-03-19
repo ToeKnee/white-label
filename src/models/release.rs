@@ -227,6 +227,49 @@ impl Release {
         })
     }
 
+    /// Get releases by artist and record label
+    /// This is used to get all releases by an artist on a record label
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `artist_id` - The ID of the artist
+    /// * `record_label_id` - The ID of the record label
+    ///
+    /// # Returns
+    /// The releases
+    ///
+    /// # Errors
+    /// If there is an error getting the releases, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn get_by_artist_and_record_label(
+        pool: &PgPool,
+        artist_id: i64,
+        record_label_id: i64,
+    ) -> anyhow::Result<Vec<Self>> {
+        let releases = sqlx::query_as::<_, Self>(
+            "SELECT * FROM releases
+             INNER JOIN release_artists
+             ON releases.id = release_artists.release_id
+             WHERE release_artists.artist_id = $1 AND releases.label_id = $2",
+        )
+        .bind(artist_id)
+        .bind(record_label_id)
+        .fetch_all(pool)
+        .await;
+
+        match releases {
+            Ok(releases) => Ok(releases),
+            Err(e) => {
+                tracing::error!("{e}");
+                Err(anyhow::anyhow!(
+                    "Could not find releases for artist with id {} and record label with id {}.",
+                    artist_id,
+                    record_label_id
+                ))
+            }
+        }
+    }
+
     /// Update an release
     ///
     /// # Arguments
@@ -560,6 +603,46 @@ mod tests {
             release.unwrap_err().to_string(),
             "Could not find release with slug missing.".to_string()
         );
+    }
+
+    #[sqlx::test]
+    async fn test_get_by_artist_and_record_label_no_releases(pool: PgPool) {
+        let releases = Release::get_by_artist_and_record_label(&pool, 1, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(releases.len(), 0);
+    }
+
+    #[sqlx::test]
+    async fn test_get_by_artist_and_record_label_with_releases(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let releases = Release::get_by_artist_and_record_label(&pool, 1, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].id, release.id);
+    }
+
+    #[sqlx::test]
+    async fn test_get_by_artist_and_record_label_wrong_artist(pool: PgPool) {
+        create_test_release(&pool, 1, None).await.unwrap();
+        let releases = Release::get_by_artist_and_record_label(&pool, 2, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(releases.len(), 0);
+    }
+
+    #[sqlx::test]
+    async fn test_get_by_artist_and_record_label_wrong_label(pool: PgPool) {
+        create_test_release(&pool, 1, None).await.unwrap();
+        let releases = Release::get_by_artist_and_record_label(&pool, 1, 2)
+            .await
+            .unwrap();
+
+        assert_eq!(releases.len(), 0);
     }
 
     #[sqlx::test]
