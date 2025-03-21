@@ -688,7 +688,11 @@ mod tests {
             .unwrap();
         published_in_future_release.published_at =
             Some(chrono::Utc::now() + chrono::Duration::days(1));
-        published_in_future_release.clone().update(&pool).await.unwrap();
+        published_in_future_release
+            .clone()
+            .update(&pool)
+            .await
+            .unwrap();
         let mut published_release = create_test_release(&pool, 3, Some(artist.clone()))
             .await
             .unwrap();
