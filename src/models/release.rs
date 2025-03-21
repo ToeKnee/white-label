@@ -245,17 +245,30 @@ impl Release {
         pool: &PgPool,
         artist_id: i64,
         record_label_id: i64,
+        include_hidden: bool,
     ) -> anyhow::Result<Vec<Self>> {
-        let releases = sqlx::query_as::<_, Self>(
+        let query = if include_hidden {
             "SELECT * FROM releases
              INNER JOIN release_artists
              ON releases.id = release_artists.release_id
-             WHERE release_artists.artist_id = $1 AND releases.label_id = $2",
-        )
-        .bind(artist_id)
-        .bind(record_label_id)
-        .fetch_all(pool)
-        .await;
+             WHERE release_artists.artist_id = $1 AND releases.label_id = $2
+             ORDER BY deleted_at DESC, name ASC"
+        } else {
+            "SELECT * FROM releases
+             INNER JOIN release_artists
+             ON releases.id = release_artists.release_id
+             WHERE release_artists.artist_id = $1 AND releases.label_id = $2
+              AND deleted_at IS NULL
+              AND published_at < NOW()
+              AND published_at IS NOT NULL
+             ORDER BY name ASC"
+        };
+
+        let releases = sqlx::query_as::<_, Self>(query)
+            .bind(artist_id)
+            .bind(record_label_id)
+            .fetch_all(pool)
+            .await;
 
         match releases {
             Ok(releases) => Ok(releases),
@@ -353,7 +366,9 @@ impl Release {
 mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
-    use crate::models::test_helpers::{create_test_record_label, create_test_release};
+    use crate::models::test_helpers::{
+        create_test_artist, create_test_record_label, create_test_release,
+    };
 
     #[sqlx::test]
     async fn test_validate_success(pool: PgPool) {
@@ -607,7 +622,7 @@ mod tests {
 
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_no_releases(pool: PgPool) {
-        let releases = Release::get_by_artist_and_record_label(&pool, 1, 1)
+        let releases = Release::get_by_artist_and_record_label(&pool, 1, 1, true)
             .await
             .unwrap();
 
@@ -617,7 +632,7 @@ mod tests {
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_with_releases(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
-        let releases = Release::get_by_artist_and_record_label(&pool, 1, 1)
+        let releases = Release::get_by_artist_and_record_label(&pool, 1, 1, true)
             .await
             .unwrap();
 
@@ -626,9 +641,80 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn test_get_by_artist_and_record_label_with_unpublished_releases(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let record_label_id = artist.label_id;
+        let mut unpublished_release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        unpublished_release.published_at = None;
+        unpublished_release.update(&pool).await.unwrap();
+        let mut published_in_future_release = create_test_release(&pool, 2, Some(artist.clone()))
+            .await
+            .unwrap();
+        published_in_future_release.published_at =
+            Some(chrono::Utc::now() + chrono::Duration::days(1));
+        published_in_future_release.update(&pool).await.unwrap();
+        let mut published_release = create_test_release(&pool, 3, Some(artist.clone()))
+            .await
+            .unwrap();
+        published_release.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        published_release.clone().update(&pool).await.unwrap();
+        let deleted_release = create_test_release(&pool, 4, Some(artist.clone()))
+            .await
+            .unwrap();
+        deleted_release.delete(&pool).await.unwrap();
+
+        let releases =
+            Release::get_by_artist_and_record_label(&pool, artist.id, record_label_id, false)
+                .await
+                .unwrap();
+
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].id, published_release.id);
+    }
+
+    #[sqlx::test]
+    async fn test_get_by_artist_and_record_label_with_unpublished_releases_show_all(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let record_label_id = artist.label_id;
+        let mut unpublished_release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        unpublished_release.published_at = None;
+        unpublished_release.clone().update(&pool).await.unwrap();
+        let mut published_in_future_release = create_test_release(&pool, 2, Some(artist.clone()))
+            .await
+            .unwrap();
+        published_in_future_release.published_at =
+            Some(chrono::Utc::now() + chrono::Duration::days(1));
+        published_in_future_release.clone().update(&pool).await.unwrap();
+        let mut published_release = create_test_release(&pool, 3, Some(artist.clone()))
+            .await
+            .unwrap();
+        published_release.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        published_release.clone().update(&pool).await.unwrap();
+        let deleted_release = create_test_release(&pool, 4, Some(artist.clone()))
+            .await
+            .unwrap();
+        deleted_release.clone().delete(&pool).await.unwrap();
+
+        let releases =
+            Release::get_by_artist_and_record_label(&pool, artist.id, record_label_id, true)
+                .await
+                .unwrap();
+
+        assert_eq!(releases.len(), 4);
+        assert_eq!(releases[0].id, unpublished_release.id);
+        assert_eq!(releases[1].id, published_in_future_release.id);
+        assert_eq!(releases[2].id, published_release.id);
+        assert_eq!(releases[3].id, deleted_release.id);
+    }
+
+    #[sqlx::test]
     async fn test_get_by_artist_and_record_label_wrong_artist(pool: PgPool) {
         create_test_release(&pool, 1, None).await.unwrap();
-        let releases = Release::get_by_artist_and_record_label(&pool, 2, 1)
+        let releases = Release::get_by_artist_and_record_label(&pool, 2, 1, true)
             .await
             .unwrap();
 
@@ -638,7 +724,7 @@ mod tests {
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_wrong_label(pool: PgPool) {
         create_test_release(&pool, 1, None).await.unwrap();
-        let releases = Release::get_by_artist_and_record_label(&pool, 1, 2)
+        let releases = Release::get_by_artist_and_record_label(&pool, 1, 2, true)
             .await
             .unwrap();
 
