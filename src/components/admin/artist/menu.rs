@@ -27,15 +27,16 @@ pub fn Menu<'a>(slug: RwSignal<std::string::String>, selected: &'a Page) -> impl
             <li class="menu-active">
                 <a
                     class=classes(selected, &Page::Profile)
-                    href=format!("/admin/artist/{}", slug.get())
+                    href=move || format!("/admin/artist/{}", slug.get())
                 >
                     Profile
                 </a>
+
             </li>
             <li>
                 <a
                     class=classes(selected, &Page::Releases)
-                    href=format!("/admin/artist/{}/releases", slug.get())
+                    href=move || format!("/admin/artist/{}/releases", slug.get())
                 >
                     Releases
                 </a>

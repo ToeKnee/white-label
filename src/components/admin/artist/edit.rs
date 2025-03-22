@@ -27,7 +27,11 @@ pub fn EditArtist() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let slug = RwSignal::new(params.read().get("slug").unwrap_or_default());
+    let slug = RwSignal::new(String::new());
+    Effect::new_isomorphic(move || {
+        let s = params.read().get("slug").unwrap_or_default();
+        slug.set(s);
+    });
 
     let (artist, set_artist) = signal(Artist::default());
     let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
@@ -55,8 +59,8 @@ pub fn EditArtist() -> impl IntoView {
                         }
                     };
                     view! {
-                        <Title text=move || format!("Edit {}", artist.get().name) />
-                        <h1>"Edit "{move || view! { {artist.get().name} }}</h1>
+                        <Title text=move || format!("{} Profile", artist.get().name) />
+                        <h1>{move || view! { {artist.get().name} }}" Profile"</h1>
 
                         <Menu slug=slug selected=&Page::Profile />
 
@@ -119,18 +123,26 @@ fn Form(artist: ReadSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
                 class="grow"
                 placeholder="Artist name"
                 name="artist_form[name]"
-                value=artist.get().name
+                value=move || artist.get().name
             />
         </label>
-        <MarkdownField
-            title="Description".to_string()
-            field="artist_form[description]".to_string()
-            markdown_text=artist.get().description
-        />
+        {move || {
+            view! {
+                <MarkdownField
+                    title="Description".to_string()
+                    field="artist_form[description]".to_string()
+                    markdown_text=artist.get().description
+                />
+            }
+        }}
 
         <div class="divider">Images</div>
-        <FileUploadWithProgress config=UploadConfiguration::Artist slug=artist.get().slug />
-        <img src=artist.get().primary_image_url() alt=artist.get().name />
+        {move || {
+            view! {
+                <FileUploadWithProgress config=UploadConfiguration::Artist slug=artist.get().slug />
+            }
+        }}
+        <img src=move || artist.get().primary_image_url() alt=move || artist.get().name />
 
         <div class="divider">Private</div>
         {move || {
