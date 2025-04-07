@@ -122,7 +122,7 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
                     None => {
                         return Err(ServerFnError::new("No content type on field.".to_string()));
                     }
-                };
+                }
 
                 let original_file_name = match field.file_name() {
                     Some(file_name) => file_name.to_string(),
@@ -295,7 +295,7 @@ async fn store_artist_primary_image(
             tracing::error!("Couldn't update artist: {e}");
             return Err(ServerFnError::new(e));
         }
-    };
+    }
     Ok(())
 }
 
@@ -326,7 +326,7 @@ async fn store_avatar(file_name: &str, slug_field: &str) -> Result<(), ServerFnE
                 tracing::error!("Couldn't update user: {e}");
                 return Err(ServerFnError::new(e));
             }
-        };
+        }
     }
     Ok(())
 }

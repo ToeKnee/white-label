@@ -55,7 +55,7 @@ pub fn EditPage() -> impl IntoView {
                         _ => {
                             redirect("/admin/pages");
                         }
-                    };
+                    }
                     view! {
                         <ActionForm action=update_page>
                             <div class="grid gap-6">

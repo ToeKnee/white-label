@@ -47,13 +47,13 @@ pub fn Releases() -> impl IntoView {
                         _ => {
                             redirect("/admin/artists");
                         }
-                    };
+                    }
                     if let Ok(releases) = releases_resource.await {
                         set_releases.set(releases.releases);
                     } else {
                         tracing::error!("Error while getting releases");
                         redirect("/admin/artists");
-                    };
+                    }
                     let release_rows = releases
                         .get()
                         .into_iter()
@@ -62,7 +62,6 @@ pub fn Releases() -> impl IntoView {
                             view! { <ReleaseRow release /> }
                         })
                         .collect::<Vec<_>>();
-
                     view! {
                         <Title text=move || format!("{} Releases", artist.get().name) />
                         <h1>{move || view! { {artist.get().name} }} " Releases"</h1>
@@ -90,7 +89,17 @@ pub fn Releases() -> impl IntoView {
                                             .into_any()
                                     } else {
                                         view! { {release_rows} }.into_any()
-                                    }}
+                                    }} <tr>
+                                        <td colspan="4"></td>
+                                        <td>
+                                            <a
+                                                href=format!("/admin/artist/{}/releases/new", slug.get())
+                                                class="btn btn-primary"
+                                            >
+                                                Add
+                                            </a>
+                                        </td>
+                                    </tr>
                                 </tbody>
                                 <tfoot>
                                     <tr>

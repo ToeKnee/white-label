@@ -33,20 +33,18 @@ pub fn valid_file_name(
     let mut name = file_name.to_string();
 
     match rename {
-        Some(rename_as) => {
-            match file_extension(file_name) {
-                Some(file_extension) => {
-                    name = format!("{rename_as}.{file_extension}");
-                }
-                None => {
-                    name.clone_from(&rename_as);
-                }
-            };
-        }
+        Some(rename_as) => match file_extension(file_name) {
+            Some(file_extension) => {
+                name = format!("{rename_as}.{file_extension}");
+            }
+            None => {
+                name.clone_from(&rename_as);
+            }
+        },
         None => {
             name = file_name.to_string();
         }
-    };
+    }
     name = format!("{}-{name}", chrono::Utc::now().timestamp());
 
     if !overwrite_existing_file {

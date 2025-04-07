@@ -16,7 +16,7 @@
 use async_broadcast::{Receiver, Sender, broadcast};
 use dashmap::DashMap;
 use futures::Stream;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 pub struct File {
     total: usize,
@@ -24,7 +24,7 @@ pub struct File {
     rx: Receiver<usize>,
 }
 
-pub static FILES: Lazy<DashMap<String, File>> = Lazy::new(DashMap::new);
+pub static FILES: LazyLock<DashMap<String, File>> = LazyLock::new(DashMap::new);
 
 /// Add a chunk to the progress of a file upload.
 /// This function will update the total length of the file and send a message to the stream.
@@ -50,7 +50,7 @@ pub async fn add_chunk(filename: &str, len: usize, username: &str) -> usize {
         Err(e) => {
             tracing::error!("[{filename}]\tCouldn't send a message over channel: {e}");
         }
-    };
+    }
 
     new_total
 }

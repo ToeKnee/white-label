@@ -18,7 +18,7 @@ pub fn StatusBadge(
                 badge_class = "indicator-item badge badge-info".to_string();
             }
             _ => (),
-        };
+        }
     } else {
         badge_text = "Draft".to_string();
         badge_class = "indicator-item badge badge-warning".to_string();

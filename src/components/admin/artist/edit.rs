@@ -57,7 +57,7 @@ pub fn EditArtist() -> impl IntoView {
                         _ => {
                             redirect("/admin/artists");
                         }
-                    };
+                    }
                     view! {
                         <Title text=move || format!("{} Profile", artist.get().name) />
                         <h1>{move || view! { {artist.get().name} }}" Profile"</h1>

@@ -52,7 +52,7 @@ pub fn FileUploadWithProgress(config: UploadConfiguration, slug: String) -> impl
                 // chunks, each with more text in it
                 // so we've padded them with newspace, and will split them out here
                 // each value is the latest total, so we'll just take the last one.
-                let len = match len.split('\n').filter(|n| !n.is_empty()).last() {
+                let len = match len.split('\n').filter(|n| !n.is_empty()).next_back() {
                     Some(len) => match len.parse::<usize>() {
                         Ok(len) => len,
                         Err(e) => {
