@@ -3,7 +3,7 @@ use leptos_meta::Title;
 use reactive_stores::Store;
 
 use crate::components::{
-    admin::shared::{MarkdownField, PublishedAtField},
+    admin::shared::{DateField, MarkdownField},
     utils::{
         error::ErrorPage, error::ServerErrors, loading::Loading,
         permissions::permission_or_redirect,
@@ -22,15 +22,15 @@ pub fn CreateArtist() -> impl IntoView {
     });
 
     let store = expect_context::<Store<GlobalState>>();
-    let (record_label, _set_record_label) = signal(store.record_label().get());
+    let record_label = move || store.record_label().get();
 
     let (artist, set_artist) = signal(Artist::default());
 
     // Set the record label id to the artist
     Effect::new_isomorphic(move || {
         let mut a = artist.get();
-        if a.label_id == 0 && record_label.get().id > 0 {
-            a.label_id = record_label.get().id;
+        if a.label_id == 0 && record_label().id > 0 {
+            a.label_id = record_label().id;
             set_artist.set(a);
         }
     });
@@ -43,7 +43,7 @@ pub fn CreateArtist() -> impl IntoView {
             .unwrap_or_else(|| Ok(ArtistResult::default()))
     });
 
-    let var_name = view! {
+    view! {
         <Title text="Create Artist" />
         <h1>Create Artist</h1>
 
@@ -77,7 +77,7 @@ pub fn CreateArtist() -> impl IntoView {
                                     class="hidden"
                                     placeholder=""
                                     name="artist_form[label_id]"
-                                    value=record_label.get().id
+                                    value=record_label().id
                                 /> <div class="divider">Public</div>
                                 <label class="flex gap-2 items-center input input-bordered">
                                     <input
@@ -97,9 +97,10 @@ pub fn CreateArtist() -> impl IntoView {
                                 </label> <div class="divider">Private</div>
                                 {move || {
                                     view! {
-                                        <PublishedAtField
+                                        <DateField
+                                            title="Published at".to_string()
                                             field="artist_form[published_at]".to_string()
-                                            published_at=artist.get().published_at
+                                            date=artist.get().published_at
                                         />
                                     }
                                 }} <button class="btn btn-primary">Create</button>
@@ -109,6 +110,5 @@ pub fn CreateArtist() -> impl IntoView {
                 })}
             </ErrorBoundary>
         </Transition>
-    };
-    var_name
+    }
 }

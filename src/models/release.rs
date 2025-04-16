@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use sqlx::{FromRow, PgPool, Row};
 
-#[cfg(feature = "ssr")]
-use super::record_label::RecordLabel;
 use super::traits::Validate;
+#[cfg(feature = "ssr")]
+use super::{artist::Artist, record_label::RecordLabel};
 #[cfg(feature = "ssr")]
 use crate::utils::slugify::slugify;
 
@@ -359,6 +359,81 @@ impl Release {
                 ))
             }
         }
+    }
+
+    /// Set the artists for the release
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `artist_ids` - The IDs of the artists
+    /// # Returns
+    /// The release
+    /// # Errors
+    /// If the release cannot be updated, return an error
+    /// # Panics
+    /// If the release cannot be updated, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn set_artists(&self, pool: &PgPool, artist_ids: Vec<i64>) -> anyhow::Result<Self> {
+        if artist_ids.is_empty() {
+            return Err(anyhow::anyhow!("Artist IDs cannot be empty."));
+        }
+
+        let mut tx = pool.begin().await?;
+
+        // Delete all artists for the release
+        sqlx::query("DELETE FROM release_artists WHERE release_id = $1")
+            .bind(self.id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Insert the new artists
+        for artist_id in artist_ids {
+            match sqlx::query("INSERT INTO release_artists (release_id, artist_id) VALUES ($1, $2)")
+                .bind(self.id)
+                .bind(artist_id)
+                .execute(&mut *tx)
+                .await
+            {
+                Ok(_) => (),
+                Err(e) => {
+                    tracing::error!("{e}");
+                    return Err(anyhow::anyhow!(
+                        "Could not set artists for release with id {}.",
+                        self.id
+                    ));
+                }
+            }
+        }
+
+        let _ = tx.commit().await;
+
+        Ok(self.clone())
+    }
+
+    /// Get the artists for the release
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    ///
+    /// # Returns
+    /// The artists for the release
+    ///
+    /// # Errors
+    /// If the release cannot be found, return an error
+    /// # Panics
+    /// If the release cannot be found, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn get_artists(&self, pool: &PgPool) -> anyhow::Result<Vec<Artist>> {
+        let artists = sqlx::query_as::<_, Artist>(
+            "SELECT artists.* FROM artists
+             INNER JOIN release_artists ON artists.id = release_artists.artist_id
+             WHERE release_artists.release_id = $1",
+        )
+        .bind(self.id)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(artists)
     }
 }
 
@@ -790,5 +865,118 @@ mod tests {
             result.unwrap_err().to_string(),
             "Could not delete release with id 0.".to_string()
         );
+    }
+
+    #[sqlx::test]
+    async fn test_set_artists(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let artist = release.get_artists(&pool).await.unwrap()[0].clone();
+        let record_label = RecordLabel::get_by_id(&pool, artist.label_id)
+            .await
+            .unwrap();
+        let artist2 = create_test_artist(&pool, 2, Some(record_label))
+            .await
+            .unwrap();
+
+        let result = release
+            .set_artists(&pool, vec![artist.id, artist2.id])
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[sqlx::test]
+    async fn test_set_artists_not_found(pool: PgPool) {
+        let release = Release::default();
+        let result = release.set_artists(&pool, vec![1, 2]).await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not set artists for release with id 0.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_set_artists_no_artists(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let result = release.set_artists(&pool, vec![]).await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Artist IDs cannot be empty.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_set_artists_replace(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let artist = release.get_artists(&pool).await.unwrap()[0].clone();
+        let record_label = RecordLabel::get_by_id(&pool, artist.label_id)
+            .await
+            .unwrap();
+        let artist2 = create_test_artist(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let artist3 = create_test_artist(&pool, 3, Some(record_label))
+            .await
+            .unwrap();
+
+        // Set the artists for the release
+        release
+            .set_artists(&pool, vec![artist.id, artist2.id])
+            .await
+            .unwrap();
+
+        // Replace the artists for the release
+        let result = release.set_artists(&pool, vec![artist3.id]).await;
+
+        assert!(result.is_ok());
+        let artists = release.get_artists(&pool).await.unwrap();
+        assert_eq!(artists.len(), 1);
+        assert_eq!(artists[0].id, artist3.id);
+    }
+
+    /// Test get_artists
+    #[sqlx::test]
+    async fn test_get_artists(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let artist = release.get_artists(&pool).await.unwrap()[0].clone();
+        let record_label = RecordLabel::get_by_id(&pool, artist.label_id)
+            .await
+            .unwrap();
+        let artist2 = create_test_artist(&pool, 2, Some(record_label))
+            .await
+            .unwrap();
+
+        // Set the artists for the release
+        release
+            .set_artists(&pool, vec![artist.id, artist2.id])
+            .await
+            .unwrap();
+
+        // Get the artists for the release
+        let artists = release.get_artists(&pool).await.unwrap();
+
+        assert_eq!(artists.len(), 2);
+        assert_eq!(artists[0].id, artist.id);
+        assert_eq!(artists[1].id, artist2.id);
+    }
+
+    #[sqlx::test]
+    async fn test_primary_image_url(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let url = release.primary_image_url();
+        assert_eq!(url, "/uploads/releases/default-release.jpg");
+    }
+
+    #[sqlx::test]
+    async fn test_primary_image_url_with_custom_image(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let mut release = release;
+        release.primary_image = Some("custom-image.jpg".to_string());
+        let url = release.primary_image_url();
+        assert_eq!(url, "/uploads/releases/custom-image.jpg");
     }
 }

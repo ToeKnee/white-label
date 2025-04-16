@@ -7,7 +7,7 @@ use super::{
     menu::{Menu, Page},
 };
 use crate::components::{
-    admin::shared::{MarkdownField, PublishedAtField},
+    admin::shared::{DateField, MarkdownField},
     files::upload::FileUploadWithProgress,
     utils::{
         error::ErrorPage, error::ServerErrors, loading::Loading,
@@ -147,9 +147,10 @@ fn Form(artist: ReadSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
         <div class="divider">Private</div>
         {move || {
             view! {
-                <PublishedAtField
+                <DateField
+                    title="Published at".to_string()
                     field="artist_form[published_at]".to_string()
-                    published_at=artist.get().published_at
+                    date=artist.get().published_at
                 />
             }
         }}

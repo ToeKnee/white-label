@@ -10,7 +10,7 @@ use crate::components::{
     },
 };
 use crate::models::{artist::Artist, release::Release};
-use crate::routes::{artist::get_artist, releases::get_releases};
+use crate::routes::{artist::get_artist, release::get_releases};
 
 use crate::utils::redirect::redirect;
 
@@ -143,7 +143,9 @@ fn ReleaseRow(#[prop(into)] release: Release) -> impl IntoView {
                     </div>
                     <div>
                         <div class="font-bold">{release.name.clone()}</div>
-                        <div class="text-sm opacity-50">{release.catalogue_number.clone()}</div>
+                        <div class="text-sm opacity-50">
+                            {release.catalogue_number.clone()} <br /> {release.slug.clone()}
+                        </div>
                     </div>
                 </div>
             </td>

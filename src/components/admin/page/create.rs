@@ -3,7 +3,7 @@ use leptos_meta::Title;
 use reactive_stores::Store;
 
 use crate::components::{
-    admin::shared::{MarkdownField, PublishedAtField},
+    admin::shared::{DateField, MarkdownField},
     utils::{
         error::ErrorPage, error::ServerErrors, loading::Loading,
         permissions::permission_or_redirect,
@@ -101,9 +101,10 @@ pub fn CreatePage() -> impl IntoView {
                                 /> <div class="divider">Private</div>
                                 {move || {
                                     view! {
-                                        <PublishedAtField
+                                        <DateField
+                                            title="Published at".to_string()
                                             field="page_form[published_at]".to_string()
-                                            published_at=page.get().published_at
+                                            date=page.get().published_at
                                         />
                                     }
                                 }} <button class="btn btn-primary">Create</button>

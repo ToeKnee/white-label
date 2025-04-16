@@ -41,37 +41,39 @@ pub fn MarkdownField(title: String, field: String, markdown_text: String) -> imp
     }
 }
 
-/// Published at field
+/// Date field
 ///
-/// This field is used to set the published_at date for the artist.
+/// This field is used to set the date fields.
 /// datetime-local input is used to allow the user to select a date and time, but this can't have a time zone.
 /// To work around this, we add the current time zone to the input value.
 #[component]
-pub fn PublishedAtField(
+pub fn DateField(
+    title: String,
     field: String,
-    published_at: Option<chrono::DateTime<chrono::Utc>>,
+    date: Option<chrono::DateTime<chrono::Utc>>,
 ) -> impl IntoView {
-    let published_at = RwSignal::new(published_at);
+    let date = RwSignal::new(date);
 
     view! {
         <input
             type="text"
             class="hidden"
-            name=field
-            prop:value=move || { published_at.get().map(|x| { x.to_string() }).unwrap_or_default() }
+            name=field.clone()
+            prop:value=move || { date.get().map(|x| { x.to_string() }).unwrap_or_default() }
         />
         <label class="w-full max-w-xs form-control">
             <div class="label">
-                <span class="label-text">"Publish at"</span>
+                <span class="label-text">{title}</span>
                 <span class="label-text-alt">"*Date & Time"</span>
             </div>
             {move || {
+                let name = format!("local_{field}");
                 view! {
                     <input
                         class="w-full max-w-xs input input-bordered"
                         type="datetime-local"
-                        name="local_published_at"
-                        value=published_at
+                        name=name
+                        value=date
                             .get()
                             .map(|x| { x.format("%Y-%m-%dT%H:%M").to_string() })
                             .unwrap_or_default()
@@ -86,14 +88,13 @@ pub fn PublishedAtField(
                                     "%Y-%m-%dT%H:%M:%S %z",
                                 )
                                 .map_or(None, |v| Some(v.into()));
-                            published_at.set(value);
+                            date.set(value);
                         }
                     />
                 }
             }}
             {move || {
-                published_at
-                    .get()
+                date.get()
                     .map_or_else(
                         || {
 
