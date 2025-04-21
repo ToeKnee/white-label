@@ -4,10 +4,7 @@ use reactive_stores::Store;
 
 use crate::components::{
     admin::shared::{DateField, MarkdownField},
-    utils::{
-        error::ErrorPage, error::ServerErrors, loading::Loading,
-        permissions::permission_or_redirect,
-    },
+    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect},
 };
 use crate::models::artist::Artist;
 use crate::routes::artist::{ArtistResult, CreateArtist};
@@ -36,12 +33,7 @@ pub fn CreateArtist() -> impl IntoView {
     });
 
     let create_artist = ServerAction::<CreateArtist>::new();
-    let value = Signal::derive(move || {
-        create_artist
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(ArtistResult::default()))
-    });
+    let value = Signal::derive(move || create_artist.value().get().unwrap_or_else(|| Ok(ArtistResult::default())));
 
     view! {
         <Title text="Create Artist" />

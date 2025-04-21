@@ -5,10 +5,7 @@ use leptos_router::hooks::use_params_map;
 use super::delete::DeletePage;
 use crate::components::{
     admin::shared::{DateField, MarkdownField},
-    utils::{
-        error::ErrorPage, error::ServerErrors, loading::Loading,
-        permissions::permission_or_redirect, success::Success,
-    },
+    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success},
 };
 use crate::models::page::Page;
 use crate::routes::page::{PageResult, UpdatePage, get_page};
@@ -29,12 +26,7 @@ pub fn EditPage() -> impl IntoView {
     let (page, set_page) = signal(Page::default());
     let page_resource = Resource::new(move || slug, |slug| get_page(slug.get()));
     let update_page = ServerAction::<UpdatePage>::new();
-    let value = Signal::derive(move || {
-        update_page
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(PageResult::default()))
-    });
+    let value = Signal::derive(move || update_page.value().get().unwrap_or_else(|| Ok(PageResult::default())));
     let (success, set_success) = signal(false);
 
     view! {

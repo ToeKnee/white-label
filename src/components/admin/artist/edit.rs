@@ -9,10 +9,7 @@ use super::{
 use crate::components::{
     admin::shared::{DateField, MarkdownField},
     files::upload::FileUploadWithProgress,
-    utils::{
-        error::ErrorPage, error::ServerErrors, loading::Loading,
-        permissions::permission_or_redirect, success::Success,
-    },
+    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success},
 };
 use crate::config::upload::UploadConfiguration;
 use crate::models::artist::Artist;
@@ -36,12 +33,7 @@ pub fn EditArtist() -> impl IntoView {
     let (artist, set_artist) = signal(Artist::default());
     let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
     let update_artist = ServerAction::<UpdateArtist>::new();
-    let value = Signal::derive(move || {
-        update_artist
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(ArtistResult::default()))
-    });
+    let value = Signal::derive(move || update_artist.value().get().unwrap_or_else(|| Ok(ArtistResult::default())));
     let (success, set_success) = signal(false);
 
     view! {

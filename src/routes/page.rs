@@ -6,9 +6,7 @@ use crate::forms::page::{CreatePageForm, UpdatePageForm};
 use crate::models::page::Page;
 
 #[cfg(feature = "ssr")]
-use crate::services::page::{
-    create_page_service, delete_page_service, get_page_service, update_page_service,
-};
+use crate::services::page::{create_page_service, delete_page_service, get_page_service, update_page_service};
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 

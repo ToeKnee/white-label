@@ -20,6 +20,7 @@ pub struct UploadDetails {
 pub enum UploadConfiguration {
     Artist,
     Avatar,
+    Release,
 }
 
 impl FromStr for UploadConfiguration {
@@ -29,6 +30,7 @@ impl FromStr for UploadConfiguration {
         match s {
             "Artist" => Ok(Self::Artist),
             "Avatar" => Ok(Self::Avatar),
+            "Release" => Ok(Self::Release),
             _ => bail!("Invalid upload configuration"),
         }
     }
@@ -60,6 +62,18 @@ impl UploadConfiguration {
                 permissions: vec![],
                 size_limit: 10 * 1024 * 1024, // 10MB
                 rename: true,
+            },
+            Self::Release => UploadDetails {
+                mime_types: vec![
+                    "image/jpeg".to_string(),
+                    "image/png".to_string(),
+                    "image/gif".to_string(),
+                    "image/webp".to_string(),
+                ],
+                path: "releases".to_string(),
+                permissions: vec!["admin".to_string(), "label_owner".to_string()],
+                size_limit: 100 * 1024 * 1024, // 100MB
+                rename: false,
             },
         }
     }

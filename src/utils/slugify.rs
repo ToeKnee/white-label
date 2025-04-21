@@ -20,10 +20,7 @@ pub fn slugify(text: &str) -> String {
     slug = binding;
 
     // Remove all punctuation from the text
-    let binding = slug
-        .chars()
-        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-        .collect::<String>();
+    let binding = slug.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace()).collect::<String>();
     slug = binding;
 
     // Remove double spaces from the text
@@ -72,10 +69,7 @@ mod tests {
 
     #[test]
     fn test_slugify_with_unicode() {
-        assert_eq!(
-            slugify("Ἰοὺ ἰού· τὰ πάντʼ ἂν ἐξήκοι σαφῆ."),
-            "iou-iou-ta-pant-an-exekoi-saphe"
-        );
+        assert_eq!(slugify("Ἰοὺ ἰού· τὰ πάντʼ ἂν ἐξήκοι σαφῆ."), "iou-iou-ta-pant-an-exekoi-saphe");
     }
 
     #[test]
@@ -100,10 +94,7 @@ mod tests {
 
     #[test]
     fn test_trim_whitespace_with_quadruple_spaces() {
-        assert_eq!(
-            slugify("The    Quick    Brown    Fox"),
-            "the-quick-brown-fox"
-        );
+        assert_eq!(slugify("The    Quick    Brown    Fox"), "the-quick-brown-fox");
     }
 
     #[test]

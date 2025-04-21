@@ -6,10 +6,7 @@ pub fn MarkdownField(title: String, field: String, markdown_text: String) -> imp
     let (description, set_description) = signal(markdown_text);
     let (markdown_description, set_markdown_description) = signal(String::new());
     Effect::new(move || {
-        set_markdown_description.set(
-            markdown::to_html_with_options(&description.get(), &markdown::Options::gfm())
-                .unwrap_or_default(),
-        );
+        set_markdown_description.set(markdown::to_html_with_options(&description.get(), &markdown::Options::gfm()).unwrap_or_default());
     });
 
     view! {
@@ -47,11 +44,7 @@ pub fn MarkdownField(title: String, field: String, markdown_text: String) -> imp
 /// datetime-local input is used to allow the user to select a date and time, but this can't have a time zone.
 /// To work around this, we add the current time zone to the input value.
 #[component]
-pub fn DateField(
-    title: String,
-    field: String,
-    date: Option<chrono::DateTime<chrono::Utc>>,
-) -> impl IntoView {
+pub fn DateField(title: String, field: String, date: Option<chrono::DateTime<chrono::Utc>>) -> impl IntoView {
     let date = RwSignal::new(date);
 
     view! {

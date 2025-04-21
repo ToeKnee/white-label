@@ -18,8 +18,7 @@ use sqlx::postgres::PgPoolOptions;
 /// If the database connection fails, the program will panic.
 pub async fn create_pool() -> sqlx::PgPool {
     // Set up database connection
-    let database_url =
-        std::env::var("DATABASE_URL").context("DATABASE_URL environment variable must be set.");
+    let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL environment variable must be set.");
 
     let database_url = match database_url {
         Ok(database_url) => database_url,
@@ -28,16 +27,10 @@ pub async fn create_pool() -> sqlx::PgPool {
         }
     };
 
-    let pool = match PgPoolOptions::new()
-        .max_connections(20)
-        .connect(database_url.as_str())
-        .await
-    {
+    let pool = match PgPoolOptions::new().max_connections(20).connect(database_url.as_str()).await {
         Ok(pool) => pool,
         Err(e) => {
-            handle_error(format!(
-                "Could not connect to database_url {database_url}: {e}"
-            ));
+            handle_error(format!("Could not connect to database_url {database_url}: {e}"));
         }
     };
 

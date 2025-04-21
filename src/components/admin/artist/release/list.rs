@@ -4,10 +4,7 @@ use leptos_router::hooks::use_params_map;
 
 use crate::components::{
     admin::artist::menu::{Menu, Page},
-    utils::{
-        error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
-        status_badge::StatusBadge,
-    },
+    utils::{error::ErrorPage, loading::Loading, permissions::permission_or_redirect, status_badge::StatusBadge},
 };
 use crate::models::{artist::Artist, release::Release};
 use crate::routes::{artist::get_artist, release::get_releases};
@@ -58,8 +55,7 @@ pub fn Releases() -> impl IntoView {
                         .get()
                         .into_iter()
                         .map(|release| {
-
-                            view! { <ReleaseRow release /> }
+                            view! { <ReleaseRow release=release artist_slug=slug.get() /> }
                         })
                         .collect::<Vec<_>>();
                     view! {
@@ -120,11 +116,10 @@ pub fn Releases() -> impl IntoView {
 }
 
 #[component]
-fn ReleaseRow(#[prop(into)] release: Release) -> impl IntoView {
-    let release_date = release.release_date.map_or_else(
-        || "Unreleased".to_string(),
-        |date| date.format("%e %B %Y").to_string(),
-    );
+fn ReleaseRow(#[prop(into)] release: Release, artist_slug: String) -> impl IntoView {
+    let release_date = release
+        .release_date
+        .map_or_else(|| "Unreleased".to_string(), |date| date.format("%e %B %Y").to_string());
 
     view! {
         <tr>
@@ -134,15 +129,22 @@ fn ReleaseRow(#[prop(into)] release: Release) -> impl IntoView {
             <td>
                 <div class="flex gap-3 items-center">
                     <div class="avatar">
-                        <div class="w-12 h-12 mask mask-squircle">
+                        <div class="w-12 rounded-full">
                             <img
-                                src="https://img.daisyui.com/images/profile/demo/2@94.webp"
+                                class="m-0"
+                                src=release.primary_image_url()
                                 alt=release.name.clone()
                             />
                         </div>
                     </div>
                     <div>
-                        <div class="font-bold">{release.name.clone()}</div>
+                        <div class="font-bold">
+                            <a href=format!(
+                                "/admin/artist/{}/release/{}",
+                                artist_slug,
+                                release.slug,
+                            )>{release.name.clone()}</a>
+                        </div>
                         <div class="text-sm opacity-50">
                             {release.catalogue_number.clone()} <br /> {release.slug.clone()}
                         </div>
@@ -152,7 +154,10 @@ fn ReleaseRow(#[prop(into)] release: Release) -> impl IntoView {
             <td>0</td>
             <td>{release_date}</td>
             <td>
-                <a href=format!("/admin/artist/{}", release.slug) class="btn btn-primary">
+                <a
+                    href=format!("/admin/artist/{}/release/{}", artist_slug, release.slug)
+                    class="btn btn-primary"
+                >
                     Edit
                 </a>
             </td>

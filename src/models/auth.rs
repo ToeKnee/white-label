@@ -49,23 +49,17 @@ impl Validate for User {
             return Err(anyhow::anyhow!("Username is required."));
         }
         if self.username.len() > 255 {
-            return Err(anyhow::anyhow!(
-                "Username must be less than 255 characters.".to_string()
-            ));
+            return Err(anyhow::anyhow!("Username must be less than 255 characters.".to_string()));
         }
         // Check that the username is unique
         if let Ok(user) = Self::get_by_username(pool, self.username.clone()).await {
             if user.id != self.id {
-                return Err(anyhow::anyhow!(
-                    "Username or Email already taken.".to_string()
-                ));
+                return Err(anyhow::anyhow!("Username or Email already taken.".to_string()));
             }
         }
 
         if self.email.len() > 255 {
-            return Err(anyhow::anyhow!(
-                "Email must be less than 255 characters.".to_string()
-            ));
+            return Err(anyhow::anyhow!("Email must be less than 255 characters.".to_string()));
         }
         if !self.email.contains('@') {
             return Err(anyhow::anyhow!("Email must be valid.".to_string()));
@@ -73,9 +67,7 @@ impl Validate for User {
         // Check that the email is unique
         if let Ok(user) = Self::get_by_email(pool, self.email.clone()).await {
             if user.id != self.id {
-                return Err(anyhow::anyhow!(
-                    "Username or Email already taken.".to_string()
-                ));
+                return Err(anyhow::anyhow!("Username or Email already taken.".to_string()));
             }
         }
 
@@ -97,10 +89,7 @@ impl User {
     }
 
     pub fn avatar_url(&self) -> String {
-        let avatar_file = self
-            .avatar
-            .clone()
-            .unwrap_or_else(|| "default-avatar.jpg".to_string());
+        let avatar_file = self.avatar.clone().unwrap_or_else(|| "default-avatar.jpg".to_string());
         format!("/uploads/avatars/{avatar_file}")
     }
 
@@ -195,27 +184,20 @@ pub mod ssr {
                 .ok()?;
 
             //lets just get all the tokens the user can use, we will only use the full permissions if modifying them.
-            let sql_user_perms = sqlx::query_as::<_, SqlPermissionTokens>(
-                "SELECT token FROM user_permissions WHERE user_id = $1",
-            )
-            .bind(id)
-            .fetch_all(pool)
-            .await
-            .ok()?;
+            let sql_user_perms = sqlx::query_as::<_, SqlPermissionTokens>("SELECT token FROM user_permissions WHERE user_id = $1")
+                .bind(id)
+                .fetch_all(pool)
+                .await
+                .ok()?;
 
             Some(sqluser.into_user(Some(sql_user_perms)))
         }
 
         pub async fn get(id: i64, pool: &PgPool) -> Option<Self> {
-            Self::get_with_passhash(id, pool)
-                .await
-                .map(|(user, _)| user)
+            Self::get_with_passhash(id, pool).await.map(|(user, _)| user)
         }
 
-        pub async fn get_from_username_with_passhash(
-            name: String,
-            pool: &PgPool,
-        ) -> Option<(Self, UserPasshash)> {
+        pub async fn get_from_username_with_passhash(name: String, pool: &PgPool) -> Option<(Self, UserPasshash)> {
             let sqluser = sqlx::query_as::<_, SqlUser>("SELECT * FROM users WHERE username = $1")
                 .bind(name)
                 .fetch_one(pool)
@@ -223,27 +205,20 @@ pub mod ssr {
                 .ok()?;
 
             // Lets just get all the tokens the user can use, we will only use the full permissions if modifying them.
-            let sql_user_perms = sqlx::query_as::<_, SqlPermissionTokens>(
-                "SELECT token FROM user_permissions WHERE user_id = $1;",
-            )
-            .bind(sqluser.id)
-            .fetch_all(pool)
-            .await
-            .ok()?;
+            let sql_user_perms = sqlx::query_as::<_, SqlPermissionTokens>("SELECT token FROM user_permissions WHERE user_id = $1;")
+                .bind(sqluser.id)
+                .fetch_all(pool)
+                .await
+                .ok()?;
 
             Some(sqluser.into_user(Some(sql_user_perms)))
         }
 
         pub async fn get_from_username(name: String, pool: &PgPool) -> Option<Self> {
-            Self::get_from_username_with_passhash(name, pool)
-                .await
-                .map(|(user, _)| user)
+            Self::get_from_username_with_passhash(name, pool).await.map(|(user, _)| user)
         }
 
-        pub async fn get_from_email_with_passhash(
-            name: String,
-            pool: &PgPool,
-        ) -> Option<(Self, UserPasshash)> {
+        pub async fn get_from_email_with_passhash(name: String, pool: &PgPool) -> Option<(Self, UserPasshash)> {
             let sqluser = sqlx::query_as::<_, SqlUser>("SELECT * FROM users WHERE email = $1")
                 .bind(name)
                 .fetch_one(pool)
@@ -251,21 +226,17 @@ pub mod ssr {
                 .ok()?;
 
             //lets just get all the tokens the user can use, we will only use the full permissions if modifying them.
-            let sql_user_perms = sqlx::query_as::<_, SqlPermissionTokens>(
-                "SELECT token FROM user_permissions WHERE user_id = $1;",
-            )
-            .bind(sqluser.id)
-            .fetch_all(pool)
-            .await
-            .ok()?;
+            let sql_user_perms = sqlx::query_as::<_, SqlPermissionTokens>("SELECT token FROM user_permissions WHERE user_id = $1;")
+                .bind(sqluser.id)
+                .fetch_all(pool)
+                .await
+                .ok()?;
 
             Some(sqluser.into_user(Some(sql_user_perms)))
         }
 
         pub async fn get_from_email(name: String, pool: &PgPool) -> Option<Self> {
-            Self::get_from_email_with_passhash(name, pool)
-                .await
-                .map(|(user, _)| user)
+            Self::get_from_email_with_passhash(name, pool).await.map(|(user, _)| user)
         }
     }
 
@@ -281,9 +252,7 @@ pub mod ssr {
                 return Err(anyhow::anyhow!("No pool provided."));
             };
 
-            Self::get(userid, pool)
-                .await
-                .ok_or_else(|| anyhow::anyhow!("Cannot get user."))
+            Self::get(userid, pool).await.ok_or_else(|| anyhow::anyhow!("Cannot get user."))
         }
 
         fn is_authenticated(&self) -> bool {
@@ -314,10 +283,7 @@ pub mod ssr {
     }
 
     impl SqlUser {
-        pub fn into_user(
-            self,
-            sql_user_perms: Option<Vec<SqlPermissionTokens>>,
-        ) -> (User, UserPasshash) {
+        pub fn into_user(self, sql_user_perms: Option<Vec<SqlPermissionTokens>>) -> (User, UserPasshash) {
             (
                 User {
                     id: self.id,
@@ -328,10 +294,7 @@ pub mod ssr {
                     description: self.description,
                     avatar: self.avatar,
                     permissions: sql_user_perms.map_or_else(HashSet::<String>::new, |user_perms| {
-                        user_perms
-                            .into_iter()
-                            .map(|x| x.token)
-                            .collect::<HashSet<String>>()
+                        user_perms.into_iter().map(|x| x.token).collect::<HashSet<String>>()
                     }),
                     created_at: self.created_at,
                     updated_at: self.updated_at,
@@ -370,10 +333,7 @@ mod tests {
         };
         let result = user.validate(&pool).await;
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Username is required.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Username is required.".to_string());
     }
 
     #[sqlx::test]
@@ -384,10 +344,7 @@ mod tests {
         };
         let result = user.validate(&pool).await;
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Username must be less than 255 characters.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Username must be less than 255 characters.".to_string());
     }
 
     #[sqlx::test]
@@ -399,10 +356,7 @@ mod tests {
         };
         let result = user.validate(&pool).await;
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Username or Email already taken.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Username or Email already taken.".to_string());
     }
 
     #[sqlx::test]
@@ -413,10 +367,7 @@ mod tests {
         };
         let result = user.validate(&pool).await;
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Email must be less than 255 characters.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Email must be less than 255 characters.".to_string());
     }
 
     #[sqlx::test]
@@ -427,10 +378,7 @@ mod tests {
         };
         let result = user.validate(&pool).await;
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Email must be valid.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Email must be valid.".to_string());
     }
 
     #[sqlx::test]
@@ -442,10 +390,7 @@ mod tests {
         };
         let result = user.validate(&pool).await;
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Username or Email already taken.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Username or Email already taken.".to_string());
     }
 
     #[test]
@@ -526,26 +471,18 @@ mod tests {
 
             let result = User::get_by_username(&pool, "test-2".into()).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "User not found.".to_string()
-            );
+            assert_eq!(result.unwrap_err().to_string(), "User not found.".to_string());
         }
 
         #[sqlx::test]
         async fn test_get_by_email(pool: PgPool) {
             let (test_user, _) = create_test_user(&pool, 1).await.unwrap().into_user(None);
-            let user = User::get_by_email(&pool, "test-1@example.com".into())
-                .await
-                .unwrap();
+            let user = User::get_by_email(&pool, "test-1@example.com".into()).await.unwrap();
             assert_eq!(user, test_user);
 
             let result = User::get_by_email(&pool, "test-2@example.com".into()).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "User not found.".to_string()
-            );
+            assert_eq!(result.unwrap_err().to_string(), "User not found.".to_string());
         }
 
         #[sqlx::test]
@@ -589,10 +526,7 @@ mod tests {
         #[sqlx::test]
         async fn test_get_from_username_with_passhash(pool: PgPool) {
             let test_user = create_test_user(&pool, 1).await.unwrap();
-            let (user, UserPasshash(passhash)) =
-                User::get_from_username_with_passhash("test-1".into(), &pool)
-                    .await
-                    .unwrap();
+            let (user, UserPasshash(passhash)) = User::get_from_username_with_passhash("test-1".into(), &pool).await.unwrap();
             assert_eq!(user.id, test_user.id);
             assert_eq!(user.username, test_user.username);
             assert_eq!(user.permissions, HashSet::new());
@@ -602,9 +536,7 @@ mod tests {
         #[sqlx::test]
         async fn test_get_from_username(pool: PgPool) {
             let test_user = create_test_user(&pool, 1).await.unwrap();
-            let user = User::get_from_username("test-1".into(), &pool)
-                .await
-                .unwrap();
+            let user = User::get_from_username("test-1".into(), &pool).await.unwrap();
             assert_eq!(user.id, test_user.id);
             assert_eq!(user.username, test_user.username);
             assert_eq!(user.permissions, HashSet::new());

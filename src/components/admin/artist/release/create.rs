@@ -8,10 +8,7 @@ use crate::components::{
         artist::menu::{Menu, Page},
         shared::{DateField, MarkdownField},
     },
-    utils::{
-        error::ErrorPage, error::ServerErrors, loading::Loading,
-        permissions::permission_or_redirect,
-    },
+    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect},
 };
 use crate::models::{artist::Artist, release::Release};
 use crate::routes::{
@@ -49,12 +46,7 @@ pub fn CreateRelease() -> impl IntoView {
 
     let (release, _set_release) = signal(Release::default());
     let create_release = ServerAction::<CreateRelease>::new();
-    let value = Signal::derive(move || {
-        create_release
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(ReleaseResult::default()))
-    });
+    let value = Signal::derive(move || create_release.value().get().unwrap_or_else(|| Ok(ReleaseResult::default())));
 
     view! {
         <Transition fallback=Loading>
@@ -85,7 +77,7 @@ pub fn CreateRelease() -> impl IntoView {
                                             if release.id > 0 {
                                                 redirect(
                                                     &format!(
-                                                        "/admin/artist/{}/{}",
+                                                        "/admin/artist/{}/release/{}",
                                                         artist.get().slug,
                                                         release.slug,
                                                     ),

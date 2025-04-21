@@ -19,7 +19,7 @@ use crate::components::{
         artist::{
             create::CreateArtist,
             edit::EditArtist,
-            release::{create::CreateRelease, list::Releases},
+            release::{create::CreateRelease, edit::EditRelease, list::Releases},
         },
         dashboard::Dashboard,
         edit_label::EditLabel,
@@ -28,10 +28,7 @@ use crate::components::{
         root::AdminRoot,
     },
     artist::home::ArtistPage,
-    auth::{
-        change_password::ChangePassword, login::Login, logout::Logout, profile::EditProfile,
-        register::Register,
-    },
+    auth::{change_password::ChangePassword, login::Login, logout::Logout, profile::EditProfile, register::Register},
     page::PageDetails,
     record_label::{footer::LabelFooter, header::LabelHeader, home::RecordLabelHome},
     utils::{error::ErrorPage, loading::Loading, not_found::NotFound},
@@ -133,6 +130,7 @@ pub fn WhiteLabel() -> impl IntoView {
                         <Route path=path!("artist/:slug") view=EditArtist />
                         <Route path=path!("artist/:slug/releases") view=Releases />
                         <Route path=path!("artist/:slug/releases/new") view=CreateRelease />
+                        <Route path=path!("artist/:slug/release/:release_slug") view=EditRelease />
                         <Route path=path!("page") view=CreatePage />
                         <Route path=path!("page/:slug") view=EditPage />
                     </ParentRoute>

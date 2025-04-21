@@ -11,12 +11,7 @@ use crate::utils::redirect::redirect;
 #[component]
 pub fn Register() -> impl IntoView {
     let register = ServerAction::<Register>::new();
-    let value = Signal::derive(move || {
-        register
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(User::default()))
-    });
+    let value = Signal::derive(move || register.value().get().unwrap_or_else(|| Ok(User::default())));
     let (server_errors, set_server_errors) = signal(Option::<ServerFnError>::None);
 
     let user_context = expect_context::<UserContext>();

@@ -51,15 +51,9 @@ mod tests {
 
     #[test]
     fn test_classes() {
-        assert_eq!(
-            classes(&Page::Profile, &Page::Profile),
-            "link link-hover active"
-        );
+        assert_eq!(classes(&Page::Profile, &Page::Profile), "link link-hover active");
         assert_eq!(classes(&Page::Profile, &Page::Releases), "link link-hover");
         assert_eq!(classes(&Page::Releases, &Page::Profile), "link link-hover");
-        assert_eq!(
-            classes(&Page::Releases, &Page::Releases),
-            "link link-hover active"
-        );
+        assert_eq!(classes(&Page::Releases, &Page::Releases), "link link-hover active");
     }
 }

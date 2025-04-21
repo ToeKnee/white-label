@@ -1,9 +1,7 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 
-use crate::components::admin::dash::{
-    artists::ArtistsTable, pages::PagesTable, record_label::RecordLabel,
-};
+use crate::components::admin::dash::{artists::ArtistsTable, pages::PagesTable, record_label::RecordLabel};
 use crate::components::utils::error::ErrorPage;
 use crate::components::utils::loading::Loading;
 

@@ -39,15 +39,11 @@ impl Validate for RecordLabel {
             return Err(anyhow::anyhow!("Name is required."));
         }
         if self.name.len() > 255 {
-            return Err(anyhow::anyhow!(
-                "Name must be less than 255 characters.".to_string()
-            ));
+            return Err(anyhow::anyhow!("Name must be less than 255 characters.".to_string()));
         }
 
         if self.slug.len() > 255 {
-            return Err(anyhow::anyhow!(
-                "Slug must be less than 255 characters.".to_string()
-            ));
+            return Err(anyhow::anyhow!("Slug must be less than 255 characters.".to_string()));
         }
         // Check that the slug is unique
         if let Ok(record_label) = Self::get_by_slug(pool, self.slug.clone()).await {
@@ -73,9 +69,7 @@ impl RecordLabel {
     /// If the record label cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn first(pool: &PgPool) -> anyhow::Result<Self> {
-        let row = sqlx::query("SELECT * FROM labels ORDER BY id ASC LIMIT 1")
-            .fetch_one(pool)
-            .await;
+        let row = sqlx::query("SELECT * FROM labels ORDER BY id ASC LIMIT 1").fetch_one(pool).await;
 
         let row = match row {
             Ok(row) => row,
@@ -109,19 +103,13 @@ impl RecordLabel {
     /// If the record label cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
-        let row = sqlx::query("SELECT * FROM labels WHERE id = $1")
-            .bind(id)
-            .fetch_one(pool)
-            .await;
+        let row = sqlx::query("SELECT * FROM labels WHERE id = $1").bind(id).fetch_one(pool).await;
 
         let row = match row {
             Ok(row) => row,
             Err(e) => {
                 tracing::error!("{e}");
-                return Err(anyhow::anyhow!(
-                    "Could not find record label with id {}.",
-                    id
-                ));
+                return Err(anyhow::anyhow!("Could not find record label with id {}.", id));
             }
         };
 
@@ -149,19 +137,13 @@ impl RecordLabel {
     /// If the record label cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
-        let row = sqlx::query("SELECT * FROM labels WHERE slug = $1")
-            .bind(&slug)
-            .fetch_one(pool)
-            .await;
+        let row = sqlx::query("SELECT * FROM labels WHERE slug = $1").bind(&slug).fetch_one(pool).await;
 
         let row = match row {
             Ok(row) => row,
             Err(e) => {
                 tracing::error!("{e}");
-                return Err(anyhow::anyhow!(
-                    "Could not find record label with slug {}.",
-                    slug
-                ));
+                return Err(anyhow::anyhow!("Could not find record label with slug {}.", slug));
             }
         };
 
@@ -308,9 +290,7 @@ impl RecordLabel {
 mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
-    use crate::models::test_helpers::{
-        create_test_artist, create_test_page, create_test_record_label,
-    };
+    use crate::models::test_helpers::{create_test_artist, create_test_page, create_test_record_label};
 
     #[test]
     fn test_init() {
@@ -363,10 +343,7 @@ mod tests {
         let result = record_label.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Name is required.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Name is required.".to_string());
     }
 
     #[sqlx::test]
@@ -385,10 +362,7 @@ mod tests {
         let result = record_label.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Name must be less than 255 characters.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Name must be less than 255 characters.".to_string());
     }
 
     #[sqlx::test]
@@ -407,10 +381,7 @@ mod tests {
         let result = record_label.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Slug must be less than 255 characters.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Slug must be less than 255 characters.".to_string());
     }
 
     #[sqlx::test]
@@ -423,10 +394,7 @@ mod tests {
         let result = new_record_label.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Slug must be unique.".to_string()
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Slug must be unique.".to_string());
     }
 
     #[cfg(feature = "ssr")]
@@ -434,10 +402,7 @@ mod tests {
     async fn test_get_first_with_no_rows_in_db(pool: PgPool) {
         let record_label = RecordLabel::first(&pool).await;
         assert!(record_label.is_err());
-        assert_eq!(
-            record_label.unwrap_err().to_string(),
-            "Could not find label".to_string()
-        );
+        assert_eq!(record_label.unwrap_err().to_string(), "Could not find label".to_string());
     }
 
     #[cfg(feature = "ssr")]
@@ -490,9 +455,7 @@ mod tests {
     #[sqlx::test]
     async fn test_get_by_slug(pool: PgPool) {
         let test_label = create_test_record_label(&pool, 1).await.unwrap();
-        let record_label = RecordLabel::get_by_slug(&pool, test_label.slug.clone())
-            .await
-            .unwrap();
+        let record_label = RecordLabel::get_by_slug(&pool, test_label.slug.clone()).await.unwrap();
         assert_eq!(record_label.id, test_label.id);
         assert_eq!(record_label.name, test_label.name);
         assert_eq!(record_label.slug, test_label.slug);
@@ -511,10 +474,7 @@ mod tests {
         assert_eq!(updated_label.id, 1);
         assert_eq!(updated_label.name, "Updated Label".to_string());
         assert_eq!(updated_label.slug, "updated-label".to_string());
-        assert_eq!(
-            updated_label.description,
-            "This is an updated label".to_string()
-        );
+        assert_eq!(updated_label.description, "This is an updated label".to_string());
         assert_eq!(updated_label.isrc_base, "UK XYZ".to_string());
     }
 
@@ -526,34 +486,23 @@ mod tests {
         record_label.name = "Updated Label".to_string();
         let updated_label = record_label.update(&pool).await;
         assert!(updated_label.is_err());
-        assert_eq!(
-            updated_label.unwrap_err().to_string(),
-            "Could not update label.".to_string()
-        );
+        assert_eq!(updated_label.unwrap_err().to_string(), "Could not update label.".to_string());
     }
 
     #[cfg(feature = "ssr")]
     #[sqlx::test]
     async fn test_artists_hide_artists(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let mut unpublished_artist = create_test_artist(&pool, 1, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut unpublished_artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
         unpublished_artist.published_at = None;
         unpublished_artist.clone().update(&pool).await.unwrap();
-        let mut published_artist = create_test_artist(&pool, 2, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut published_artist = create_test_artist(&pool, 2, Some(record_label.clone())).await.unwrap();
         published_artist.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
         let published_artist = published_artist.clone().update(&pool).await.unwrap();
-        let mut future_artist = create_test_artist(&pool, 3, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut future_artist = create_test_artist(&pool, 3, Some(record_label.clone())).await.unwrap();
         future_artist.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
         future_artist.clone().update(&pool).await.unwrap();
-        let deleted_artist = create_test_artist(&pool, 4, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let deleted_artist = create_test_artist(&pool, 4, Some(record_label.clone())).await.unwrap();
         deleted_artist.clone().delete(&pool).await.unwrap();
         let artists = record_label.artists(&pool, false).await.unwrap();
         assert_eq!(artists, vec![published_artist]);
@@ -563,59 +512,35 @@ mod tests {
     #[sqlx::test]
     async fn test_artists_include_hidden_artists(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let mut unpublished_artist = create_test_artist(&pool, 1, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut unpublished_artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
         unpublished_artist.published_at = None;
         let unpublished_artist = unpublished_artist.clone().update(&pool).await.unwrap();
-        let mut published_artist = create_test_artist(&pool, 2, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut published_artist = create_test_artist(&pool, 2, Some(record_label.clone())).await.unwrap();
         published_artist.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
         let published_artist = published_artist.clone().update(&pool).await.unwrap();
-        let mut future_artist = create_test_artist(&pool, 3, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut future_artist = create_test_artist(&pool, 3, Some(record_label.clone())).await.unwrap();
         future_artist.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
         let future_artist = future_artist.clone().update(&pool).await.unwrap();
-        let deleted_artist = create_test_artist(&pool, 4, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let deleted_artist = create_test_artist(&pool, 4, Some(record_label.clone())).await.unwrap();
         let deleted_artist = deleted_artist.clone().delete(&pool).await.unwrap();
         let artists = record_label.artists(&pool, true).await.unwrap();
-        assert_eq!(
-            artists,
-            vec![
-                unpublished_artist,
-                published_artist,
-                future_artist,
-                deleted_artist,
-            ]
-        );
+        assert_eq!(artists, vec![unpublished_artist, published_artist, future_artist, deleted_artist,]);
     }
 
     #[cfg(feature = "ssr")]
     #[sqlx::test]
     async fn test_pages_hide_pages(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let mut unpublished_page = create_test_page(&pool, 1, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut unpublished_page = create_test_page(&pool, 1, Some(record_label.clone())).await.unwrap();
         unpublished_page.published_at = None;
         unpublished_page.clone().update(&pool).await.unwrap();
-        let mut published_page = create_test_page(&pool, 2, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut published_page = create_test_page(&pool, 2, Some(record_label.clone())).await.unwrap();
         published_page.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
         let published_page = published_page.clone().update(&pool).await.unwrap();
-        let mut future_page = create_test_page(&pool, 3, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut future_page = create_test_page(&pool, 3, Some(record_label.clone())).await.unwrap();
         future_page.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
         future_page.clone().update(&pool).await.unwrap();
-        let deleted_page = create_test_page(&pool, 4, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let deleted_page = create_test_page(&pool, 4, Some(record_label.clone())).await.unwrap();
         deleted_page.clone().delete(&pool).await.unwrap();
         let pages = record_label.pages(&pool, false).await.unwrap();
         assert_eq!(pages, vec![published_page]);
@@ -625,29 +550,18 @@ mod tests {
     #[sqlx::test]
     async fn test_pages_include_hidden_pages(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let mut unpublished_page = create_test_page(&pool, 1, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut unpublished_page = create_test_page(&pool, 1, Some(record_label.clone())).await.unwrap();
         unpublished_page.published_at = None;
         let unpublished_page = unpublished_page.clone().update(&pool).await.unwrap();
-        let mut published_page = create_test_page(&pool, 2, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut published_page = create_test_page(&pool, 2, Some(record_label.clone())).await.unwrap();
         published_page.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
         let published_page = published_page.clone().update(&pool).await.unwrap();
-        let mut future_page = create_test_page(&pool, 3, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let mut future_page = create_test_page(&pool, 3, Some(record_label.clone())).await.unwrap();
         future_page.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
         let future_page = future_page.clone().update(&pool).await.unwrap();
-        let deleted_page = create_test_page(&pool, 4, Some(record_label.clone()))
-            .await
-            .unwrap();
+        let deleted_page = create_test_page(&pool, 4, Some(record_label.clone())).await.unwrap();
         let deleted_page = deleted_page.clone().delete(&pool).await.unwrap();
         let pages = record_label.pages(&pool, true).await.unwrap();
-        assert_eq!(
-            pages,
-            vec![unpublished_page, published_page, future_page, deleted_page,]
-        );
+        assert_eq!(pages, vec![unpublished_page, published_page, future_page, deleted_page,]);
     }
 }

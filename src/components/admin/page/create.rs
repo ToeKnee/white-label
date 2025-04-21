@@ -4,10 +4,7 @@ use reactive_stores::Store;
 
 use crate::components::{
     admin::shared::{DateField, MarkdownField},
-    utils::{
-        error::ErrorPage, error::ServerErrors, loading::Loading,
-        permissions::permission_or_redirect,
-    },
+    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect},
 };
 use crate::models::page::Page;
 use crate::routes::page::{CreatePage, PageResult};
@@ -34,12 +31,7 @@ pub fn CreatePage() -> impl IntoView {
     });
 
     let create_page = ServerAction::<CreatePage>::new();
-    let value = Signal::derive(move || {
-        create_page
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(PageResult::default()))
-    });
+    let value = Signal::derive(move || create_page.value().get().unwrap_or_else(|| Ok(PageResult::default())));
 
     let var_name = view! {
         <Title text="Create Page" />

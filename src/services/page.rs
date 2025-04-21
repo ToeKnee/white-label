@@ -43,11 +43,7 @@ pub async fn get_page_service(pool: &PgPool, slug: String) -> Result<PageResult,
 /// If the page cannot be created, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn create_page_service(
-    pool: &PgPool,
-    user: Option<&User>,
-    page_form: CreatePageForm,
-) -> Result<PageResult, ServerFnError> {
+pub async fn create_page_service(pool: &PgPool, user: Option<&User>, page_form: CreatePageForm) -> Result<PageResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -86,11 +82,7 @@ pub async fn create_page_service(
 /// If the page cannot be updated, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn update_page_service(
-    pool: &PgPool,
-    user: Option<&User>,
-    page_form: UpdatePageForm,
-) -> Result<PageResult, ServerFnError> {
+pub async fn update_page_service(pool: &PgPool, user: Option<&User>, page_form: UpdatePageForm) -> Result<PageResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -129,11 +121,7 @@ pub async fn update_page_service(
 /// If the page cannot be found, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn delete_page_service(
-    pool: &PgPool,
-    user: Option<&User>,
-    slug: String,
-) -> Result<PageResult, ServerFnError> {
+pub async fn delete_page_service(pool: &PgPool, user: Option<&User>, slug: String) -> Result<PageResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -158,9 +146,7 @@ pub async fn delete_page_service(
 mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
-    use crate::models::test_helpers::{
-        create_test_page, create_test_record_label, create_test_user_with_permissions,
-    };
+    use crate::models::test_helpers::{create_test_page, create_test_record_label, create_test_user_with_permissions};
 
     #[sqlx::test]
     async fn test_get_page_service(pool: PgPool) {
@@ -182,9 +168,7 @@ mod tests {
     #[sqlx::test]
     async fn test_create_page_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
 
         let page_form = CreatePageForm {
@@ -195,9 +179,7 @@ mod tests {
             published_at: None,
         };
 
-        let page = create_page_service(&pool, Some(&user), page_form)
-            .await
-            .unwrap();
+        let page = create_page_service(&pool, Some(&user), page_form).await.unwrap();
         assert_eq!(page.page.name, "Test Page".to_string());
         assert_eq!(page.page.description, "This is a test page".to_string());
     }
@@ -229,9 +211,7 @@ mod tests {
     #[sqlx::test]
     async fn test_create_page_service_no_name(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
 
         let page_form = CreatePageForm {
@@ -254,9 +234,7 @@ mod tests {
     #[sqlx::test]
     async fn test_create_page_service_name_too_long(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
 
         let name = "a".repeat(256);
@@ -279,9 +257,7 @@ mod tests {
     #[sqlx::test]
     async fn test_create_page_service_no_record_label(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
 
         let page_form = CreatePageForm {
             name: "Test Page".to_string(),
@@ -303,9 +279,7 @@ mod tests {
     #[sqlx::test]
     async fn test_update_page_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
 
         let page = create_test_page(&pool, 1, None).await.unwrap();
         let page_form = UpdatePageForm {
@@ -315,22 +289,15 @@ mod tests {
             body: "# This is an updated page".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_page = update_page_service(&pool, Some(&user), page_form)
-            .await
-            .unwrap();
+        let updated_page = update_page_service(&pool, Some(&user), page_form).await.unwrap();
         assert_eq!(updated_page.page.name, "Updated Page".to_string());
-        assert_eq!(
-            updated_page.page.description,
-            "This is an updated page".to_string()
-        );
+        assert_eq!(updated_page.page.description, "This is an updated page".to_string());
     }
 
     #[sqlx::test]
     async fn test_update_page_service_name_is_empty(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
 
         let page = create_test_page(&pool, 1, None).await.unwrap();
         let page_form = UpdatePageForm {
@@ -352,9 +319,7 @@ mod tests {
     #[sqlx::test]
     async fn test_update_page_service_name_too_long(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
 
         let name = "a".repeat(256);
         let page = create_test_page(&pool, 1, None).await.unwrap();
@@ -377,9 +342,7 @@ mod tests {
     #[sqlx::test]
     async fn test_update_page_service_no_page(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
 
         let page_form = UpdatePageForm {
             slug: "missing".to_string(),
@@ -418,9 +381,7 @@ mod tests {
 
     #[sqlx::test]
     async fn test_update_page_service_no_permissions(pool: PgPool) {
-        let user = create_test_user_with_permissions(&pool, 1, vec![])
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, vec![]).await.unwrap();
         let page = create_test_page(&pool, 1, None).await.unwrap();
         let page_form = UpdatePageForm {
             slug: page.slug.clone(),
@@ -441,23 +402,17 @@ mod tests {
     #[sqlx::test]
     async fn test_delete_page_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
 
         let page = create_test_page(&pool, 1, None).await.unwrap();
-        let deleted_page = delete_page_service(&pool, Some(&user), page.slug.clone())
-            .await
-            .unwrap();
+        let deleted_page = delete_page_service(&pool, Some(&user), page.slug.clone()).await.unwrap();
         assert!(deleted_page.page.deleted_at.is_some());
     }
 
     #[sqlx::test]
     async fn test_delete_page_service_no_page(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
 
         let deleted_page = delete_page_service(&pool, Some(&user), "missing".to_string()).await;
         assert!(deleted_page.is_err());
@@ -470,8 +425,7 @@ mod tests {
     #[sqlx::test]
     async fn test_delete_page_service_no_user(pool: PgPool) {
         let page = create_test_page(&pool, 1, None).await.unwrap();
-        let deleted_page =
-            delete_page_service(&pool, Some(&User::default()), page.slug.clone()).await;
+        let deleted_page = delete_page_service(&pool, Some(&User::default()), page.slug.clone()).await;
         assert!(deleted_page.is_err());
         assert_eq!(
             deleted_page.unwrap_err().to_string(),
@@ -481,9 +435,7 @@ mod tests {
 
     #[sqlx::test]
     async fn test_delete_page_service_no_permissions(pool: PgPool) {
-        let user = create_test_user_with_permissions(&pool, 1, vec![])
-            .await
-            .unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, vec![]).await.unwrap();
         let page = create_test_page(&pool, 1, None).await.unwrap();
         let deleted_page = delete_page_service(&pool, Some(&user), page.slug.clone()).await;
         assert!(deleted_page.is_err());

@@ -34,8 +34,7 @@ pub fn pool() -> Result<PgPool, ServerFnError> {
 ///
 /// Will return a `ServerError` error if the auth session is missing.
 pub fn auth() -> Result<AuthSession, ServerFnError> {
-    use_context::<AuthSession>()
-        .ok_or_else(|| ServerFnError::ServerError("Auth session missing.".into()))
+    use_context::<AuthSession>().ok_or_else(|| ServerFnError::ServerError("Auth session missing.".into()))
 }
 
 /// This gets the user context from state
@@ -44,6 +43,5 @@ pub fn auth() -> Result<AuthSession, ServerFnError> {
 ///
 /// Will return a `ServerError` error if the user state is missing.
 pub fn user_context() -> Result<UserContext, ServerFnError> {
-    use_context::<UserContext>()
-        .ok_or_else(|| ServerFnError::ServerError("User context missing.".into()))
+    use_context::<UserContext>().ok_or_else(|| ServerFnError::ServerError("User context missing.".into()))
 }

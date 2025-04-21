@@ -22,41 +22,29 @@ pub async fn get_user() -> Result<Option<User>, ServerFnError> {
 }
 
 #[server(Login, "/api", endpoint="login", output = Cbor)]
-pub async fn login(
-    username: String,
-    password: String,
-    remember: Option<String>,
-) -> Result<User, ServerFnError> {
+pub async fn login(username: String, password: String, remember: Option<String>) -> Result<User, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
 
     if username.is_empty() || password.is_empty() {
-        return Err(ServerFnError::ServerError(
-            "Username and password are required.".to_string(),
-        ));
+        return Err(ServerFnError::ServerError("Username and password are required.".to_string()));
     }
 
-    let (user, UserPasshash(expected_passhash)) =
-        User::get_from_username_with_passhash(username, &pool)
-            .await
-            .ok_or_else(|| ServerFnError::new("User does not exist."))?;
+    let (user, UserPasshash(expected_passhash)) = User::get_from_username_with_passhash(username, &pool)
+        .await
+        .ok_or_else(|| ServerFnError::new("User does not exist."))?;
 
     if verify(password, &expected_passhash)? {
         auth.login_user(user.id);
         auth.remember_user(remember.is_some());
         Ok(user)
     } else {
-        Err(ServerFnError::ServerError(
-            "Password does not match.".to_string(),
-        ))
+        Err(ServerFnError::ServerError("Password does not match.".to_string()))
     }
 }
 
 #[server(Register, "/api", endpoint="register", output = Cbor)]
-pub async fn register(
-    form: RegisterUserForm,
-    remember: Option<String>,
-) -> Result<User, ServerFnError> {
+pub async fn register(form: RegisterUserForm, remember: Option<String>) -> Result<User, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
 

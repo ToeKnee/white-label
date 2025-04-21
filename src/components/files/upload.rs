@@ -28,9 +28,7 @@ pub fn FileUploadWithProgress(config: UploadConfiguration, slug: String) -> impl
                 return;
             }
         };
-        let file = form_data
-            .get("file_to_upload")
-            .unchecked_into::<web_sys::File>();
+        let file = form_data.get("file_to_upload").unchecked_into::<web_sys::File>();
         let filename = file.name();
         let size = file.size();
         tracing::debug!("Size {}", size);

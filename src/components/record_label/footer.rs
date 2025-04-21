@@ -12,8 +12,7 @@ use crate::store::GlobalStateStoreFields;
 #[component]
 pub fn LabelFooter() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
-    let record_label_resource =
-        Resource::new(move || store.record_label().get(), |_| get_record_label());
+    let record_label_resource = Resource::new(move || store.record_label().get(), |_| get_record_label());
     view! {
         <Transition fallback=move || view! { <Loading /> }>
             <ErrorBoundary fallback=|_| {

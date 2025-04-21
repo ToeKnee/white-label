@@ -12,8 +12,7 @@ use crate::store::{GlobalState, GlobalStateStoreFields};
 #[component]
 pub fn LabelHeader() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
-    let record_label_resource =
-        Resource::new(move || store.record_label().get(), |_| get_record_label());
+    let record_label_resource = Resource::new(move || store.record_label().get(), |_| get_record_label());
 
     view! {
         <div class="navbar bg-primary text-primary-content">

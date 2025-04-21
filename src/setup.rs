@@ -44,11 +44,7 @@ async fn server_fn_handler(
     .await
 }
 
-async fn leptos_routes_handler(
-    auth_session: AuthSession,
-    state: State<AppState>,
-    req: Request<AxumBody>,
-) -> Response {
+async fn leptos_routes_handler(auth_session: AuthSession, state: State<AppState>, req: Request<AxumBody>) -> Response {
     let State(app_state) = state.clone();
     let handler = leptos_axum::render_route_with_context(
         app_state.routes.clone(),
@@ -81,12 +77,7 @@ pub async fn init_app() {
     // Auth section
     let session_config = SessionConfig::default().with_table_name("axum_sessions");
     let auth_config = AuthConfig::<i64>::default();
-    let session_store = match SessionStore::<SessionPgPool>::new(
-        Some(SessionPgPool::from(pool.clone())),
-        session_config,
-    )
-    .await
-    {
+    let session_store = match SessionStore::<SessionPgPool>::new(Some(SessionPgPool::from(pool.clone())), session_config).await {
         Ok(store) => store,
         Err(e) => {
             tracing::error!("Couldn't initialise session store: {:?}", e);
@@ -119,17 +110,11 @@ pub async fn init_app() {
 
     // build our application with a route
     let app = Router::new()
-        .route(
-            "/api/*fn_name",
-            get(server_fn_handler).post(server_fn_handler),
-        )
+        .route("/api/*fn_name", get(server_fn_handler).post(server_fn_handler))
         .nest_service("/uploads", ServeDir::new(upload_path))
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
-        .layer(
-            AuthSessionLayer::<User, i64, SessionPgPool, PgPool>::new(Some(pool.clone()))
-                .with_config(auth_config),
-        )
+        .layer(AuthSessionLayer::<User, i64, SessionPgPool, PgPool>::new(Some(pool.clone())).with_config(auth_config))
         .layer(SessionLayer::new(session_store))
         .with_state(app_state);
 

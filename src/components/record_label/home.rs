@@ -59,10 +59,7 @@ pub fn RecordLabelHome() -> impl IntoView {
 pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
     let (artists, set_artists) = signal(vec![]);
 
-    let artists_resource = Resource::new(
-        move || artists.get(),
-        move |_artists| get_label_artists(record_label.clone().id),
-    );
+    let artists_resource = Resource::new(move || artists.get(), move |_artists| get_label_artists(record_label.clone().id));
 
     view! {
         <Transition fallback=move || view! { <Loading /> }>
