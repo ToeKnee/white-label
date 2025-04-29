@@ -50,6 +50,7 @@ pub fn CreateArtist() -> impl IntoView {
                                 {move || {
                                     match value.get() {
                                         Ok(artist_result) => {
+                                            tracing::info!("Artist created: {:?}", artist_result);
                                             let artist = artist_result.artist;
                                             if artist.id > 0 {
                                                 redirect(&format!("/admin/artist/{}", artist.slug));
@@ -69,7 +70,7 @@ pub fn CreateArtist() -> impl IntoView {
                                     class="hidden"
                                     placeholder=""
                                     name="artist_form[label_id]"
-                                    value=record_label().id
+                                    value=move || artist.get().label_id
                                 /> <div class="divider">Public</div>
                                 <label class="flex gap-2 items-center input input-bordered">
                                     <input
@@ -77,16 +78,17 @@ pub fn CreateArtist() -> impl IntoView {
                                         class="grow"
                                         placeholder="Artist name"
                                         name="artist_form[name]"
-                                        value=artist.get().name
                                     />
                                 </label>
-                                <label class="flex gap-2 items-center input input-bordered">
-                                    <MarkdownField
-                                        title="Description".to_string()
-                                        field="artist_form[description]".to_string()
-                                        markdown_text=artist.get().description
-                                    />
-                                </label> <div class="divider">Private</div>
+                                {move || {
+                                    view! {
+                                        <MarkdownField
+                                            title="Description".to_string()
+                                            field="artist_form[description]".to_string()
+                                            markdown_text=artist.get().description
+                                        />
+                                    }
+                                }} <div class="divider">Private</div>
                                 {move || {
                                     view! {
                                         <DateField
