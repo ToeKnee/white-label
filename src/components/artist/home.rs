@@ -42,6 +42,11 @@ pub fn ArtistPage() -> impl IntoView {
                                     &markdown::Options::gfm(),
                                 )
                                 .unwrap_or_default() />
+                            <img
+                                src=move || artist.get().primary_image_url()
+                                alt=move || artist.get().name
+                                class="w-full h-auto"
+                            />
                         </article>
                     }
                 })}
