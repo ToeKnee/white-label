@@ -24,6 +24,10 @@ pub struct Release {
     pub slug: String,
     /// The description of the release
     pub description: String,
+    /// The primary artist
+    /// This can also be included in the artsts relation, but it must contain one artist.
+    /// Other artists are considered contributing artists
+    pub primary_artist_id: i64,
     /// The primary image of the release
     pub primary_image: Option<String>,
     /// The catalogue number of the release
@@ -74,6 +78,12 @@ impl Validate for Release {
             }
         }
 
+        // Check that the artist referenced in the primary_artist_id exists
+        if let Err(e) = Artist::get_by_id(pool, self.primary_artist_id).await {
+            tracing::error!("{e}");
+            return Err(anyhow::anyhow!("Artist with id {} does not exist.", self.primary_artist_id));
+        }
+
         if self.catalogue_number.len() > 255 {
             return Err(anyhow::anyhow!("Catalogue number must be less than 255 characters.".to_string()));
         }
@@ -122,11 +132,13 @@ impl Release {
     /// # Errors
     /// If the release cannot be created, return an error
     /// If the record label is not found, return an error
+    #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "ssr")]
     pub async fn create(
         pool: &PgPool,
         name: String,
         description: String,
+        primary_artist_id: i64,
         catalogue_number: String,
         release_date: Option<chrono::DateTime<chrono::Utc>>,
         record_label_id: i64,
@@ -139,6 +151,7 @@ impl Release {
             name,
             slug,
             description,
+            primary_artist_id,
             primary_image: None,
             catalogue_number,
             release_date,
@@ -151,11 +164,12 @@ impl Release {
         release.validate(pool).await?;
 
         let release = sqlx::query_as::<_, Self>(
-         "INSERT INTO releases (name, slug, description, catalogue_number, release_date, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+         "INSERT INTO releases (name, slug, description, primary_artist_id, catalogue_number, release_date, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
      )
          .bind(release.name)
          .bind(release.slug)
          .bind(release.description)
+         .bind(release.primary_artist_id)
          .bind(release.catalogue_number)
          .bind(release.release_date)
          .bind(release.label_id)
@@ -197,6 +211,7 @@ impl Release {
             name: row.get("name"),
             slug: row.get("slug"),
             description: row.get("description"),
+            primary_artist_id: row.get("primary_artist_id"),
             primary_image: row.get("primary_image"),
             catalogue_number: row.get("catalogue_number"),
             release_date: row.get("release_date"),
@@ -344,11 +359,12 @@ impl Release {
         self.validate(pool).await?;
 
         let release = match sqlx::query_as::<_, Self>(
-            "UPDATE releases SET name = $1, slug = $2, description = $3, primary_image = $4, catalogue_number = $5, release_date = $6, published_at = $7, updated_at = $8 WHERE id = $9 RETURNING *",
+            "UPDATE releases SET name = $1, slug = $2, description = $3, primary_artist_id = $4, primary_image = $5, catalogue_number = $6, release_date = $7, published_at = $8, updated_at = $9 WHERE id = $10 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
         .bind(self.description)
+        .bind(self.primary_artist_id)
         .bind(self.primary_image)
         .bind(self.catalogue_number)
         .bind(self.release_date)
@@ -473,6 +489,7 @@ impl Release {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     #[cfg(feature = "ssr")]
     use crate::models::test_helpers::{create_test_artist, create_test_record_label, create_test_release};
@@ -480,11 +497,13 @@ mod tests {
     #[sqlx::test]
     async fn test_validate_success(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
         let release = Release {
             id: 1,
             name: "Test Release".to_string(),
             slug: "test-release".to_string(),
             description: "This is a test release".to_string(),
+            primary_artist_id: artist.id,
             primary_image: None,
             catalogue_number: "TEST-0001".to_string(),
             release_date: Some(chrono::Utc::now()),
@@ -502,11 +521,13 @@ mod tests {
 
     #[sqlx::test]
     async fn test_validate_name_is_empty(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let release = Release {
             id: 1,
             name: String::new(),
             slug: "test-release".to_string(),
             description: "This is a test release".to_string(),
+            primary_artist_id: artist.id,
             primary_image: None,
             catalogue_number: "TEST-0001".to_string(),
             release_date: Some(chrono::Utc::now()),
@@ -525,12 +546,14 @@ mod tests {
 
     #[sqlx::test]
     async fn test_validate_name_length(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let name = "a".repeat(256);
         let release = Release {
             id: 1,
             name,
             slug: "test-release".to_string(),
             description: "This is a test release".to_string(),
+            primary_artist_id: artist.id,
             primary_image: None,
             catalogue_number: "TEST-0001".to_string(),
             release_date: Some(chrono::Utc::now()),
@@ -549,12 +572,14 @@ mod tests {
 
     #[sqlx::test]
     async fn test_validate_slug_length(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let slug = "a".repeat(256);
         let release = Release {
             id: 1,
             name: "Test Release".to_string(),
             slug,
             description: "This is a test release".to_string(),
+            primary_artist_id: artist.id,
             primary_image: None,
             catalogue_number: "TEST-0001".to_string(),
             release_date: Some(chrono::Utc::now()),
@@ -585,13 +610,40 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn test_primary_artist_dow_not_exist(pool: PgPool) {
+        let release = Release {
+            id: 1,
+            name: "Test Release".to_string(),
+            slug: "test-release".to_string(),
+            description: "This is a test release".to_string(),
+            primary_artist_id: 1,
+            primary_image: None,
+            catalogue_number: "TEST-0001".to_string(),
+            release_date: Some(chrono::Utc::now()),
+            label_id: 1,
+            published_at: Some(chrono::Utc::now()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            deleted_at: None,
+        };
+
+        let result = release.validate(&pool).await;
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "Artist with id 1 does not exist.".to_string());
+    }
+
+    #[sqlx::test]
     async fn test_validate_catalogue_number_length(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+
         let catalogue_number = "a".repeat(256);
         let release = Release {
             id: 1,
             name: "Test Release".to_string(),
             slug: "test-release".to_string(),
             description: "This is a test release".to_string(),
+            primary_artist_id: artist.id,
             primary_image: None,
             catalogue_number,
             release_date: Some(chrono::Utc::now()),
@@ -627,15 +679,18 @@ mod tests {
 
     #[sqlx::test]
     async fn test_validate_record_label_exists(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+
         let release = Release {
             id: 1,
             name: "Test Release".to_string(),
             slug: "test-release".to_string(),
             description: "This is a test release".to_string(),
+            primary_artist_id: artist.id,
             primary_image: None,
             catalogue_number: "TEST-0001".to_string(),
             release_date: Some(chrono::Utc::now()),
-            label_id: 1,
+            label_id: 100,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -645,16 +700,18 @@ mod tests {
         let result = release.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Record Label with id 1 does not exist.".to_string());
+        assert_eq!(result.unwrap_err().to_string(), "Record Label with id 100 does not exist.".to_string());
     }
 
     #[sqlx::test]
     async fn test_create(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
         let release = Release::create(
             &pool,
             "Test Release".to_string(),
             "This is a test release".to_string(),
+            artist.id,
             "TEST-0001".to_string(),
             None,
             record_label.id,
@@ -670,10 +727,12 @@ mod tests {
     #[sqlx::test]
     async fn test_create_with_validation_error(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
         let release = Release::create(
             &pool,
             String::new(),
             "This is a test release".to_string(),
+            artist.id,
             "TEST-0001".to_string(),
             Some(chrono::Utc::now()),
             record_label.id,

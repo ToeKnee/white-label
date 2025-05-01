@@ -130,11 +130,12 @@ pub async fn create_test_release(pool: &PgPool, id: usize, artist: Option<Artist
     };
 
     let release =  sqlx::query_as::<_, Release>(
-    "INSERT INTO releases (name, slug, description, catalogue_number, release_date, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+    "INSERT INTO releases (name, slug, description, primary_artist_id, catalogue_number, release_date, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
     )
     .bind(format!("Test Release {id}"))
     .bind(format!("test-release-{id}"))
     .bind(format!("A release for testing purposes with the id of {id}"))
+    .bind(artist.id)
     .bind(format!("TEST-{id}"))
     .bind(chrono::Utc::now())
     .bind(artist.label_id)

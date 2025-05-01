@@ -126,6 +126,7 @@ pub async fn create_release_service(pool: &PgPool, user: Option<&User>, release_
         pool,
         release_form.name,
         release_form.description,
+        release_form.primary_artist_id,
         release_form.catalogue_number,
         release_form.release_date,
         release_form.label_id,
@@ -187,6 +188,7 @@ pub async fn update_release_service(pool: &PgPool, user: Option<&User>, release_
 
     release.name = release_form.name;
     release.description = release_form.description;
+    release.primary_artist_id = release_form.primary_artist_id;
     release.catalogue_number = release_form.catalogue_number;
     release.release_date = release_form.release_date;
     release.published_at = release_form.published_at;
@@ -346,6 +348,7 @@ mod tests {
         let release_form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
+            primary_artist_id: artist.id,
             catalogue_number: "TEST-123".to_string(),
             release_date: Some(chrono::Utc::now()),
             label_id: record_label.id,
@@ -357,6 +360,7 @@ mod tests {
 
         assert_eq!(release_result.release.name, "Test Release");
         assert_eq!(release_result.release.description, "Test Release Description");
+        assert_eq!(release_result.release.primary_artist_id, artist.id);
         assert_eq!(release_result.release.catalogue_number, "TEST-123");
         assert!(release_result.release.release_date.is_some());
         assert_eq!(release_result.release.label_id, record_label.id);
@@ -376,6 +380,7 @@ mod tests {
         let release_form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
+            primary_artist_id: artist.id,
             catalogue_number: "TEST-123".to_string(),
             release_date: Some(chrono::Utc::now()),
             label_id: record_label.id,
@@ -402,6 +407,7 @@ mod tests {
         let release_form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
+            primary_artist_id: artist.id,
             catalogue_number: "TEST-123".to_string(),
             release_date: Some(chrono::Utc::now()),
             label_id: record_label.id,
@@ -429,6 +435,7 @@ mod tests {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
             catalogue_number: "TEST-123".to_string(),
+            primary_artist_id: artist.id,
             release_date: Some(chrono::Utc::now()),
             label_id: record_label.id,
             published_at: Some(chrono::Utc::now()),
@@ -443,6 +450,7 @@ mod tests {
             name: "Updated Release".to_string(),
             slug: "test-release".to_string(),
             description: "Updated Release Description".to_string(),
+            primary_artist_id: artist.id,
             catalogue_number: "UPDATED-123".to_string(),
             release_date: Some(chrono::Utc::now()),
             label_id: record_label.id,
@@ -457,6 +465,7 @@ mod tests {
         assert_eq!(release.release.id, updated_release.release.id);
         assert_eq!(updated_release.release.name, "Updated Release");
         assert_eq!(updated_release.release.description, "Updated Release Description");
+        assert_eq!(updated_release.release.primary_artist_id, artist.id);
         assert_eq!(updated_release.release.catalogue_number, "UPDATED-123");
         assert!(updated_release.release.release_date.is_some());
         assert_eq!(updated_release.release.label_id, record_label.id);
@@ -475,6 +484,7 @@ mod tests {
         let release_form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
+            primary_artist_id: artist.id,
             catalogue_number: "TEST-123".to_string(),
             release_date: Some(chrono::Utc::now()),
             label_id: record_label.id,

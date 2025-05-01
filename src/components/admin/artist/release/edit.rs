@@ -152,6 +152,13 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
         <input
             type="text"
             class="hidden"
+            placeholder=""
+            name="release_form[primary_artist_id]"
+            value=move || { artist.get().id }
+        />
+        <input
+            type="text"
+            class="hidden"
             name="release_form[artist_ids]"
             value=move || { artist_ids.get() }
         />

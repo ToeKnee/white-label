@@ -132,6 +132,43 @@ impl Artist {
         Ok(artist)
     }
 
+    /// Get artist by id
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `id` - The id of the artist
+    ///
+    /// # Returns
+    /// The artist
+    ///
+    /// # Errors
+    /// If the artist cannot be found, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
+        let row = sqlx::query("SELECT * FROM artists WHERE id = $1").bind(id).fetch_one(pool).await;
+
+        let row = match row {
+            Ok(row) => row,
+            Err(e) => {
+                tracing::error!("{e}");
+                return Err(anyhow::anyhow!("Could not find artist with id {}.", id));
+            }
+        };
+
+        Ok(Self {
+            id: row.get("id"),
+            name: row.get("name"),
+            slug: row.get("slug"),
+            description: row.get("description"),
+            primary_image: row.get("primary_image"),
+            label_id: row.get("label_id"),
+            published_at: row.get("published_at"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            deleted_at: row.get("deleted_at"),
+        })
+    }
+
     /// Get artist by slug
     ///
     /// # Arguments
@@ -419,6 +456,22 @@ mod tests {
 
         assert!(artist.is_err());
         assert_eq!(artist.unwrap_err().to_string(), "Name is required.".to_string());
+    }
+
+    #[sqlx::test]
+    async fn test_get_by_id(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let artist_by_id = Artist::get_by_id(&pool, artist.id).await.unwrap();
+
+        assert_eq!(artist, artist_by_id);
+    }
+
+    #[sqlx::test]
+    async fn test_get_by_id_not_found(pool: PgPool) {
+        let artist = Artist::get_by_id(&pool, 0).await;
+
+        assert!(artist.is_err());
+        assert_eq!(artist.unwrap_err().to_string(), "Could not find artist with id 0.".to_string());
     }
 
     #[sqlx::test]
