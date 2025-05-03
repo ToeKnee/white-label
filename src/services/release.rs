@@ -32,10 +32,7 @@ pub async fn get_releases_service(pool: &PgPool, user: Option<&User>, slug: Stri
         }
     };
 
-    let Some(current_user) = user else {
-        return Err(ServerFnError::new("User not found"));
-    };
-    let include_hidden = current_user.permissions.contains("label_owner");
+    let include_hidden = user.is_some_and(|current_user| current_user.permissions.contains("label_owner"));
 
     Ok(ReleasesResult {
         releases: match Release::list_by_artist_and_record_label(pool, artist.id, artist.label_id, include_hidden).await {
@@ -276,13 +273,29 @@ mod tests {
         let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
         let mut unpublished_release = create_test_release(&pool, 2, Some(artist.clone())).await.unwrap();
         unpublished_release.published_at = None;
+        unpublished_release.release_date = None;
         unpublished_release.clone().update(&pool).await.unwrap();
 
         let releases = get_releases_service(&pool, Some(&user), artist.slug.clone()).await.unwrap();
 
         assert_eq!(releases.releases.len(), 2);
+        assert_eq!(releases.releases[0].id, unpublished_release.id);
+        assert_eq!(releases.releases[1].id, release.id);
+    }
+
+    #[sqlx::test]
+    async fn test_get_releases_service_no_user(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
+        let mut unpublished_release = create_test_release(&pool, 2, Some(artist.clone())).await.unwrap();
+        unpublished_release.published_at = None;
+        unpublished_release.clone().update(&pool).await.unwrap();
+
+        let releases = get_releases_service(&pool, None, artist.slug.clone()).await.unwrap();
+
+        assert_eq!(releases.releases.len(), 1);
         assert_eq!(releases.releases[0].id, release.id);
-        assert_eq!(releases.releases[1].id, unpublished_release.id);
     }
 
     #[sqlx::test]

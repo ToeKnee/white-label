@@ -309,7 +309,7 @@ impl Release {
              INNER JOIN release_artists
              ON releases.id = release_artists.release_id
              WHERE release_artists.artist_id = $1 AND releases.label_id = $2
-             ORDER BY deleted_at DESC, name ASC"
+             ORDER BY deleted_at DESC, release_date DESC, name ASC"
         } else {
             "SELECT * FROM releases
              INNER JOIN release_artists
@@ -318,7 +318,7 @@ impl Release {
               AND deleted_at IS NULL
               AND published_at < NOW()
               AND published_at IS NOT NULL
-             ORDER BY name ASC"
+             ORDER BY release_date DESC, name ASC"
         };
 
         let releases = sqlx::query_as::<_, Self>(query)
@@ -906,12 +906,15 @@ mod tests {
         let record_label_id = artist.label_id;
         let mut unpublished_release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
         unpublished_release.published_at = None;
+        unpublished_release.release_date = None;
         unpublished_release.clone().update(&pool).await.unwrap();
         let mut published_in_future_release = create_test_release(&pool, 2, Some(artist.clone())).await.unwrap();
         published_in_future_release.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        published_in_future_release.release_date = Some(chrono::Utc::now() + chrono::Duration::days(1));
         published_in_future_release.clone().update(&pool).await.unwrap();
         let mut published_release = create_test_release(&pool, 3, Some(artist.clone())).await.unwrap();
         published_release.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        published_release.release_date = Some(chrono::Utc::now() - chrono::Duration::days(1));
         published_release.clone().update(&pool).await.unwrap();
         let deleted_release = create_test_release(&pool, 4, Some(artist.clone())).await.unwrap();
         deleted_release.clone().delete(&pool).await.unwrap();

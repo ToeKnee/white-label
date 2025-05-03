@@ -14,7 +14,7 @@ pub fn StatusBadge(
     } else if published_at.is_some() {
         match published_at {
             Some(published_at) if published_at > chrono::Utc::now() => {
-                badge_text = "Scheduled".to_string();
+                badge_text = "Coming Soon".to_string();
                 badge_class = "indicator-item badge badge-info".to_string();
             }
             _ => (),

@@ -20,7 +20,6 @@ fn classes(selected: &Page, current_menu_item: &Page) -> String {
 
 /// Renders the artist admin menu.
 #[component]
-#[allow(clippy::needless_pass_by_value)]
 pub fn Menu<'a>(slug: RwSignal<std::string::String>, selected: &'a Page) -> impl IntoView {
     view! {
         <ul class="menu menu-horizontal bg-base-200">

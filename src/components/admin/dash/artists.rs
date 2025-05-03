@@ -58,7 +58,6 @@ pub fn ArtistsTable() -> impl IntoView {
                                             .get()
                                             .into_iter()
                                             .map(|artist| {
-
                                                 view! { <ArtistRow artist /> }
                                             })
                                             .collect::<Vec<_>>();
