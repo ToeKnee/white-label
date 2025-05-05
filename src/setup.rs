@@ -110,7 +110,7 @@ pub async fn init_app() {
 
     // build our application with a route
     let app = Router::new()
-        .route("/api/*fn_name", get(server_fn_handler).post(server_fn_handler))
+        .route("/api/{*fn_name}", get(server_fn_handler).post(server_fn_handler))
         .nest_service("/uploads", ServeDir::new(upload_path))
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
