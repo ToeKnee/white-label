@@ -29,7 +29,6 @@ pub fn ChangePassword() -> impl IntoView {
                             <ActionForm action=change_password>
                                 <div class="grid gap-6">
                                     {move || {
-                                        tracing::info!("User: {:?}", value.get());
                                         match value.get() {
                                             Ok(user) => {
                                                 if user.is_authenticated() && !success.get() {
