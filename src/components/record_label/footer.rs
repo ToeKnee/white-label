@@ -32,7 +32,7 @@ pub fn LabelFooter() -> impl IntoView {
                     let record_label = store.record_label().get();
 
                     view! {
-                        <footer class="p-10 footer bg-neutral text-neutral-content">
+                        <footer class="p-10 footer bg-neutral text-neutral-content md:footer-horizontal">
                             <nav>
                                 <h6 class="footer-title">Services</h6>
                                 <a class="link link-hover">Branding</a>

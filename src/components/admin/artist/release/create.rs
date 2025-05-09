@@ -126,7 +126,7 @@ pub fn CreateRelease() -> impl IntoView {
 #[component]
 fn Form(release: ReadSignal<Release>) -> impl IntoView {
     view! {
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -140,7 +140,7 @@ fn Form(release: ReadSignal<Release>) -> impl IntoView {
             field="release_form[description]".to_string()
             markdown_text=String::new()
         />
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -155,14 +155,14 @@ fn Form(release: ReadSignal<Release>) -> impl IntoView {
                     <div class="w-1/2">
                         <DateField
                             title="Release Date".to_string()
-                            field="release_form[release_date]".to_string()
+                            field="release_form[release_date]"
                             date=release.get().release_date
                         />
                     </div>
                     <div class="w-1/2">
                         <DateField
                             title="Published At".to_string()
-                            field="release_form[published_at]".to_string()
+                            field="release_form[published_at]"
                             date=release.get().published_at
                         />
                     </div>

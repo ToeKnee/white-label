@@ -69,7 +69,7 @@ pub fn EditLabel() -> impl IntoView {
                                     name="id"
                                     value=record_label.get().id
                                 /> <div class="divider">Public</div>
-                                <label class="flex gap-2 items-center input input-bordered">
+                                <label class="flex gap-2 items-center input">
                                     <input
                                         type="text"
                                         class="grow"
@@ -79,24 +79,23 @@ pub fn EditLabel() -> impl IntoView {
                                     />
                                 </label> <DescriptionFields record_label=record_label.get() />
                                 <div class="divider">Private</div> <ISRCDescription />
-                                <label class="flex gap-2 form-control">
+                                <fieldset class="fieldset">
+                                    <legend class="fieldset-legend">ISRC Code prefix</legend>
                                     <input
                                         type="text"
-                                        class="grow input input-bordered"
+                                        class="w-full input"
                                         placeholder="ISRC prefix"
                                         name="isrc_base"
                                         value=move || record_label.get().isrc_base
                                     />
-                                    <div class="label">
-                                        <span class="label-text-alt">
-                                            "Country Code and First Registrant Code only"
-                                        </span>
-                                        <span class="label-text-alt">
+                                    <p class="flex justify-between label">
+                                        <span>"Country Code and First Registrant Code only"</span>
+                                        <span>
                                             "Example " {move || record_label.get().isrc_base}
                                             " 25 00001"
                                         </span>
-                                    </div>
-                                </label> <button class="btn btn-primary">Update</button>
+                                    </p>
+                                </fieldset> <button class="btn btn-primary">Update</button>
                             </div>
                         </ActionForm>
                     }
@@ -118,10 +117,10 @@ pub fn DescriptionFields(record_label: RecordLabel) -> impl IntoView {
 
     view! {
         <div class="flex gap-6">
-            <label class="w-1/2 form-control">
+            <label class="w-1/2 fieldset">
                 <h2>Description</h2>
                 <textarea
-                    class="textarea textarea-bordered"
+                    class="w-full textarea"
                     rows="15"
                     name="description"
                     placeholder="Description"
@@ -132,10 +131,10 @@ pub fn DescriptionFields(record_label: RecordLabel) -> impl IntoView {
                 >
                     {description}
                 </textarea>
-                <div class="label">
-                    <span class="label-text-alt"></span>
-                    <span class="label-text-alt">Markdown</span>
-                </div>
+                <p class="flex justify-between label">
+                    <span></span>
+                    <span>"Markdown supported"</span>
+                </p>
             </label>
             <div class="w-1/2">
                 <h2>Preview</h2>

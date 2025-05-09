@@ -169,7 +169,7 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
             value=move || { release.get().slug }
         />
         <div class="divider">Public</div>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -187,7 +187,7 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
                 />
             }
         }}
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -201,7 +201,7 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
             view! {
                 <DateField
                     title="Release Date".to_string()
-                    field="release_form[release_date]".to_string()
+                    field="release_form[release_date]"
                     date=release.get().release_date
                 />
             }
@@ -223,7 +223,7 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
             view! {
                 <DateField
                     title="Published At".to_string()
-                    field="release_form[published_at]".to_string()
+                    field="release_form[published_at]"
                     date=release.get().published_at
                 />
             }

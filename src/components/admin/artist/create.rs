@@ -72,7 +72,7 @@ pub fn CreateArtist() -> impl IntoView {
                                     name="artist_form[label_id]"
                                     value=move || artist.get().label_id
                                 /> <div class="divider">Public</div>
-                                <label class="flex gap-2 items-center input input-bordered">
+                                <label class="flex gap-2 items-center input">
                                     <input
                                         type="text"
                                         class="grow"
@@ -93,7 +93,7 @@ pub fn CreateArtist() -> impl IntoView {
                                     view! {
                                         <DateField
                                             title="Published at".to_string()
-                                            field="artist_form[published_at]".to_string()
+                                            field="artist_form[published_at]"
                                             date=artist.get().published_at
                                         />
                                     }

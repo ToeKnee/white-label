@@ -4,8 +4,4 @@ module.exports = {
     relative: true,
     files: ["*.html", "./src/**/*.rs"],
   },
-  theme: {
-    extend: {},
-  },
-  plugins: [require("@tailwindcss/typography"), require("daisyui")],
 };

@@ -79,7 +79,7 @@ pub fn FileUploadWithProgress(config: UploadConfiguration, slug: String) -> impl
                     <input type="hidden" name="slug" value=slug />
                     <input
                         type="file"
-                        class="w-full file-input file-input-bordered file-input-primary"
+                        class="w-full file-input file-input-primary"
                         name="file_to_upload"
                     />
                 </div>

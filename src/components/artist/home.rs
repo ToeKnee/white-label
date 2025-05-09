@@ -81,7 +81,7 @@ pub fn ReleaseList(artist_slug: String) -> impl IntoView {
                         .get()
                         .into_iter()
                         .map(|release| {
-                            view! { <Release release artist_slug=artist_slug /> }
+                            view! { <Release release artist_slug /> }
                         })
                         .collect::<Vec<_>>();
                     view! {
@@ -105,27 +105,39 @@ pub fn ReleaseList(artist_slug: String) -> impl IntoView {
 /// * A view of the release
 #[component]
 pub fn Release(#[prop(into)] release: Release, artist_slug: RwSignal<String>) -> impl IntoView {
-    let release_date = release
-        .release_date
-        .map_or_else(|| "Unreleased".to_string(), |date| date.format("%e %B %Y").to_string());
+    let release = RwSignal::new(release);
+    let release_date = move || {
+        release
+            .get()
+            .release_date
+            .map_or_else(|| "Unreleased".to_string(), |date| date.format("%e %B %Y").to_string())
+    };
 
     view! {
         <a
-            href=format!("/artists/{}/{}", artist_slug.get(), release.slug)
+            href=move || format!("/artists/{}/{}", artist_slug.get(), release.get().slug)
             class="p-6 w-1/4 link link-hover min-w-96"
         >
             <div class="shadow-sm card bg-base-100 bg-neutral text-neutral-content">
-                <figure class="m-0">
-                    <img src=release.primary_image_url() alt=release.name.clone() />
+                <figure class="not-prose">
+                    <img
+                        src=move || release.get().primary_image_url()
+                        alt=move || release.get().name
+                    />
                 </figure>
-                <div class="m-0 card-body">
-                    <h2 class="m-0 card-title">{release.name}</h2>
-                    <p class="m-0">
-                        {release_date} <span class="pl-6">
-                            <StatusBadge
-                                deleted_at=release.deleted_at
-                                published_at=release.release_date
-                            />
+                <div class="card-body">
+                    <h2 class="card-title">{move || release.get().name}</h2>
+                    <p>
+                        {release_date}
+                        <span class="pl-6">
+                            {move || {
+                                view! {
+                                    <StatusBadge
+                                        deleted_at=release.get().deleted_at
+                                        published_at=release.get().release_date
+                                    />
+                                }
+                            }}
                         </span>
                     </p>
                 </div>

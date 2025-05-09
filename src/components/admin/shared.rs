@@ -11,28 +11,32 @@ pub fn MarkdownField(title: String, field: String, markdown_text: String) -> imp
 
     view! {
         <div class="flex gap-6">
-            <label class="w-1/2 form-control">
+            <div class="w-1/2">
                 <h2>{title.clone()}</h2>
-                <textarea
-                    class="textarea textarea-bordered"
-                    rows="15"
-                    name=field
-                    placeholder=title
-                    prop:value=move || description.get()
-                    on:input:target=move |ev| {
-                        set_description.set(ev.target().value());
-                    }
-                >
-                    {description}
-                </textarea>
-                <div class="label">
-                    <span class="label-text-alt"></span>
-                    <span class="label-text-alt">Markdown</span>
-                </div>
-            </label>
+                <fieldset class="fieldset">
+                    <textarea
+                        class="w-full textarea"
+                        rows="15"
+                        id=field.clone()
+                        name=field.clone()
+                        placeholder=title
+                        prop:value=move || description.get()
+                        on:input:target=move |ev| {
+                            set_description.set(ev.target().value());
+                        }
+                    >
+                        {description}
+                    </textarea>
+
+                    <label class="flex justify-between label" for=field>
+                        <span></span>
+                        <span>"Markdown Supported"</span>
+                    </label>
+                </fieldset>
+            </div>
             <div class="w-1/2">
                 <h2>Preview</h2>
-                <div class="textarea textarea-bordered" inner_html=markdown_description />
+                <div class="w-full textarea" inner_html=markdown_description />
             </div>
         </div>
     }
@@ -44,28 +48,28 @@ pub fn MarkdownField(title: String, field: String, markdown_text: String) -> imp
 /// datetime-local input is used to allow the user to select a date and time, but this can't have a time zone.
 /// To work around this, we add the current time zone to the input value.
 #[component]
-pub fn DateField(title: String, field: String, date: Option<chrono::DateTime<chrono::Utc>>) -> impl IntoView {
+pub fn DateField<'a>(title: String, field: &'a str, date: Option<chrono::DateTime<chrono::Utc>>) -> impl IntoView {
     let date = RwSignal::new(date);
-
+    let name = RwSignal::new(format!("local_{field}"));
     view! {
         <input
             type="text"
             class="hidden"
-            name=field.clone()
+            name=field.to_string()
             prop:value=move || { date.get().map(|x| { x.to_string() }).unwrap_or_default() }
         />
-        <label class="w-full max-w-xs form-control">
-            <div class="label">
-                <span class="label-text">{title}</span>
-                <span class="label-text-alt">"*Date & Time"</span>
-            </div>
+        <fieldset class="w-full max-w-xs fieldset">
+            <label class="flex justify-between label" for=move || { name.get() }>
+                <span>{title}</span>
+                <span>"*Date & Time"</span>
+            </label>
             {move || {
-                let name = format!("local_{field}");
                 view! {
                     <input
-                        class="w-full max-w-xs input input-bordered"
+                        class="w-full max-w-xs input"
                         type="datetime-local"
-                        name=name
+                        id=move || { name.get() }
+                        name=move || { name.get() }
                         value=date
                             .get()
                             .map(|x| { x.format("%Y-%m-%dT%H:%M").to_string() })
@@ -96,18 +100,21 @@ pub fn DateField(title: String, field: String, date: Option<chrono::DateTime<chr
                         },
                         |p| {
                             view! {
-                                <div class="label">
-                                    <span class="label-text-alt"></span>
-                                    <span class="label-text-alt">
+                                <label
+                                    class="flex justify-between label"
+                                    for=move || { name.get() }
+                                >
+                                    <span></span>
+                                    <span>
                                         "Timezone " {p.format("%z").to_string()} " ("
                                         {p.format("%Z").to_string()}")"
                                     </span>
-                                </div>
+                                </label>
                             }
                                 .into_any()
                         },
                     )
             }}
-        </label>
+        </fieldset>
     }
 }

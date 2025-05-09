@@ -102,7 +102,7 @@ fn Form(page: ReadSignal<Page>, slug: RwSignal<String>) -> impl IntoView {
     view! {
         <input type="text" class="hidden" name="page_form[slug]" bind:value=slug />
         <div class="divider">Public</div>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -113,7 +113,7 @@ fn Form(page: ReadSignal<Page>, slug: RwSignal<String>) -> impl IntoView {
         </label>
         <h2>Meta Description</h2>
         <textarea
-            class="textarea textarea-bordered"
+            class="w-full textarea"
             rows="5"
             name="page_form[description]"
             placeholder="Meta Description\nA short description of the page used for search engines."
@@ -130,7 +130,7 @@ fn Form(page: ReadSignal<Page>, slug: RwSignal<String>) -> impl IntoView {
             view! {
                 <DateField
                     title="Published at".to_string()
-                    field="page_form[published_at]".to_string()
+                    field="page_form[published_at]"
                     date=page.get().published_at
                 />
             }

@@ -109,7 +109,7 @@ fn Form(artist: ReadSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
     view! {
         <input type="text" class="hidden" name="artist_form[slug]" bind:value=slug />
         <div class="divider">Public</div>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -141,7 +141,7 @@ fn Form(artist: ReadSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
             view! {
                 <DateField
                     title="Published at".to_string()
-                    field="artist_form[published_at]".to_string()
+                    field="artist_form[published_at]"
                     date=artist.get().published_at
                 />
             }

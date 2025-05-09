@@ -95,7 +95,7 @@ fn Form(user: User, username: RwSignal<String>) -> impl IntoView {
     view! {
         <input type="text" class="hidden" name="user_form[original_username]" bind:value=username />
         <div class="divider">Public</div>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -105,7 +105,7 @@ fn Form(user: User, username: RwSignal<String>) -> impl IntoView {
             />
         </label>
         <div class="divider">Private</div>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="email"
                 class="grow"
@@ -114,7 +114,7 @@ fn Form(user: User, username: RwSignal<String>) -> impl IntoView {
                 value=user.email
             />
         </label>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -123,7 +123,7 @@ fn Form(user: User, username: RwSignal<String>) -> impl IntoView {
                 value=user.first_name
             />
         </label>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
@@ -132,7 +132,7 @@ fn Form(user: User, username: RwSignal<String>) -> impl IntoView {
                 value=user.last_name
             />
         </label>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"

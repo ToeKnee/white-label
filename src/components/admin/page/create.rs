@@ -69,7 +69,7 @@ pub fn CreatePage() -> impl IntoView {
                                     name="page_form[label_id]"
                                     value=store.record_label().get().id
                                 /> <div class="divider">Public</div>
-                                <label class="flex gap-2 items-center input input-bordered">
+                                <label class="flex gap-2 items-center input">
                                     <input
                                         type="text"
                                         class="grow"
@@ -79,7 +79,7 @@ pub fn CreatePage() -> impl IntoView {
                                     />
                                 </label> <h2>Meta Description</h2>
                                 <textarea
-                                    class="textarea textarea-bordered"
+                                    class="w-full textarea"
                                     rows="5"
                                     name="page_form[description]"
                                     placeholder="Meta Description\nA short description of the page used for search engines."
@@ -95,7 +95,7 @@ pub fn CreatePage() -> impl IntoView {
                                     view! {
                                         <DateField
                                             title="Published at".to_string()
-                                            field="page_form[published_at]".to_string()
+                                            field="page_form[published_at]"
                                             date=page.get().published_at
                                         />
                                     }

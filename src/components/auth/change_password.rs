@@ -64,7 +64,7 @@ pub fn ChangePassword() -> impl IntoView {
 #[component]
 fn Form() -> impl IntoView {
     view! {
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 16 16"
@@ -79,7 +79,7 @@ fn Form() -> impl IntoView {
             </svg>
             <input type="password" class="grow" name="password_form[password]" />
         </label>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 16 16"
@@ -94,7 +94,7 @@ fn Form() -> impl IntoView {
             </svg>
             <input type="password" class="grow" name="password_form[new_password]" />
         </label>
-        <label class="flex gap-2 items-center input input-bordered">
+        <label class="flex gap-2 items-center input">
             <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 16 16"
