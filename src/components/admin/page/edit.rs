@@ -21,17 +21,17 @@ pub fn EditPage() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let slug = RwSignal::new(params.read().get("slug").unwrap_or_default());
+    let slug = move || params.read().get("slug");
 
     let (page, set_page) = signal(Page::default());
-    let page_resource = Resource::new(move || slug, |slug| get_page(slug.get()));
+    let page_resource = Resource::new(move || slug().unwrap_or_default(), get_page);
     let update_page = ServerAction::<UpdatePage>::new();
     let value = Signal::derive(move || update_page.value().get().unwrap_or_else(|| Ok(PageResult::default())));
     let (success, set_success) = signal(false);
 
     view! {
         <Title text=move || format!("Edit {}", page.get().name) />
-        <Meta name="description" content=page.get().description />
+        <Meta name="description" content=move || page.get().description />
 
         <h1>"Edit "{move || view! { {page.get().name} }}</h1>
 
@@ -58,7 +58,6 @@ pub fn EditPage() -> impl IntoView {
                                             if fresh_page.id > 0 {
                                                 if fresh_page.slug != page.get().slug {
                                                     set_page.set(fresh_page.clone());
-                                                    slug.set(fresh_page.clone().slug);
                                                     redirect(&format!("/admin/page/{}", fresh_page.slug));
                                                 }
                                                 if !success.get() {
@@ -86,7 +85,7 @@ pub fn EditPage() -> impl IntoView {
                                             show=success.get()
                                         />
                                     }
-                                }} <Form page=page slug=slug />
+                                }} <Form page=page slug=slug().unwrap_or_default() />
 
                             </div>
                         </ActionForm>
@@ -98,9 +97,9 @@ pub fn EditPage() -> impl IntoView {
 }
 
 #[component]
-fn Form(page: ReadSignal<Page>, slug: RwSignal<String>) -> impl IntoView {
+fn Form(page: ReadSignal<Page>, slug: String) -> impl IntoView {
     view! {
-        <input type="text" class="hidden" name="page_form[slug]" bind:value=slug />
+        <input type="text" class="hidden" name="page_form[slug]" value=slug />
         <div class="divider">Public</div>
         <label class="flex gap-2 items-center input">
             <input
@@ -108,7 +107,7 @@ fn Form(page: ReadSignal<Page>, slug: RwSignal<String>) -> impl IntoView {
                 class="grow"
                 placeholder="Page name"
                 name="page_form[name]"
-                value=page.get().name
+                value=move || page.get().name
             />
         </label>
         <h2>Meta Description</h2>
@@ -118,13 +117,17 @@ fn Form(page: ReadSignal<Page>, slug: RwSignal<String>) -> impl IntoView {
             name="page_form[description]"
             placeholder="Meta Description\nA short description of the page used for search engines."
         >
-            {page.get().description}
+            {move || page.get().description}
         </textarea>
-        <MarkdownField
-            title="Body".to_string()
-            field="page_form[body]".to_string()
-            markdown_text=page.get().body
-        />
+        {move || {
+            view! {
+                <MarkdownField
+                    title="Body".to_string()
+                    field="page_form[body]".to_string()
+                    markdown_text=page.get().body
+                />
+            }
+        }}
         <div class="divider">Private</div>
         {move || {
             view! {

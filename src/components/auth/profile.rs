@@ -30,7 +30,14 @@ pub fn EditProfile() -> impl IntoView {
         <article class="md:container md:mx-auto prose">
             <h1>"Edit Profile"</h1>
 
-            <FileUploadWithProgress config=UploadConfiguration::Avatar slug=username.get() />
+            {move || {
+                view! {
+                    <FileUploadWithProgress
+                        config=UploadConfiguration::Avatar
+                        slug=username.get()
+                    />
+                }
+            }}
 
             <Transition fallback=Loading>
                 <ErrorBoundary fallback=|_| {

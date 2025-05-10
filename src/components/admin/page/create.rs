@@ -67,7 +67,7 @@ pub fn CreatePage() -> impl IntoView {
                                     class="hidden"
                                     placeholder=""
                                     name="page_form[label_id]"
-                                    value=store.record_label().get().id
+                                    value=move || store.record_label().get().id
                                 /> <div class="divider">Public</div>
                                 <label class="flex gap-2 items-center input">
                                     <input
@@ -75,7 +75,7 @@ pub fn CreatePage() -> impl IntoView {
                                         class="grow"
                                         placeholder="Page name"
                                         name="page_form[name]"
-                                        value=page.get().name
+                                        value=move || page.get().name
                                     />
                                 </label> <h2>Meta Description</h2>
                                 <textarea
@@ -84,13 +84,17 @@ pub fn CreatePage() -> impl IntoView {
                                     name="page_form[description]"
                                     placeholder="Meta Description\nA short description of the page used for search engines."
                                 >
-                                    {page.get().description}
+                                    {move || page.get().description}
                                 </textarea>
-                                <MarkdownField
-                                    title="Body".to_string()
-                                    field="page_form[body]".to_string()
-                                    markdown_text=page.get().body
-                                /> <div class="divider">Private</div>
+                                {move || {
+                                    view! {
+                                        <MarkdownField
+                                            title="Body".to_string()
+                                            field="page_form[body]".to_string()
+                                            markdown_text=page.get().body
+                                        />
+                                    }
+                                }} <div class="divider">Private</div>
                                 {move || {
                                     view! {
                                         <DateField

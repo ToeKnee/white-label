@@ -33,7 +33,6 @@ pub fn RecordLabelHome() -> impl IntoView {
                         };
                     }
                     let record_label = store.record_label().get();
-
                     view! {
                         <Title text=record_label.name.clone() />
                         <article class="md:container md:mx-auto prose">
@@ -45,7 +44,7 @@ pub fn RecordLabelHome() -> impl IntoView {
                                 .unwrap_or_default() />
 
                             <h2>"Artists"</h2>
-                            <ArtistList record_label />
+                            <ArtistList record_label_id=store.record_label().get().id />
                         </article>
                     }
                 })}
@@ -56,10 +55,9 @@ pub fn RecordLabelHome() -> impl IntoView {
 
 /// Render a list of artists for a record label.
 #[component]
-pub fn ArtistList(record_label: RecordLabel) -> impl IntoView {
+pub fn ArtistList(record_label_id: i64) -> impl IntoView {
     let (artists, set_artists) = signal(vec![]);
-
-    let artists_resource = Resource::new(move || artists.get(), move |_artists| get_label_artists(record_label.clone().id));
+    let artists_resource = Resource::new(move || record_label_id, get_label_artists);
 
     view! {
         <Transition fallback=move || view! { <Loading /> }>

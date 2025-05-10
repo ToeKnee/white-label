@@ -18,6 +18,9 @@ pub fn ArtistPage() -> impl IntoView {
         move || artist.get(),
         move |_| slug().map_or_else(|| get_artist(String::new()), get_artist),
     );
+
+    let releases = RwSignal::new(vec![Release::default()]);
+    let releases_resource = Resource::new(move || artist.get().slug, get_releases);
     view! {
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {
@@ -27,6 +30,9 @@ pub fn ArtistPage() -> impl IntoView {
                     match artist_resource.await {
                         Ok(this_artist) => {
                             *set_artist.write() = this_artist.artist.clone();
+                            if let Ok(this_releases) = releases_resource.await {
+                                releases.set(this_releases.releases);
+                            }
                             this_artist.artist
                         }
                         Err(_) => Artist::default(),
@@ -50,9 +56,15 @@ pub fn ArtistPage() -> impl IntoView {
                                     alt=move || artist.get().name
                                     class="pl-6 w-1/2 h-auto"
                                 />
-                                <ReleaseList artist_slug=artist.get().slug />
+                                {move || {
+                                    view! {
+                                        <ReleaseList
+                                            artist_slug=artist.get().slug
+                                            releases=releases
+                                        />
+                                    }
+                                }}
                             </div>
-
                         </article>
                     }
                 })}
@@ -63,37 +75,24 @@ pub fn ArtistPage() -> impl IntoView {
 
 #[component]
 /// Fetch and display the list of releases for the artist
-pub fn ReleaseList(artist_slug: String) -> impl IntoView {
+pub fn ReleaseList(artist_slug: String, releases: RwSignal<Vec<Release>>) -> impl IntoView {
     let artist_slug = RwSignal::new(artist_slug);
-    let releases = RwSignal::new(vec![Release::default()]);
-    let releases_resource = Resource::new(move || artist_slug.get(), get_releases);
 
     view! {
-        <Transition fallback=Loading>
-            <ErrorBoundary fallback=|_| {
-                ErrorPage
-            }>
-                {move || Suspend::new(async move {
-                    if let Ok(this_releases) = releases_resource.await {
-                        releases.set(this_releases.releases);
-                    }
-                    let release_rows = releases
-                        .get()
-                        .into_iter()
-                        .map(|release| {
-                            view! { <Release release artist_slug /> }
-                        })
-                        .collect::<Vec<_>>();
-                    view! {
-                        {if release_rows.is_empty() {
-                            view! { <p>"Coming Soon…"</p> }.into_any()
-                        } else {
-                            view! { {release_rows} }.into_any()
-                        }}
-                    }
-                })}
-            </ErrorBoundary>
-        </Transition>
+        {move || {
+            let release_rows = releases
+                .get()
+                .into_iter()
+                .map(|release| {
+                    view! { <Release release artist_slug /> }
+                })
+                .collect::<Vec<_>>();
+            if release_rows.is_empty() {
+                view! { <p>"Coming Soon…"</p> }.into_any()
+            } else {
+                view! { {release_rows} }.into_any()
+            }
+        }}
     }
 }
 

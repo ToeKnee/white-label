@@ -16,8 +16,6 @@ pub fn EditLabel() -> impl IntoView {
     });
 
     let store = expect_context::<Store<GlobalState>>();
-    let (record_label, set_record_label) = signal(store.record_label().get());
-
     let update_record_label = ServerAction::<UpdateRecordLabel>::new();
     let value = Signal::derive(move || update_record_label.value().get().unwrap_or_else(|| Ok(LabelResult::default())));
     let (success, set_success) = signal(false);
@@ -29,8 +27,8 @@ pub fn EditLabel() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     view! {
-                        <Title text=format!("Edit {}", record_label.get().name) />
-                        <h1>"Edit "{record_label.get().name}" Details"</h1>
+                        <Title text=format!("Edit {}", store.record_label().get().name) />
+                        <h1>"Edit "{store.record_label().get().name}" Details"</h1>
                         <ActionForm action=update_record_label>
                             <div class="grid gap-6">
                                 {move || {
@@ -39,13 +37,14 @@ pub fn EditLabel() -> impl IntoView {
                                             let record_label = label_result.label;
                                             if record_label.id > 0 {
                                                 let store_record_label = store.record_label();
-                                                *store_record_label.write() = record_label.clone();
-                                                set_record_label.set(record_label);
+                                                *store_record_label.write() = record_label;
                                                 set_success.set(true);
                                             } else {
                                                 set_success.set(false);
                                             }
-                                            view! { "" }.into_any()
+
+                                            view! { "" }
+                                                .into_any()
                                         }
                                         Err(errors) => {
                                             set_success.set(false);
@@ -57,7 +56,10 @@ pub fn EditLabel() -> impl IntoView {
                                 {move || {
                                     view! {
                                         <Success
-                                            message=format!("{} Updated!", record_label.get().name)
+                                            message=format!(
+                                                "{} Updated!",
+                                                store.record_label().get().name,
+                                            )
                                             show=success.get()
                                         />
                                     }
@@ -67,7 +69,7 @@ pub fn EditLabel() -> impl IntoView {
                                     class="hidden"
                                     placeholder=""
                                     name="id"
-                                    value=record_label.get().id
+                                    value=move || store.record_label().get().id
                                 /> <div class="divider">Public</div>
                                 <label class="flex gap-2 items-center input">
                                     <input
@@ -75,10 +77,16 @@ pub fn EditLabel() -> impl IntoView {
                                         class="grow"
                                         placeholder="Label name"
                                         name="name"
-                                        value=record_label.get().name
+                                        value=move || store.record_label().get().name
                                     />
-                                </label> <DescriptionFields record_label=record_label.get() />
-                                <div class="divider">Private</div> <ISRCDescription />
+                                </label>
+                                {move || {
+                                    view! {
+                                        <DescriptionFields record_label=store
+                                            .record_label()
+                                            .get() />
+                                    }
+                                }} <div class="divider">Private</div> <ISRCDescription />
                                 <fieldset class="fieldset">
                                     <legend class="fieldset-legend">ISRC Code prefix</legend>
                                     <input
@@ -86,12 +94,12 @@ pub fn EditLabel() -> impl IntoView {
                                         class="w-full input"
                                         placeholder="ISRC prefix"
                                         name="isrc_base"
-                                        value=move || record_label.get().isrc_base
+                                        value=move || store.record_label().get().isrc_base
                                     />
                                     <p class="flex justify-between label">
                                         <span>"Country Code and First Registrant Code only"</span>
                                         <span>
-                                            "Example " {move || record_label.get().isrc_base}
+                                            "Example " {move || store.record_label().get().isrc_base}
                                             " 25 00001"
                                         </span>
                                     </p>

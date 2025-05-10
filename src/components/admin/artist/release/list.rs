@@ -129,7 +129,7 @@ fn ReleaseRow(#[prop(into)] release: Release, artist_slug: String) -> impl IntoV
             <td>
                 <div class="flex gap-3 items-center">
                     <div class="avatar">
-                        <div class="w-12 rounded-full">
+                        <div class="w-12 rounded-full not-prose">
                             <img
                                 class="m-0"
                                 src=release.primary_image_url()
