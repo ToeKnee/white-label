@@ -3,7 +3,7 @@ use leptos_meta::Title;
 use reactive_stores::Store;
 
 use crate::components::{
-    admin::shared::{DateField, MarkdownField},
+    admin::shared::{date_field::DateField, markdown_field::MarkdownField},
     utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect},
 };
 use crate::models::page::Page;

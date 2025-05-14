@@ -6,7 +6,7 @@ use reactive_stores::Store;
 use crate::components::{
     admin::{
         artist::menu::{Menu, Page},
-        shared::{DateField, MarkdownField},
+        shared::{artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField},
     },
     utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect},
 };
@@ -15,7 +15,6 @@ use crate::routes::{
     artist::get_artist,
     release::{CreateRelease, ReleaseResult},
 };
-
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
@@ -36,12 +35,11 @@ pub fn CreateRelease() -> impl IntoView {
         slug.set(s);
     });
 
-    let (artist, set_artist) = signal(Artist::default());
+    let artist = RwSignal::new(Artist::default());
     let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
-    let (artist_ids, set_artist_ids) = signal(String::new());
+    let artist_ids = RwSignal::new(vec![]);
     Effect::new_isomorphic(move || {
-        let artist_ids_str = [artist.get().id.to_string()];
-        set_artist_ids.set(artist_ids_str.join(","));
+        artist_ids.set(vec![artist.get().id]);
     });
 
     let (release, _set_release) = signal(Release::default());
@@ -56,7 +54,7 @@ pub fn CreateRelease() -> impl IntoView {
                 {move || Suspend::new(async move {
                     match artist_resource.await {
                         Ok(this_artist) => {
-                            set_artist.set(this_artist.artist);
+                            artist.set(this_artist.artist);
                         }
                         _ => {
                             redirect("/admin/artists");
@@ -99,21 +97,7 @@ pub fn CreateRelease() -> impl IntoView {
                                     placeholder=""
                                     name="release_form[label_id]"
                                     value=move || { record_label().id }
-                                />
-                                <input
-                                    type="text"
-                                    class="hidden"
-                                    placeholder=""
-                                    name="release_form[primary_artist_id]"
-                                    value=move || { artist.get().id }
-                                />
-                                <input
-                                    type="text"
-                                    class="hidden"
-                                    placeholder=""
-                                    name="release_form[artist_ids]"
-                                    value=move || { artist_ids.get() }
-                                /> <Form release=release />
+                                /><Form release artist artist_ids />
                             </div>
                         </ActionForm>
                     }
@@ -124,7 +108,7 @@ pub fn CreateRelease() -> impl IntoView {
 }
 
 #[component]
-fn Form(release: ReadSignal<Release>) -> impl IntoView {
+fn Form(release: ReadSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSignal<Vec<i64>>) -> impl IntoView {
     view! {
         <label class="flex gap-2 items-center input">
             <input
@@ -140,6 +124,11 @@ fn Form(release: ReadSignal<Release>) -> impl IntoView {
             field="release_form[description]".to_string()
             markdown_text=String::new()
         />
+        {move || {
+            view! {
+                <ArtistSelect primary_artist=artist.get() initial_artist_ids=artist_ids.get() />
+            }
+        }}
         <label class="flex gap-2 items-center input">
             <input
                 type="text"

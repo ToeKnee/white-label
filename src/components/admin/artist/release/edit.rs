@@ -5,7 +5,7 @@ use leptos_router::hooks::use_params_map;
 use super::super::menu::{Menu, Page};
 use super::delete::DeleteRelease;
 use crate::components::{
-    admin::shared::{DateField, MarkdownField},
+    admin::shared::{artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField},
     files::upload::FileUploadWithProgress,
     utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success},
 };
@@ -17,8 +17,13 @@ use crate::routes::{
 };
 use crate::utils::redirect::redirect;
 
+fn artists_ids(artists: &[Artist]) -> Vec<i64> {
+    artists.iter().map(|a| a.id).collect::<Vec<_>>()
+}
+
 /// Renders the create artist page.
 #[component]
+#[allow(clippy::too_many_lines)] // components are a pain to make smaller
 pub fn EditRelease() -> impl IntoView {
     Effect::new_isomorphic(move || {
         permission_or_redirect("label_owner", "/admin");
@@ -36,14 +41,10 @@ pub fn EditRelease() -> impl IntoView {
 
     let artist = RwSignal::new(Artist::default());
     let artist_resource = Resource::new(move || artist_slug, |artist_slug| get_artist(artist_slug.get()));
-    let artist_ids = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let artist_ids_str = [artist.get().id.to_string()];
-        artist_ids.set(artist_ids_str.join(","));
-    });
 
     let release = RwSignal::new(Release::default());
     let artists = RwSignal::new(Vec::new()); // Artists on the release
+    let artist_ids = RwSignal::new(vec![]);
     let release_resource = Resource::new(
         move || (artist_slug, release_slug),
         |(artist_slug, release_slug)| get_release(artist_slug.get(), release_slug.get()),
@@ -71,7 +72,8 @@ pub fn EditRelease() -> impl IntoView {
                     match release_resource.await {
                         Ok(this_release) => {
                             release.set(this_release.release);
-                            artists.set(this_release.artists);
+                            artists.set(this_release.artists.clone());
+                            artist_ids.set(artists_ids(&this_release.artists));
                         }
                         Err(_) => redirect("/admin/artists/{artist_slug.get()}/releases"),
                     }
@@ -85,6 +87,7 @@ pub fn EditRelease() -> impl IntoView {
                                     match value.get() {
                                         Ok(release_result) => {
                                             let fresh_release = release_result.release;
+                                            let fresh_artists = release_result.artists;
                                             if fresh_release.id > 0 {
                                                 if fresh_release.slug != release.get().slug {
                                                     redirect(
@@ -95,8 +98,14 @@ pub fn EditRelease() -> impl IntoView {
                                                         ),
                                                     );
                                                 }
-                                                if !success.get() {
+                                                if fresh_release != release.get() {
                                                     release.set(fresh_release);
+                                                }
+                                                if fresh_artists != artists.get() {
+                                                    artists.set(fresh_artists.clone());
+                                                    artist_ids.set(artists_ids(&fresh_artists));
+                                                }
+                                                if !success.get() {
                                                     success.set(true);
                                                 }
                                             } else {
@@ -141,26 +150,13 @@ fn Header(name: String, artist_slug: RwSignal<String>) -> impl IntoView {
 }
 
 #[component]
-fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSignal<String>) -> impl IntoView {
+fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSignal<Vec<i64>>) -> impl IntoView {
     view! {
         <input
             type="text"
             class="hidden"
             name="release_form[label_id]"
             value=move || { artist.get().label_id }
-        />
-        <input
-            type="text"
-            class="hidden"
-            placeholder=""
-            name="release_form[primary_artist_id]"
-            value=move || { artist.get().id }
-        />
-        <input
-            type="text"
-            class="hidden"
-            name="release_form[artist_ids]"
-            value=move || { artist_ids.get() }
         />
         <input
             type="text"
@@ -187,6 +183,12 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
                 />
             }
         }}
+        {move || {
+            view! {
+                <ArtistSelect primary_artist=artist.get() initial_artist_ids=artist_ids.get() />
+            }
+        }}
+
         <label class="flex gap-2 items-center input">
             <input
                 type="text"

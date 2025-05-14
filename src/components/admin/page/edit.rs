@@ -4,7 +4,7 @@ use leptos_router::hooks::use_params_map;
 
 use super::delete::DeletePage;
 use crate::components::{
-    admin::shared::{DateField, MarkdownField},
+    admin::shared::{date_field::DateField, markdown_field::MarkdownField},
     utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success},
 };
 use crate::models::page::Page;

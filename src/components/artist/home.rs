@@ -56,15 +56,13 @@ pub fn ArtistPage() -> impl IntoView {
                                     alt=move || artist.get().name
                                     class="pl-6 w-1/2 h-auto"
                                 />
-                                {move || {
-                                    view! {
-                                        <ReleaseList
-                                            artist_slug=artist.get().slug
-                                            releases=releases
-                                        />
-                                    }
-                                }}
                             </div>
+
+                            {move || {
+                                view! {
+                                    <ReleaseList artist_slug=artist.get().slug releases=releases />
+                                }
+                            }}
                         </article>
                     }
                 })}
@@ -79,20 +77,22 @@ pub fn ReleaseList(artist_slug: String, releases: RwSignal<Vec<Release>>) -> imp
     let artist_slug = RwSignal::new(artist_slug);
 
     view! {
-        {move || {
-            let release_rows = releases
-                .get()
-                .into_iter()
-                .map(|release| {
-                    view! { <Release release artist_slug /> }
-                })
-                .collect::<Vec<_>>();
-            if release_rows.is_empty() {
-                view! { <p>"Coming Soon…"</p> }.into_any()
-            } else {
-                view! { {release_rows} }.into_any()
-            }
-        }}
+        <div class="flex flex-wrap gap-4 justify-between">
+            {move || {
+                let release_rows = releases
+                    .get()
+                    .into_iter()
+                    .map(|release| {
+                        view! { <Release release artist_slug /> }
+                    })
+                    .collect::<Vec<_>>();
+                if release_rows.is_empty() {
+                    view! { <p>"Coming Soon…"</p> }.into_any()
+                } else {
+                    view! { {release_rows} }.into_any()
+                }
+            }}
+        </div>
     }
 }
 
@@ -115,7 +115,7 @@ pub fn Release(#[prop(into)] release: Release, artist_slug: RwSignal<String>) ->
     view! {
         <a
             href=move || format!("/artists/{}/{}", artist_slug.get(), release.get().slug)
-            class="p-6 w-1/4 link link-hover min-w-96"
+            class="w-1/4 link link-hover min-w-96"
         >
             <div class="shadow-sm card bg-base-100 bg-neutral text-neutral-content">
                 <figure class="not-prose">

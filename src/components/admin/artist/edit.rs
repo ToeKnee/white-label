@@ -7,7 +7,7 @@ use super::{
     menu::{Menu, Page},
 };
 use crate::components::{
-    admin::shared::{DateField, MarkdownField},
+    admin::shared::{date_field::DateField, markdown_field::MarkdownField},
     files::upload::FileUploadWithProgress,
     utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success},
 };

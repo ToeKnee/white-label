@@ -246,13 +246,13 @@ impl Release {
         include_hidden: bool,
     ) -> anyhow::Result<Self> {
         let query = if include_hidden {
-            "SELECT * FROM releases
+            "SELECT releases.* FROM releases
              INNER JOIN release_artists
              ON releases.id = release_artists.release_id
              WHERE release_artists.artist_id = $1 AND releases.label_id = $2 AND releases.slug = $3
              ORDER BY deleted_at DESC, name ASC"
         } else {
-            "SELECT * FROM releases
+            "SELECT releases.* FROM releases
              INNER JOIN release_artists
              ON releases.id = release_artists.release_id
              WHERE release_artists.artist_id = $1 AND releases.label_id = $2 AND releases.slug = $3
@@ -305,13 +305,13 @@ impl Release {
         include_hidden: bool,
     ) -> anyhow::Result<Vec<Self>> {
         let query = if include_hidden {
-            "SELECT * FROM releases
+            "SELECT releases.* FROM releases
              INNER JOIN release_artists
              ON releases.id = release_artists.release_id
              WHERE release_artists.artist_id = $1 AND releases.label_id = $2
              ORDER BY deleted_at DESC, release_date DESC, name ASC"
         } else {
-            "SELECT * FROM releases
+            "SELECT releases.* FROM releases
              INNER JOIN release_artists
              ON releases.id = release_artists.release_id
              WHERE release_artists.artist_id = $1 AND releases.label_id = $2
@@ -489,7 +489,6 @@ impl Release {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     #[cfg(feature = "ssr")]
     use crate::models::test_helpers::{create_test_artist, create_test_record_label, create_test_release};
