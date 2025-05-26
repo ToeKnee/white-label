@@ -556,7 +556,7 @@ mod tests {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
             primary_artist_id: artist.id,
-            isrc_code: Some("UKUTX2020123".to_string()),
+            isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
@@ -571,7 +571,7 @@ mod tests {
         assert_eq!(track_result.track.primary_artist_id, artist.id);
         assert_eq!(
             track_result.track.isrc_code,
-            Some("UKUTX2020123".to_string())
+            Some("UKXXX2020123".to_string())
         );
         assert_eq!(track_result.track.bpm, Some(120));
         assert!(track_result.track.published_at.is_some());
@@ -600,7 +600,7 @@ mod tests {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
             primary_artist_id: artist.id,
-            isrc_code: Some("UKUTX2020123".to_string()),
+            isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
@@ -634,7 +634,7 @@ mod tests {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
             primary_artist_id: artist.id,
-            isrc_code: Some("UKUTX2020123".to_string()),
+            isrc_code: Some("UKXX2020123".to_string()),
             bpm: Some(120),
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
@@ -670,7 +670,7 @@ mod tests {
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
-            isrc_code: Some("UKUTX2020123".to_string()),
+            isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             primary_artist_id: artist.id,
             published_at: Some(chrono::Utc::now()),
@@ -689,7 +689,7 @@ mod tests {
             slug: "test-track".to_string(),
             description: "Updated Track Description".to_string(),
             primary_artist_id: artist.id,
-            isrc_code: Some("UKUTX2025321".to_string()),
+            isrc_code: Some("UKXXX2025321".to_string()),
             bpm: Some(130),
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
@@ -706,7 +706,7 @@ mod tests {
         assert_eq!(updated_track.track.primary_artist_id, artist.id);
         assert_eq!(
             updated_track.track.isrc_code,
-            Some("UKUTX2025321".to_string())
+            Some("UKXXX2025321".to_string())
         );
         assert_eq!(updated_track.track.bpm, Some(130));
         assert!(updated_track.track.published_at.is_some());
@@ -733,7 +733,7 @@ mod tests {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
             primary_artist_id: artist.id,
-            isrc_code: Some("UKUTX2020123".to_string()),
+            isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),

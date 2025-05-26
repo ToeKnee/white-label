@@ -214,7 +214,7 @@ pub async fn create_test_track(
             .unwrap(),
     };
 
-    let isrc_code = format!("UKUTX25{id:0>5}");
+    let isrc_code = format!("UKXXX25{id:0>5}");
     let track = sqlx::query_as::<_, Track>("INSERT INTO tracks (name, slug, description, primary_artist_id, isrc_code, bpm, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *")
         .bind(format!("Test Track {id}"))
         .bind(format!("test-track-{id}"))
