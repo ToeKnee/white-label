@@ -15,5 +15,8 @@ pub trait Validate {
     ///   - Ok(()) if the model is valid
     ///   - Err if the model is invalid
     #[cfg(feature = "ssr")]
-    fn validate(&self, pool: &PgPool) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+    fn validate(
+        &self,
+        pool: &PgPool,
+    ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
 }

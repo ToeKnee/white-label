@@ -15,7 +15,10 @@ pub fn PageDetails() -> impl IntoView {
     let slug = move || params.read().get("slug");
 
     let (page, set_page) = signal(Page::default());
-    let page_resource = Resource::new(move || page.get(), move |_| slug().map_or_else(|| get_page(String::new()), get_page));
+    let page_resource = Resource::new(
+        move || page.get(),
+        move |_| slug().map_or_else(|| get_page(String::new()), get_page),
+    );
     view! {
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {

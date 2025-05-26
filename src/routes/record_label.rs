@@ -37,16 +37,21 @@ pub async fn get_label_artists(record_label_id: i64) -> Result<LabelArtistResult
     let current_user = auth.current_user.unwrap_or_default();
     let show_hidden = current_user.permissions.contains("label_owner");
 
-    let record_label = RecordLabel::get_by_id(&pool, record_label_id).await.map_err(|x| {
-        let err = format!("Error while getting label: {x:?}");
-        tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve label, try again later")
-    })?;
-    let artists = record_label.artists(&pool, show_hidden).await.map_err(|x| {
-        let err = format!("Error while getting artists: {x:?}");
-        tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve artists, try again later")
-    })?;
+    let record_label = RecordLabel::get_by_id(&pool, record_label_id)
+        .await
+        .map_err(|x| {
+            let err = format!("Error while getting label: {x:?}");
+            tracing::error!("{err}");
+            ServerFnError::new("Could not retrieve label, try again later")
+        })?;
+    let artists = record_label
+        .artists(&pool, show_hidden)
+        .await
+        .map_err(|x| {
+            let err = format!("Error while getting artists: {x:?}");
+            tracing::error!("{err}");
+            ServerFnError::new("Could not retrieve artists, try again later")
+        })?;
     Ok(LabelArtistResult { artists })
 }
 
@@ -63,11 +68,13 @@ pub async fn get_label_pages(record_label_id: i64) -> Result<LabelPageResult, Se
     let current_user = auth.current_user.unwrap_or_default();
     let show_hidden = current_user.permissions.contains("label_owner");
 
-    let record_label = RecordLabel::get_by_id(&pool, record_label_id).await.map_err(|x| {
-        let err = format!("Error while getting label: {x:?}");
-        tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve label, try again later")
-    })?;
+    let record_label = RecordLabel::get_by_id(&pool, record_label_id)
+        .await
+        .map_err(|x| {
+            let err = format!("Error while getting label: {x:?}");
+            tracing::error!("{err}");
+            ServerFnError::new("Could not retrieve label, try again later")
+        })?;
     let pages = record_label.pages(&pool, show_hidden).await.map_err(|x| {
         let err = format!("Error while getting pages: {x:?}");
         tracing::error!("{err}");
@@ -77,7 +84,12 @@ pub async fn get_label_pages(record_label_id: i64) -> Result<LabelPageResult, Se
 }
 
 #[server(UpdateRecordLabel, "/api", endpoint="update_record_label", output = Cbor)]
-pub async fn update_record_label(id: i64, name: String, description: String, isrc_base: String) -> Result<LabelResult, ServerFnError> {
+pub async fn update_record_label(
+    id: i64,
+    name: String,
+    description: String,
+    isrc_base: String,
+) -> Result<LabelResult, ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;
 
@@ -86,7 +98,9 @@ pub async fn update_record_label(id: i64, name: String, description: String, isr
         .as_ref()
         .ok_or_else(|| ServerFnError::new("You must be logged in to update a label"))?;
     if !current_user.permissions.contains("label_owner") {
-        return Err(ServerFnError::new("You do not have permission to update a label"));
+        return Err(ServerFnError::new(
+            "You do not have permission to update a label",
+        ));
     }
 
     let mut record_label = RecordLabel::get_by_id(&pool, id).await.map_err(|x| {
@@ -99,11 +113,15 @@ pub async fn update_record_label(id: i64, name: String, description: String, isr
     record_label.description = description;
     record_label.isrc_base = isrc_base;
     match record_label.clone().update(&pool).await {
-        Ok(record_label) => Ok(LabelResult { label: record_label }),
+        Ok(record_label) => Ok(LabelResult {
+            label: record_label,
+        }),
         Err(e) => {
             let err = format!("Error while updating label: {e}");
             tracing::error!("{err}");
-            Err(ServerFnError::new("Could not update label, try again later"))
+            Err(ServerFnError::new(
+                "Could not update label, try again later",
+            ))
         }
     }
 }

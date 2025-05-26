@@ -18,7 +18,10 @@ use crate::routes::artist::ArtistResult;
 ///
 /// # Errors
 /// If the artist cannot be found, return an error
-pub async fn get_artist_service(pool: &PgPool, slug: String) -> Result<ArtistResult, ServerFnError> {
+pub async fn get_artist_service(
+    pool: &PgPool,
+    slug: String,
+) -> Result<ArtistResult, ServerFnError> {
     Ok(ArtistResult {
         artist: Artist::get_by_slug(pool, slug).await.map_err(|e| {
             let err = format!("Error while getting artist: {e:?}");
@@ -43,7 +46,11 @@ pub async fn get_artist_service(pool: &PgPool, slug: String) -> Result<ArtistRes
 /// If the artist cannot be created, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn create_artist_service(pool: &PgPool, user: Option<&User>, artist_form: CreateArtistForm) -> Result<ArtistResult, ServerFnError> {
+pub async fn create_artist_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    artist_form: CreateArtistForm,
+) -> Result<ArtistResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -81,17 +88,23 @@ pub async fn create_artist_service(pool: &PgPool, user: Option<&User>, artist_fo
 /// If the artist cannot be updated, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn update_artist_service(pool: &PgPool, user: Option<&User>, artist_form: UpdateArtistForm) -> Result<ArtistResult, ServerFnError> {
+pub async fn update_artist_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    artist_form: UpdateArtistForm,
+) -> Result<ArtistResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let mut artist = Artist::get_by_slug(pool, artist_form.slug).await.map_err(|e| {
-        let err = format!("Error while getting artist: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let mut artist = Artist::get_by_slug(pool, artist_form.slug)
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting artist: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?;
     artist.name = artist_form.name;
     artist.description = artist_form.description;
     artist.published_at = artist_form.published_at;
@@ -119,7 +132,11 @@ pub async fn update_artist_service(pool: &PgPool, user: Option<&User>, artist_fo
 /// If the artist cannot be found, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn delete_artist_service(pool: &PgPool, user: Option<&User>, slug: String) -> Result<ArtistResult, ServerFnError> {
+pub async fn delete_artist_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    slug: String,
+) -> Result<ArtistResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -144,12 +161,16 @@ pub async fn delete_artist_service(pool: &PgPool, user: Option<&User>, slug: Str
 mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
-    use crate::models::test_helpers::{create_test_artist, create_test_record_label, create_test_user_with_permissions};
+    use crate::models::test_helpers::{
+        create_test_artist, create_test_record_label, create_test_user_with_permissions,
+    };
 
     #[sqlx::test]
     async fn test_get_artist_service(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
-        let artist_by_slug = get_artist_service(&pool, artist.slug.clone()).await.unwrap();
+        let artist_by_slug = get_artist_service(&pool, artist.slug.clone())
+            .await
+            .unwrap();
         assert_eq!(artist, artist_by_slug.artist);
     }
 
@@ -166,7 +187,9 @@ mod tests {
     #[sqlx::test]
     async fn test_create_artist_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
 
         let artist_form = CreateArtistForm {
@@ -176,9 +199,14 @@ mod tests {
             published_at: None,
         };
 
-        let artist = create_artist_service(&pool, Some(&user), artist_form).await.unwrap();
+        let artist = create_artist_service(&pool, Some(&user), artist_form)
+            .await
+            .unwrap();
         assert_eq!(artist.artist.name, "Test Artist".to_string());
-        assert_eq!(artist.artist.description, "This is a test artist".to_string());
+        assert_eq!(
+            artist.artist.description,
+            "This is a test artist".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -207,7 +235,9 @@ mod tests {
     #[sqlx::test]
     async fn test_create_artist_service_no_name(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
 
         let artist_form = CreateArtistForm {
@@ -229,7 +259,9 @@ mod tests {
     #[sqlx::test]
     async fn test_create_artist_service_name_too_long(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
 
         let name = "a".repeat(256);
@@ -251,7 +283,9 @@ mod tests {
     #[sqlx::test]
     async fn test_create_artist_service_no_record_label(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let artist_form = CreateArtistForm {
             name: "Test Artist".to_string(),
@@ -272,7 +306,9 @@ mod tests {
     #[sqlx::test]
     async fn test_update_artist_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let artist_form = UpdateArtistForm {
@@ -281,15 +317,22 @@ mod tests {
             description: "This is an updated artist".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await.unwrap();
+        let updated_artist = update_artist_service(&pool, Some(&user), artist_form)
+            .await
+            .unwrap();
         assert_eq!(updated_artist.artist.name, "Updated Artist".to_string());
-        assert_eq!(updated_artist.artist.description, "This is an updated artist".to_string());
+        assert_eq!(
+            updated_artist.artist.description,
+            "This is an updated artist".to_string()
+        );
     }
 
     #[sqlx::test]
     async fn test_update_artist_service_name_is_empty(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let artist_form = UpdateArtistForm {
@@ -310,7 +353,9 @@ mod tests {
     #[sqlx::test]
     async fn test_update_artist_service_name_too_long(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let name = "a".repeat(256);
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -332,7 +377,9 @@ mod tests {
     #[sqlx::test]
     async fn test_update_artist_service_no_artist(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let artist_form = UpdateArtistForm {
             slug: "missing".to_string(),
@@ -358,7 +405,8 @@ mod tests {
             description: "This is an updated artist".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
-        let updated_artist = update_artist_service(&pool, Some(&User::default()), artist_form).await;
+        let updated_artist =
+            update_artist_service(&pool, Some(&User::default()), artist_form).await;
 
         assert!(updated_artist.is_err());
         assert_eq!(
@@ -369,7 +417,9 @@ mod tests {
 
     #[sqlx::test]
     async fn test_update_artist_service_no_permissions(pool: PgPool) {
-        let user = create_test_user_with_permissions(&pool, 1, vec![]).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, vec![])
+            .await
+            .unwrap();
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let artist_form = UpdateArtistForm {
             slug: artist.slug.clone(),
@@ -389,17 +439,23 @@ mod tests {
     #[sqlx::test]
     async fn test_delete_artist_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
-        let deleted_artist = delete_artist_service(&pool, Some(&user), artist.slug.clone()).await.unwrap();
+        let deleted_artist = delete_artist_service(&pool, Some(&user), artist.slug.clone())
+            .await
+            .unwrap();
         assert!(deleted_artist.artist.deleted_at.is_some());
     }
 
     #[sqlx::test]
     async fn test_delete_artist_service_no_artist(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let deleted_artist = delete_artist_service(&pool, Some(&user), "missing".to_string()).await;
         assert!(deleted_artist.is_err());
@@ -412,7 +468,8 @@ mod tests {
     #[sqlx::test]
     async fn test_delete_artist_service_no_user(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
-        let deleted_artist = delete_artist_service(&pool, Some(&User::default()), artist.slug.clone()).await;
+        let deleted_artist =
+            delete_artist_service(&pool, Some(&User::default()), artist.slug.clone()).await;
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),
@@ -422,7 +479,9 @@ mod tests {
 
     #[sqlx::test]
     async fn test_delete_artist_service_no_permissions(pool: PgPool) {
-        let user = create_test_user_with_permissions(&pool, 1, vec![]).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, vec![])
+            .await
+            .unwrap();
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let deleted_artist = delete_artist_service(&pool, Some(&user), artist.slug.clone()).await;
         assert!(deleted_artist.is_err());

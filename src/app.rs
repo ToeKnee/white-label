@@ -33,7 +33,10 @@ use crate::components::{
         root::AdminRoot,
     },
     artist::home::ArtistPage,
-    auth::{change_password::ChangePassword, login::Login, logout::Logout, profile::EditProfile, register::Register},
+    auth::{
+        change_password::ChangePassword, login::Login, logout::Logout, profile::EditProfile,
+        register::Register,
+    },
     page::PageDetails,
     record_label::{footer::LabelFooter, header::LabelHeader, home::RecordLabelHome},
     utils::{error::ErrorPage, loading::Loading, not_found::NotFound},

@@ -6,9 +6,15 @@ use super::delete::DeleteTrack;
 use crate::components::{
     admin::{
         artist::menu::{Menu, Page},
-        shared::{artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField, release_select::ReleaseSelect},
+        shared::{
+            artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
+            release_select::ReleaseSelect,
+        },
     },
-    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success},
+    utils::{
+        error::ErrorPage, error::ServerErrors, loading::Loading,
+        permissions::permission_or_redirect, success::Success,
+    },
 };
 use crate::models::{artist::Artist, release::Release, track::Track};
 use crate::routes::{
@@ -56,14 +62,28 @@ pub fn EditTrack() -> impl IntoView {
     });
     let track_resource = Resource::new(
         move || [artist_slug, release_slug, track_slug],
-        |[artist_slug, release_slug, track_slug]| get_track(artist_slug.get(), release_slug.get(), track_slug.get()),
+        |[artist_slug, release_slug, track_slug]| {
+            get_track(artist_slug.get(), release_slug.get(), track_slug.get())
+        },
     );
     let track = RwSignal::new(Track::default());
     let update_track = ServerAction::<UpdateTrack>::new();
-    let value = Signal::derive(move || update_track.value().get().unwrap_or_else(|| Ok(TrackResult::default())));
+    let value = Signal::derive(move || {
+        update_track
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(TrackResult::default()))
+    });
     let success = RwSignal::new(false);
 
-    let title = move || format!("{} - {} - {}", track.get().name, release.get().name, artist.get().name);
+    let title = move || {
+        format!(
+            "{} - {} - {}",
+            track.get().name,
+            release.get().name,
+            artist.get().name
+        )
+    };
 
     view! {
         <Transition fallback=Loading>

@@ -34,12 +34,18 @@ mod tests {
 
     #[test]
     fn test_shorten_string_with_newline() {
-        assert_eq!(shorten_string("This is a test\nSecond line".to_string()), "This is a test".to_string());
+        assert_eq!(
+            shorten_string("This is a test\nSecond line".to_string()),
+            "This is a test".to_string()
+        );
     }
 
     #[test]
     fn test_shorten_string_with_markdown() {
-        assert_eq!(shorten_string("# This is a test.".to_string()), " This is a test.".to_string());
+        assert_eq!(
+            shorten_string("# This is a test.".to_string()),
+            " This is a test.".to_string()
+        );
     }
 
     #[test]

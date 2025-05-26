@@ -20,7 +20,11 @@ use crate::models::{artist::Artist, auth::User};
 ///
 /// # Errors
 /// If the artist cannot be found, return an error
-pub async fn get_releases_for_artists_service(pool: &PgPool, user: Option<&User>, artist_ids: Vec<i64>) -> Result<Vec<Release>, ServerFnError> {
+pub async fn get_releases_for_artists_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    artist_ids: Vec<i64>,
+) -> Result<Vec<Release>, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -43,13 +47,21 @@ pub async fn get_releases_for_artists_service(pool: &PgPool, user: Option<&User>
     let releases = artists
         .into_iter()
         .map(|artist| async move {
-            Release::list_by_artist_and_record_label(pool, artist.id, artist.label_id, include_hidden)
-                .await
-                .map_err(|x| {
-                    let err = format!("Error while getting releases for artist {}: {x:?}", artist.name);
-                    tracing::error!("{err}");
-                    ServerFnError::new("Could not retrieve releases, try again later")
-                })
+            Release::list_by_artist_and_record_label(
+                pool,
+                artist.id,
+                artist.label_id,
+                include_hidden,
+            )
+            .await
+            .map_err(|x| {
+                let err = format!(
+                    "Error while getting releases for artist {}: {x:?}",
+                    artist.name
+                );
+                tracing::error!("{err}");
+                ServerFnError::new("Could not retrieve releases, try again later")
+            })
         })
         .collect::<futures::stream::FuturesUnordered<_>>()
         .collect::<Vec<Result<Vec<Release>, ServerFnError>>>();
@@ -70,17 +82,28 @@ pub async fn get_releases_for_artists_service(pool: &PgPool, user: Option<&User>
 mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
-    use crate::models::test_helpers::{create_test_artist, create_test_record_label, create_test_release, create_test_user_with_permissions};
+    use crate::models::test_helpers::{
+        create_test_artist, create_test_record_label, create_test_release,
+        create_test_user_with_permissions,
+    };
 
     #[sqlx::test]
     async fn test_get_releases_for_artists(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label)).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
 
-        let releases = get_releases_for_artists_service(&pool, Some(&user), vec![artist.id]).await.unwrap();
+        let releases = get_releases_for_artists_service(&pool, Some(&user), vec![artist.id])
+            .await
+            .unwrap();
 
         assert_eq!(releases.len(), 1);
         assert_eq!(releases[0].id, release.id);
@@ -89,10 +112,16 @@ mod tests {
     #[sqlx::test]
     async fn test_get_releases_for_artists_no_permission(pool: PgPool) {
         let permissions = vec![];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label)).await.unwrap();
-        let _release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label))
+            .await
+            .unwrap();
+        let _release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
 
         let result = get_releases_for_artists_service(&pool, Some(&user), vec![artist.id]).await;
 
@@ -102,16 +131,27 @@ mod tests {
     #[sqlx::test]
     async fn test_get_releases_for_artists_multiple_artists(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
-        let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist1 = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let artist2 = create_test_artist(&pool, 2, Some(record_label)).await.unwrap();
-        let release1 = create_test_release(&pool, 1, Some(artist1.clone())).await.unwrap();
-        let release2 = create_test_release(&pool, 2, Some(artist2.clone())).await.unwrap();
-
-        let releases = get_releases_for_artists_service(&pool, Some(&user), vec![artist1.id, artist2.id])
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
             .await
             .unwrap();
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist1 = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let artist2 = create_test_artist(&pool, 2, Some(record_label))
+            .await
+            .unwrap();
+        let release1 = create_test_release(&pool, 1, Some(artist1.clone()))
+            .await
+            .unwrap();
+        let release2 = create_test_release(&pool, 2, Some(artist2.clone()))
+            .await
+            .unwrap();
+
+        let releases =
+            get_releases_for_artists_service(&pool, Some(&user), vec![artist1.id, artist2.id])
+                .await
+                .unwrap();
 
         assert_eq!(releases.len(), 2);
         assert_eq!(releases[0].id, release2.id);

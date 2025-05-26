@@ -47,10 +47,19 @@ pub async fn get_tracks_service(
         }
     };
 
-    let include_hidden = user.is_some_and(|current_user| current_user.permissions.contains("label_owner"));
+    let include_hidden =
+        user.is_some_and(|current_user| current_user.permissions.contains("label_owner"));
 
     Ok(TracksResult {
-        tracks: match Track::list_by_release_and_artist_and_record_label(pool, release.id, artist.id, artist.label_id, include_hidden).await {
+        tracks: match Track::list_by_release_and_artist_and_record_label(
+            pool,
+            release.id,
+            artist.id,
+            artist.label_id,
+            include_hidden,
+        )
+        .await
+        {
             Ok(tracks) => tracks,
             Err(e) => {
                 let err = format!("Error while getting tracks: {e:?}");
@@ -108,14 +117,20 @@ pub async fn get_track_service(
     };
     let include_hidden = current_user.permissions.contains("label_owner");
 
-    let track =
-        Track::get_by_release_and_artist_and_record_label_and_slug(pool, release.id, artist.id, artist.label_id, track_slug.clone(), include_hidden)
-            .await
-            .map_err(|e| {
-                let err = format!("Error while getting track: {e:?}");
-                tracing::error!("{err}");
-                ServerFnError::new(e)
-            })?;
+    let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+        pool,
+        release.id,
+        artist.id,
+        artist.label_id,
+        track_slug.clone(),
+        include_hidden,
+    )
+    .await
+    .map_err(|e| {
+        let err = format!("Error while getting track: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
 
     let artists = track.get_artists(pool).await.map_err(|e| {
         let err = format!("Error while getting artists: {e:?}");
@@ -129,7 +144,11 @@ pub async fn get_track_service(
         ServerFnError::new(e)
     })?;
 
-    Ok(TrackResult { track, artists, releases })
+    Ok(TrackResult {
+        track,
+        artists,
+        releases,
+    })
 }
 
 /// Create a new track
@@ -147,7 +166,11 @@ pub async fn get_track_service(
 /// If the track cannot be created, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn create_track_service(pool: &PgPool, user: Option<&User>, form: CreateTrackForm) -> Result<TrackResult, ServerFnError> {
+pub async fn create_track_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    form: CreateTrackForm,
+) -> Result<TrackResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -169,7 +192,11 @@ pub async fn create_track_service(pool: &PgPool, user: Option<&User>, form: Crea
         ServerFnError::new(e)
     })?;
 
-    let artist_ids = form.artist_ids.split(',').filter_map(|s| s.parse::<i64>().ok()).collect::<Vec<i64>>();
+    let artist_ids = form
+        .artist_ids
+        .split(',')
+        .filter_map(|s| s.parse::<i64>().ok())
+        .collect::<Vec<i64>>();
     track.set_artists(pool, artist_ids).await.map_err(|e| {
         let err = format!("Error while setting artists: {e:?}");
         tracing::error!("{err}");
@@ -181,7 +208,11 @@ pub async fn create_track_service(pool: &PgPool, user: Option<&User>, form: Crea
         ServerFnError::new(e)
     })?;
 
-    let release_ids = form.release_ids.split(',').filter_map(|s| s.parse::<i64>().ok()).collect::<Vec<i64>>();
+    let release_ids = form
+        .release_ids
+        .split(',')
+        .filter_map(|s| s.parse::<i64>().ok())
+        .collect::<Vec<i64>>();
     track.set_releases(pool, release_ids).await.map_err(|e| {
         let err = format!("Error while setting releases: {e:?}");
         tracing::error!("{err}");
@@ -193,7 +224,11 @@ pub async fn create_track_service(pool: &PgPool, user: Option<&User>, form: Crea
         ServerFnError::new(e)
     })?;
 
-    Ok(TrackResult { track, artists, releases })
+    Ok(TrackResult {
+        track,
+        artists,
+        releases,
+    })
 }
 
 /// Update a track
@@ -211,7 +246,11 @@ pub async fn create_track_service(pool: &PgPool, user: Option<&User>, form: Crea
 /// If the track cannot be created, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn update_track_service(pool: &PgPool, user: Option<&User>, form: UpdateTrackForm) -> Result<TrackResult, ServerFnError> {
+pub async fn update_track_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    form: UpdateTrackForm,
+) -> Result<TrackResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -236,7 +275,11 @@ pub async fn update_track_service(pool: &PgPool, user: Option<&User>, form: Upda
         ServerFnError::new(e)
     })?;
 
-    let artist_ids = form.artist_ids.split(',').filter_map(|s| s.parse::<i64>().ok()).collect::<Vec<i64>>();
+    let artist_ids = form
+        .artist_ids
+        .split(',')
+        .filter_map(|s| s.parse::<i64>().ok())
+        .collect::<Vec<i64>>();
     track.set_artists(pool, artist_ids).await.map_err(|e| {
         let err = format!("Error while setting artists: {e:?}");
         tracing::error!("{err}");
@@ -247,7 +290,11 @@ pub async fn update_track_service(pool: &PgPool, user: Option<&User>, form: Upda
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;
-    let release_ids = form.release_ids.split(',').filter_map(|s| s.parse::<i64>().ok()).collect::<Vec<i64>>();
+    let release_ids = form
+        .release_ids
+        .split(',')
+        .filter_map(|s| s.parse::<i64>().ok())
+        .collect::<Vec<i64>>();
     track.set_releases(pool, release_ids).await.map_err(|e| {
         let err = format!("Error while setting releases: {e:?}");
         tracing::error!("{err}");
@@ -259,7 +306,11 @@ pub async fn update_track_service(pool: &PgPool, user: Option<&User>, form: Upda
         ServerFnError::new(e)
     })?;
 
-    Ok(TrackResult { track, artists, releases })
+    Ok(TrackResult {
+        track,
+        artists,
+        releases,
+    })
 }
 
 /// Soft delete a track
@@ -276,7 +327,11 @@ pub async fn update_track_service(pool: &PgPool, user: Option<&User>, form: Upda
 /// If the track cannot be found, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn delete_track_service(pool: &PgPool, user: Option<&User>, slug: String) -> Result<TrackResult, ServerFnError> {
+pub async fn delete_track_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    slug: String,
+) -> Result<TrackResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -312,25 +367,42 @@ mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
     use crate::models::test_helpers::{
-        create_test_artist, create_test_record_label, create_test_release, create_test_track, create_test_user, create_test_user_with_permissions,
+        create_test_artist, create_test_record_label, create_test_release, create_test_track,
+        create_test_user, create_test_user_with_permissions,
     };
 
     #[sqlx::test]
     async fn test_get_tracks_service_admin_user(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user: User = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user: User = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        let mut unpublished_track = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+        let mut unpublished_track =
+            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
         unpublished_track.published_at = None;
         unpublished_track.clone().update(&pool).await.unwrap();
 
-        let tracks = get_tracks_service(&pool, Some(&user), artist.slug.clone(), release.slug.clone())
-            .await
-            .unwrap();
+        let tracks = get_tracks_service(
+            &pool,
+            Some(&user),
+            artist.slug.clone(),
+            release.slug.clone(),
+        )
+        .await
+        .unwrap();
         assert_eq!(tracks.tracks.len(), 2);
         assert_eq!(tracks.tracks[0].id, track.id);
         assert_eq!(tracks.tracks[1].id, unpublished_track.id);
@@ -339,14 +411,25 @@ mod tests {
     #[sqlx::test]
     async fn test_get_tracks_service_no_user(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        let mut unpublished_track = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+        let mut unpublished_track =
+            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
         unpublished_track.published_at = None;
         unpublished_track.clone().update(&pool).await.unwrap();
 
-        let tracks = get_tracks_service(&pool, None, artist.slug.clone(), release.slug.clone()).await.unwrap();
+        let tracks = get_tracks_service(&pool, None, artist.slug.clone(), release.slug.clone())
+            .await
+            .unwrap();
 
         assert_eq!(tracks.tracks.len(), 1);
         assert_eq!(tracks.tracks[0].id, track.id);
@@ -357,16 +440,30 @@ mod tests {
         let (user, _) = create_test_user(&pool, 1).await.unwrap().into_user(None);
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        let mut unpublished_track = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+        let mut unpublished_track =
+            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
         unpublished_track.published_at = None;
         unpublished_track.clone().update(&pool).await.unwrap();
 
-        let tracks = get_tracks_service(&pool, Some(&user), artist.slug.clone(), release.slug.clone())
-            .await
-            .unwrap();
+        let tracks = get_tracks_service(
+            &pool,
+            Some(&user),
+            artist.slug.clone(),
+            release.slug.clone(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(tracks.tracks.len(), 1);
         assert_eq!(tracks.tracks[0].id, track.id);
@@ -375,16 +472,30 @@ mod tests {
     #[sqlx::test]
     async fn test_get_track_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
-
-        let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone())).await.unwrap();
-
-        let track_result = get_track_service(&pool, Some(&user), artist.slug.clone(), release.slug.clone(), track.slug.clone())
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
             .await
             .unwrap();
+
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+
+        let track_result = get_track_service(
+            &pool,
+            Some(&user),
+            artist.slug.clone(),
+            release.slug.clone(),
+            track.slug.clone(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(track_result.track.id, track.id);
     }
@@ -392,12 +503,21 @@ mod tests {
     #[sqlx::test]
     async fn test_get_track_service_no_permission(pool: PgPool) {
         let permissions = vec![];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-        let mut unpublished_track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let mut unpublished_track =
+            create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
         unpublished_track.published_at = None;
         unpublished_track.clone().update(&pool).await.unwrap();
 
@@ -420,11 +540,17 @@ mod tests {
     #[sqlx::test]
     async fn test_create_track_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user: User = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user: User = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
 
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
@@ -437,11 +563,16 @@ mod tests {
             release_ids: release.id.to_string(),
         };
 
-        let track_result = create_track_service(&pool, Some(&user), form.clone()).await.unwrap();
+        let track_result = create_track_service(&pool, Some(&user), form.clone())
+            .await
+            .unwrap();
         assert_eq!(track_result.track.name, "Test Track");
         assert_eq!(track_result.track.description, "Test Track Description");
         assert_eq!(track_result.track.primary_artist_id, artist.id);
-        assert_eq!(track_result.track.isrc_code, Some("UKUTX2020123".to_string()));
+        assert_eq!(
+            track_result.track.isrc_code,
+            Some("UKUTX2020123".to_string())
+        );
         assert_eq!(track_result.track.bpm, Some(120));
         assert!(track_result.track.published_at.is_some());
         assert_eq!(track_result.artists.len(), 1);
@@ -453,11 +584,17 @@ mod tests {
     #[sqlx::test]
     async fn test_create_track_service_no_permision(pool: PgPool) {
         let permissions = vec![];
-        let user: User = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user: User = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
 
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
@@ -481,11 +618,17 @@ mod tests {
     #[sqlx::test]
     async fn test_update_track_service_no_permission(pool: PgPool) {
         let permissions = vec![];
-        let user: User = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user: User = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
 
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
@@ -509,12 +652,20 @@ mod tests {
     #[sqlx::test]
     async fn test_update_track_service(pool: PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user: User = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user: User = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-        let release2 = create_test_release(&pool, 2, Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let release2 = create_test_release(&pool, 2, Some(artist.clone()))
+            .await
+            .unwrap();
 
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
@@ -553,7 +704,10 @@ mod tests {
         assert_eq!(updated_track.track.name, "Updated Track");
         assert_eq!(updated_track.track.description, "Updated Track Description");
         assert_eq!(updated_track.track.primary_artist_id, artist.id);
-        assert_eq!(updated_track.track.isrc_code, Some("UKUTX2025321".to_string()));
+        assert_eq!(
+            updated_track.track.isrc_code,
+            Some("UKUTX2025321".to_string())
+        );
         assert_eq!(updated_track.track.bpm, Some(130));
         assert!(updated_track.track.published_at.is_some());
         assert_eq!(updated_track.artists, vec![artist]);
@@ -563,11 +717,17 @@ mod tests {
     #[sqlx::test]
     pub fn delete_track(pool: sqlx::PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user: User = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user: User = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
 
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
@@ -584,10 +744,18 @@ mod tests {
         assert!(track_result.is_ok());
         let track = track_result.unwrap();
 
-        let delete_result = delete_track_service(&pool, Some(&user), track.track.slug.clone()).await;
+        let delete_result =
+            delete_track_service(&pool, Some(&user), track.track.slug.clone()).await;
         assert!(delete_result.is_ok());
 
-        let get_result = get_track_service(&pool, Some(&user), artist.slug, release.slug, track.track.slug).await;
+        let get_result = get_track_service(
+            &pool,
+            Some(&user),
+            artist.slug,
+            release.slug,
+            track.track.slug,
+        )
+        .await;
         assert!(get_result.is_ok());
         assert!(get_result.unwrap().track.deleted_at.is_some());
     }
@@ -595,7 +763,9 @@ mod tests {
     #[sqlx::test]
     pub fn delete_track_not_found(pool: sqlx::PgPool) {
         let permissions = vec!["admin", "label_owner"];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let delete_result = delete_track_service(&pool, Some(&user), "not-found".to_string()).await;
         assert!(delete_result.is_err());
@@ -608,12 +778,20 @@ mod tests {
     #[sqlx::test]
     pub fn delete_service_no_permission(pool: sqlx::PgPool) {
         let permissions = vec![];
-        let user = create_test_user_with_permissions(&pool, 1, permissions).await.unwrap();
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
 
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
 
         let delete_result = delete_track_service(&pool, Some(&user), track.slug.clone()).await;
         assert_eq!(
@@ -621,7 +799,8 @@ mod tests {
             "error running server function: You do not have permission.".to_string()
         );
 
-        let get_result = get_track_service(&pool, Some(&user), artist.slug, release.slug, track.slug).await;
+        let get_result =
+            get_track_service(&pool, Some(&user), artist.slug, release.slug, track.slug).await;
         assert!(get_result.is_ok());
     }
 }

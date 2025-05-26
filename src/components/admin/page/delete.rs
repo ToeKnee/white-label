@@ -25,7 +25,12 @@ pub fn DeletePage(page: Page) -> impl IntoView {
     };
 
     let update_page = ServerAction::<DeletePage>::new();
-    let value = Signal::derive(move || update_page.value().get().unwrap_or_else(|| Ok(PageResult::default())));
+    let value = Signal::derive(move || {
+        update_page
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(PageResult::default()))
+    });
 
     view! {
         <button class="btn btn-error" on:click=on_click_show>

@@ -5,7 +5,10 @@ use server_fn::codec::Cbor;
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
 use crate::models::{artist::Artist, release::Release, track::Track};
 #[cfg(feature = "ssr")]
-use crate::services::track::{create_track_service, delete_track_service, get_track_service, get_tracks_service, update_track_service};
+use crate::services::track::{
+    create_track_service, delete_track_service, get_track_service, get_tracks_service,
+    update_track_service,
+};
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
@@ -22,7 +25,10 @@ pub struct TrackResult {
 }
 
 #[server(GetTracks, "/api", endpoint="get_tracks", output = Cbor)]
-pub async fn get_tracks(artist_slug: String, release_slug: String) -> Result<TracksResult, ServerFnError> {
+pub async fn get_tracks(
+    artist_slug: String,
+    release_slug: String,
+) -> Result<TracksResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
@@ -30,7 +36,11 @@ pub async fn get_tracks(artist_slug: String, release_slug: String) -> Result<Tra
 }
 
 #[server(GetTrack, "/api", endpoint="get_track", output = Cbor)]
-pub async fn get_track(artist_slug: String, release_slug: String, slug: String) -> Result<TrackResult, ServerFnError> {
+pub async fn get_track(
+    artist_slug: String,
+    release_slug: String,
+    slug: String,
+) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();

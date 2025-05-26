@@ -2,7 +2,10 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use reactive_stores::Store;
 
-use crate::components::utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success};
+use crate::components::utils::{
+    error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect,
+    success::Success,
+};
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::LabelResult;
 use crate::routes::record_label::UpdateRecordLabel;
@@ -10,6 +13,7 @@ use crate::store::{GlobalState, GlobalStateStoreFields};
 
 /// Renders the edit record label page.
 #[component]
+#[allow(clippy::too_many_lines)] // components are a pain to make smaller
 pub fn EditLabel() -> impl IntoView {
     Effect::new_isomorphic(move || {
         permission_or_redirect("label_owner", "/admin");
@@ -17,7 +21,12 @@ pub fn EditLabel() -> impl IntoView {
 
     let store = expect_context::<Store<GlobalState>>();
     let update_record_label = ServerAction::<UpdateRecordLabel>::new();
-    let value = Signal::derive(move || update_record_label.value().get().unwrap_or_else(|| Ok(LabelResult::default())));
+    let value = Signal::derive(move || {
+        update_record_label
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(LabelResult::default()))
+    });
     let (success, set_success) = signal(false);
 
     let var_name = view! {
@@ -120,7 +129,10 @@ pub fn DescriptionFields(record_label: RecordLabel) -> impl IntoView {
     let (description, set_description) = signal(record_label.description);
     let (markdown_description, set_markdown_description) = signal(String::new());
     Effect::new(move || {
-        set_markdown_description.set(markdown::to_html_with_options(&description.get(), &markdown::Options::gfm()).unwrap_or_default());
+        set_markdown_description.set(
+            markdown::to_html_with_options(&description.get(), &markdown::Options::gfm())
+                .unwrap_or_default(),
+        );
     });
 
     view! {

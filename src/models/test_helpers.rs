@@ -25,7 +25,11 @@ use crate::models::track::Track;
 /// If the artist cannot be created, panic
 /// If the record label is not found or cannot be created, panic
 #[cfg(feature = "ssr")]
-pub async fn create_test_artist(pool: &PgPool, id: usize, record_label: Option<RecordLabel>) -> Result<Artist, sqlx::Error> {
+pub async fn create_test_artist(
+    pool: &PgPool,
+    id: usize,
+    record_label: Option<RecordLabel>,
+) -> Result<Artist, sqlx::Error> {
     let record_label = match record_label {
         Some(label) => label,
         None => create_test_record_label(pool, id).await.unwrap(),
@@ -60,7 +64,11 @@ pub async fn create_test_artist(pool: &PgPool, id: usize, record_label: Option<R
 /// If the page cannot be created, panic
 /// If the record label is not found or cannot be created, panic
 #[cfg(feature = "ssr")]
-pub async fn create_test_page(pool: &PgPool, id: usize, record_label: Option<RecordLabel>) -> Result<Page, sqlx::Error> {
+pub async fn create_test_page(
+    pool: &PgPool,
+    id: usize,
+    record_label: Option<RecordLabel>,
+) -> Result<Page, sqlx::Error> {
     let record_label = match record_label {
         Some(label) => label,
         None => create_test_record_label(pool, id).await.unwrap(),
@@ -95,7 +103,10 @@ pub async fn create_test_page(pool: &PgPool, id: usize, record_label: Option<Rec
 /// # Panics
 /// If the record label cannot be created, panic
 #[cfg(feature = "ssr")]
-pub async fn create_test_record_label(pool: &PgPool, id: usize) -> Result<RecordLabel, sqlx::Error> {
+pub async fn create_test_record_label(
+    pool: &PgPool,
+    id: usize,
+) -> Result<RecordLabel, sqlx::Error> {
     let label = sqlx::query_as::<_, RecordLabel>("INSERT INTO labels (name, slug, description, isrc_base) VALUES ($1, $2, $3, $4) RETURNING *")
         .bind(format!("Test Record Label {id}"))
         .bind(format!("test-record-label-{id}"))
@@ -124,7 +135,11 @@ pub async fn create_test_record_label(pool: &PgPool, id: usize) -> Result<Record
 /// If the release cannot be created, panic
 /// If the record label is not found or cannot be created, panic
 #[cfg(feature = "ssr")]
-pub async fn create_test_release(pool: &PgPool, id: usize, artist: Option<Artist>) -> Result<Release, sqlx::Error> {
+pub async fn create_test_release(
+    pool: &PgPool,
+    id: usize,
+    artist: Option<Artist>,
+) -> Result<Release, sqlx::Error> {
     let artist = match artist {
         Some(artist) => artist,
         None => create_test_artist(pool, id, None).await.unwrap(),
@@ -144,11 +159,13 @@ pub async fn create_test_release(pool: &PgPool, id: usize, artist: Option<Artist
     .fetch_one(pool)
     .await?;
 
-    let _release_artists = sqlx::query("INSERT INTO release_artists (release_id, artist_id) VALUES ($1, $2) RETURNING *")
-        .bind(release.id)
-        .bind(artist.id)
-        .fetch_one(pool)
-        .await?;
+    let _release_artists = sqlx::query(
+        "INSERT INTO release_artists (release_id, artist_id) VALUES ($1, $2) RETURNING *",
+    )
+    .bind(release.id)
+    .bind(artist.id)
+    .fetch_one(pool)
+    .await?;
 
     Ok(release)
 }
@@ -172,12 +189,19 @@ pub async fn create_test_release(pool: &PgPool, id: usize, artist: Option<Artist
 /// If the release is not found or cannot be created, panic
 /// If the artist is not found or cannot be created, panic
 #[cfg(feature = "ssr")]
-pub async fn create_test_track(pool: &PgPool, id: usize, release: Option<Release>, artist: Option<Artist>) -> Result<Track, sqlx::Error> {
+pub async fn create_test_track(
+    pool: &PgPool,
+    id: usize,
+    release: Option<Release>,
+    artist: Option<Artist>,
+) -> Result<Track, sqlx::Error> {
     let artist = match artist {
         Some(artist) => artist,
         None => {
             if release.is_some() {
-                Artist::get_by_id(pool, release.clone().unwrap().primary_artist_id).await.unwrap()
+                Artist::get_by_id(pool, release.clone().unwrap().primary_artist_id)
+                    .await
+                    .unwrap()
             } else {
                 create_test_artist(pool, id, None).await.unwrap()
             }
@@ -185,7 +209,9 @@ pub async fn create_test_track(pool: &PgPool, id: usize, release: Option<Release
     };
     let release = match release {
         Some(release) => release,
-        None => create_test_release(pool, id, Some(artist.clone())).await.unwrap(),
+        None => create_test_release(pool, id, Some(artist.clone()))
+            .await
+            .unwrap(),
     };
 
     let isrc_code = format!("UKUTX25{id:0>5}");
@@ -200,17 +226,20 @@ pub async fn create_test_track(pool: &PgPool, id: usize, release: Option<Release
         .fetch_one(pool)
         .await?;
 
-    let _track_artists = sqlx::query("INSERT INTO track_artists (track_id, artist_id) VALUES ($1, $2) RETURNING *")
-        .bind(track.id)
-        .bind(artist.id)
-        .fetch_one(pool)
-        .await?;
+    let _track_artists =
+        sqlx::query("INSERT INTO track_artists (track_id, artist_id) VALUES ($1, $2) RETURNING *")
+            .bind(track.id)
+            .bind(artist.id)
+            .fetch_one(pool)
+            .await?;
 
-    let _track_releases = sqlx::query("INSERT INTO release_tracks (release_id, track_id) VALUES ($1, $2) RETURNING *")
-        .bind(release.id)
-        .bind(track.id)
-        .fetch_one(pool)
-        .await?;
+    let _track_releases = sqlx::query(
+        "INSERT INTO release_tracks (release_id, track_id) VALUES ($1, $2) RETURNING *",
+    )
+    .bind(release.id)
+    .bind(track.id)
+    .fetch_one(pool)
+    .await?;
 
     Ok(track)
 }
@@ -231,12 +260,14 @@ pub async fn create_test_track(pool: &PgPool, id: usize, release: Option<Release
 /// If the user cannot be created, panic
 #[cfg(feature = "ssr")]
 pub async fn create_test_user(pool: &PgPool, id: usize) -> Result<SqlUser, sqlx::Error> {
-    let user = sqlx::query_as::<_, SqlUser>("INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *")
-        .bind(format!("test-{id}"))
-        .bind(format!("test-{id}@example.com"))
-        .bind("$2b$12$bvHwxi3jnJC6/nzyFmKKBOZPHo/kn5KHPKxTeG0wiGOUlKuYYjZH.") // This is a valid bcrypt hash for the word "password"
-        .fetch_one(pool)
-        .await?;
+    let user = sqlx::query_as::<_, SqlUser>(
+        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *",
+    )
+    .bind(format!("test-{id}"))
+    .bind(format!("test-{id}@example.com"))
+    .bind("$2b$12$bvHwxi3jnJC6/nzyFmKKBOZPHo/kn5KHPKxTeG0wiGOUlKuYYjZH.") // This is a valid bcrypt hash for the word "password"
+    .fetch_one(pool)
+    .await?;
 
     Ok(user)
 }
@@ -258,16 +289,22 @@ pub async fn create_test_user(pool: &PgPool, id: usize) -> Result<SqlUser, sqlx:
 /// # Panics
 /// If the user cannot be created, panic
 #[cfg(feature = "ssr")]
-pub async fn create_test_user_with_permissions(pool: &PgPool, id: usize, permissions: Vec<&str>) -> Result<User, sqlx::Error> {
+pub async fn create_test_user_with_permissions(
+    pool: &PgPool,
+    id: usize,
+    permissions: Vec<&str>,
+) -> Result<User, sqlx::Error> {
     let user = create_test_user(pool, id).await.unwrap();
 
     let mut permission_tokens = vec![];
     for permission in permissions.clone() {
-        let token = sqlx::query_as::<_, SqlPermissionTokens>("INSERT INTO user_permissions (user_id, token) VALUES ($1, $2) RETURNING *")
-            .bind(user.id)
-            .bind(permission)
-            .fetch_one(pool)
-            .await?;
+        let token = sqlx::query_as::<_, SqlPermissionTokens>(
+            "INSERT INTO user_permissions (user_id, token) VALUES ($1, $2) RETURNING *",
+        )
+        .bind(user.id)
+        .bind(permission)
+        .fetch_one(pool)
+        .await?;
         permission_tokens.push(token);
     }
 

@@ -24,7 +24,12 @@ pub fn file_extension(file_name: &str) -> Option<&str> {
 /// # Errors
 /// - If the file already exists and `file_exists_ok` is false, it will return an error.
 #[cfg(feature = "ssr")]
-pub fn valid_file_name(file_name: &str, rename: Option<String>, path: &str, overwrite_existing_file: bool) -> Result<String, ServerFnError> {
+pub fn valid_file_name(
+    file_name: &str,
+    rename: Option<String>,
+    path: &str,
+    overwrite_existing_file: bool,
+) -> Result<String, ServerFnError> {
     let mut name = file_name.to_string();
 
     match rename {

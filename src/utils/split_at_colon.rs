@@ -28,11 +28,17 @@ mod tests {
 
     #[test]
     fn test_split_string_with_colon_and_spaces_and_newlines() {
-        assert_eq!(split_at_colon("A\n : \nB"), ("A".to_string(), "B".to_string()));
+        assert_eq!(
+            split_at_colon("A\n : \nB"),
+            ("A".to_string(), "B".to_string())
+        );
     }
 
     #[test]
     fn test_split_string_with_multiple_colons() {
-        assert_eq!(split_at_colon("A:B:C"), ("A".to_string(), "B:C".to_string()));
+        assert_eq!(
+            split_at_colon("A:B:C"),
+            ("A".to_string(), "B:C".to_string())
+        );
     }
 }

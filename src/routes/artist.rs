@@ -6,7 +6,9 @@ use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
 use crate::models::artist::Artist;
 
 #[cfg(feature = "ssr")]
-use crate::services::artist::{create_artist_service, delete_artist_service, get_artist_service, update_artist_service};
+use crate::services::artist::{
+    create_artist_service, delete_artist_service, get_artist_service, update_artist_service,
+};
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 

@@ -6,7 +6,11 @@ use leptos::prelude::*;
 /// datetime-local input is used to allow the user to select a date and time, but this can't have a time zone.
 /// To work around this, we add the current time zone to the input value.
 #[component]
-pub fn DateField<'a>(title: String, field: &'a str, date: Option<chrono::DateTime<chrono::Utc>>) -> impl IntoView {
+pub fn DateField<'a>(
+    title: String,
+    field: &'a str,
+    date: Option<chrono::DateTime<chrono::Utc>>,
+) -> impl IntoView {
     let date = RwSignal::new(date);
     let name = RwSignal::new(format!("local_{field}"));
     view! {

@@ -106,10 +106,10 @@ pub fn ReleaseList(artist_slug: String, releases: RwSignal<Vec<Release>>) -> imp
 pub fn Release(#[prop(into)] release: Release, artist_slug: RwSignal<String>) -> impl IntoView {
     let release = RwSignal::new(release);
     let release_date = move || {
-        release
-            .get()
-            .release_date
-            .map_or_else(|| "Unreleased".to_string(), |date| date.format("%e %B %Y").to_string())
+        release.get().release_date.map_or_else(
+            || "Unreleased".to_string(),
+            |date| date.format("%e %B %Y").to_string(),
+        )
     };
 
     view! {

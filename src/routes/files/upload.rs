@@ -29,7 +29,9 @@ fn upload_details(config_str: &str) -> Result<UploadDetails, ServerFnError> {
         Ok(config) => config,
         Err(e) => {
             tracing::error!("Invalid upload configuration: {e}");
-            return Err(ServerFnError::new("Invalid upload configuration.".to_string()));
+            return Err(ServerFnError::new(
+                "Invalid upload configuration.".to_string(),
+            ));
         }
     };
 
@@ -90,7 +92,11 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
 
     let auth = auth()?;
     // Convert vector of String to vector of &str
-    let permissions = upload_details.permissions.iter().map(std::string::String::as_str).collect();
+    let permissions = upload_details
+        .permissions
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let user = match user_with_permissions(auth.current_user.as_ref(), permissions) {
         Ok(user) => user,
         Err(e) => return Err(ServerFnError::new(e)),
@@ -106,7 +112,10 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
                 // Check the content type of the field.
                 match field.content_type() {
                     Some(content_type) => {
-                        if !upload_details.mime_types.contains(&content_type.to_string()) {
+                        if !upload_details
+                            .mime_types
+                            .contains(&content_type.to_string())
+                        {
                             return Err(ServerFnError::new("Invalid mime type.".to_string()));
                         }
                     }
@@ -122,7 +131,12 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
                     }
                 };
 
-                let file_name = match valid_file_name(&original_file_name, Some(slug_field.clone()), &upload_details.path, true) {
+                let file_name = match valid_file_name(
+                    &original_file_name,
+                    Some(slug_field.clone()),
+                    &upload_details.path,
+                    true,
+                ) {
                     Ok(name) => name,
                     Err(e) => return Err(e),
                 };
@@ -155,7 +169,8 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
                         }
                         Ok(Some(chunk)) => {
                             let len = chunk.len();
-                            let total_so_far = add_chunk(&original_file_name, len, &user.username).await;
+                            let total_so_far =
+                                add_chunk(&original_file_name, len, &user.username).await;
 
                             if total_so_far > upload_details.size_limit {
                                 // Delete file and return error
@@ -233,7 +248,11 @@ async fn finalise_file_upload(
 /// - Unable to get the user from the database
 /// - Unable to to update the user
 #[cfg(feature = "ssr")]
-async fn store_file_to_object(file_name: &str, upload_config_type: &str, slug_field: &str) -> Result<(), ServerFnError> {
+async fn store_file_to_object(
+    file_name: &str,
+    upload_config_type: &str,
+    slug_field: &str,
+) -> Result<(), ServerFnError> {
     if upload_config_type == "Artist" {
         store_artist_primary_image(file_name, slug_field).await?;
     } else if upload_config_type == "Avatar" {
@@ -241,19 +260,25 @@ async fn store_file_to_object(file_name: &str, upload_config_type: &str, slug_fi
     } else if upload_config_type == "Release" {
         store_release(file_name, slug_field).await?;
     } else {
-        return Err(ServerFnError::new("Invalid upload configuration.".to_string()));
+        return Err(ServerFnError::new(
+            "Invalid upload configuration.".to_string(),
+        ));
     }
     Ok(())
 }
 
 #[cfg(feature = "ssr")]
-async fn store_artist_primary_image(file_name: &str, slug_field: &str) -> Result<(), ServerFnError> {
+async fn store_artist_primary_image(
+    file_name: &str,
+    slug_field: &str,
+) -> Result<(), ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;
-    let _user = match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"]) {
-        Ok(user) => user,
-        Err(e) => return Err(ServerFnError::new(e)),
-    };
+    let _user =
+        match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"]) {
+            Ok(user) => user,
+            Err(e) => return Err(ServerFnError::new(e)),
+        };
 
     // Store the file to the artist
     let mut artist = match Artist::get_by_slug(&pool, slug_field.to_string()).await {
@@ -312,10 +337,11 @@ async fn store_avatar(file_name: &str, slug_field: &str) -> Result<(), ServerFnE
 async fn store_release(file_name: &str, slug_field: &str) -> Result<(), ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;
-    let _user = match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"]) {
-        Ok(user) => user,
-        Err(e) => return Err(ServerFnError::new(e)),
-    };
+    let _user =
+        match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"]) {
+            Ok(user) => user,
+            Err(e) => return Err(ServerFnError::new(e)),
+        };
 
     // Store the file to the artist
     let mut release = match Release::get_by_slug(&pool, slug_field.to_string()).await {
@@ -349,7 +375,8 @@ pub async fn file_progress(filename: String) -> Result<TextStream, ServerFnError
     use futures::StreamExt;
 
     let auth = auth()?;
-    let user = match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"]) {
+    let user = match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"])
+    {
         Ok(user) => user,
         Err(e) => return Err(ServerFnError::new(e)),
     };

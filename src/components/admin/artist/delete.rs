@@ -25,7 +25,12 @@ pub fn DeleteArtist(artist: Artist) -> impl IntoView {
     };
 
     let update_artist = ServerAction::<DeleteArtist>::new();
-    let value = Signal::derive(move || update_artist.value().get().unwrap_or_else(|| Ok(ArtistResult::default())));
+    let value = Signal::derive(move || {
+        update_artist
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(ArtistResult::default()))
+    });
 
     view! {
         <button class="btn btn-error" on:click=on_click_show>

@@ -49,11 +49,15 @@ impl Validate for Page {
             return Err(anyhow::anyhow!("Name is required."));
         }
         if self.name.len() > 255 {
-            return Err(anyhow::anyhow!("Name must be less than 255 characters.".to_string()));
+            return Err(anyhow::anyhow!(
+                "Name must be less than 255 characters.".to_string()
+            ));
         }
 
         if self.slug.len() > 255 {
-            return Err(anyhow::anyhow!("Slug must be less than 255 characters.".to_string()));
+            return Err(anyhow::anyhow!(
+                "Slug must be less than 255 characters.".to_string()
+            ));
         }
         // Check that the slug is unique
         if let Ok(page) = Self::get_by_slug(pool, self.slug.clone()).await {
@@ -64,13 +68,18 @@ impl Validate for Page {
 
         // Check that the description is less than 255 characters
         if self.description.len() > 255 {
-            return Err(anyhow::anyhow!("Description must be less than 255 characters.".to_string()));
+            return Err(anyhow::anyhow!(
+                "Description must be less than 255 characters.".to_string()
+            ));
         }
 
         // Check that the record label exists
         if let Err(e) = RecordLabel::get_by_id(pool, self.label_id).await {
             tracing::error!("{e}");
-            return Err(anyhow::anyhow!("Record Label with id {} does not exist.", self.label_id));
+            return Err(anyhow::anyhow!(
+                "Record Label with id {} does not exist.",
+                self.label_id
+            ));
         }
 
         Ok(())
@@ -226,17 +235,21 @@ impl Page {
     /// If the page cannot be deleted, return an error
     #[cfg(feature = "ssr")]
     pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<Self> {
-        let page = sqlx::query_as::<_, Self>("UPDATE pages SET deleted_at = $1 WHERE id = $2 RETURNING *")
-            .bind(chrono::Utc::now())
-            .bind(self.id)
-            .fetch_one(pool)
-            .await;
+        let page =
+            sqlx::query_as::<_, Self>("UPDATE pages SET deleted_at = $1 WHERE id = $2 RETURNING *")
+                .bind(chrono::Utc::now())
+                .bind(self.id)
+                .fetch_one(pool)
+                .await;
 
         match page {
             Ok(page) => Ok(page),
             Err(e) => {
                 eprintln!("{e}");
-                Err(anyhow::anyhow!("Could not delete page with id {}.", self.id))
+                Err(anyhow::anyhow!(
+                    "Could not delete page with id {}.",
+                    self.id
+                ))
             }
         }
     }
@@ -309,7 +322,10 @@ mod tests {
         let result = page.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -331,7 +347,10 @@ mod tests {
         let result = page.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Name must be less than 255 characters.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Name must be less than 255 characters.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -353,7 +372,10 @@ mod tests {
         let result = page.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Slug must be less than 255 characters.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Slug must be less than 255 characters.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -366,7 +388,10 @@ mod tests {
         let result = new_page.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Slug must be unique.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Slug must be unique.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -412,7 +437,10 @@ mod tests {
         let result = page.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Record Label with id 1 does not exist.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Record Label with id 1 does not exist.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -449,7 +477,10 @@ mod tests {
         .await;
 
         assert!(page.is_err());
-        assert_eq!(page.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            page.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -465,7 +496,10 @@ mod tests {
         let page = Page::get_by_slug(&pool, "missing".to_string()).await;
 
         assert!(page.is_err());
-        assert_eq!(page.unwrap_err().to_string(), "Could not find page with slug missing.".to_string());
+        assert_eq!(
+            page.unwrap_err().to_string(),
+            "Could not find page with slug missing.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -479,8 +513,14 @@ mod tests {
         let updated_page = update_page.update(&pool).await.unwrap();
         assert_eq!(updated_page.name, "Updated Page".to_string());
         assert_eq!(updated_page.slug, "updated-page".to_string());
-        assert_eq!(updated_page.description, "This is an updated page".to_string());
-        assert_eq!(updated_page.body, "This is an updated page body".to_string());
+        assert_eq!(
+            updated_page.description,
+            "This is an updated page".to_string()
+        );
+        assert_eq!(
+            updated_page.body,
+            "This is an updated page body".to_string()
+        );
         assert_ne!(updated_page.updated_at, page.updated_at);
     }
 
@@ -492,7 +532,10 @@ mod tests {
         let updated_page = update_page.update(&pool).await;
 
         assert!(updated_page.is_err());
-        assert_eq!(updated_page.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            updated_page.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -508,6 +551,9 @@ mod tests {
         let result = page.delete(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Could not delete page with id 0.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not delete page with id 0.".to_string()
+        );
     }
 }

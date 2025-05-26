@@ -4,7 +4,10 @@ use leptos_router::hooks::use_params_map;
 
 use crate::components::{
     admin::artist::menu::{Menu, Page},
-    utils::{error::ErrorPage, loading::Loading, permissions::permission_or_redirect, status_badge::StatusBadge},
+    utils::{
+        error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
+        status_badge::StatusBadge,
+    },
 };
 use crate::models::{artist::Artist, release::Release, track::Track};
 use crate::routes::{artist::get_artist, release::get_release, track::get_tracks};
@@ -152,7 +155,11 @@ pub fn Tracks() -> impl IntoView {
 }
 
 #[component]
-fn TrackRow(#[prop(into)] track: Track, artist_slug: String, release_slug: String) -> impl IntoView {
+fn TrackRow(
+    #[prop(into)] track: Track,
+    artist_slug: String,
+    release_slug: String,
+) -> impl IntoView {
     view! {
         <tr>
             <td>

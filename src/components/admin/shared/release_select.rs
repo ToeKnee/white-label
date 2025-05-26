@@ -15,14 +15,24 @@ fn toggle_release_id(release_ids: RwSignal<Vec<i64>>, release_id: i64) {
 }
 
 fn ids_to_str(ids: &[i64]) -> String {
-    ids.iter().map(std::string::ToString::to_string).collect::<Vec<_>>().join(",")
+    ids.iter()
+        .map(std::string::ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 #[component]
 #[allow(clippy::needless_pass_by_value)]
-pub fn ReleaseSelect(artist_ids: Vec<i64>, primary_release: Release, initial_release_ids: Vec<i64>) -> impl IntoView {
+pub fn ReleaseSelect(
+    artist_ids: Vec<i64>,
+    primary_release: Release,
+    initial_release_ids: Vec<i64>,
+) -> impl IntoView {
     let (releases, set_releases) = signal(vec![]);
-    let releases_resource = Resource::new(move || ids_to_str(&artist_ids.clone()), get_releases_for_artists);
+    let releases_resource = Resource::new(
+        move || ids_to_str(&artist_ids.clone()),
+        get_releases_for_artists,
+    );
     let release_ids = RwSignal::new(initial_release_ids);
 
     Effect::new_isomorphic(move || {

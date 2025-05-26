@@ -49,11 +49,15 @@ impl Validate for Artist {
             return Err(anyhow::anyhow!("Name is required."));
         }
         if self.name.len() > 255 {
-            return Err(anyhow::anyhow!("Name must be less than 255 characters.".to_string()));
+            return Err(anyhow::anyhow!(
+                "Name must be less than 255 characters.".to_string()
+            ));
         }
 
         if self.slug.len() > 255 {
-            return Err(anyhow::anyhow!("Slug must be less than 255 characters.".to_string()));
+            return Err(anyhow::anyhow!(
+                "Slug must be less than 255 characters.".to_string()
+            ));
         }
         // Check that the slug is unique
         if let Ok(artist) = Self::get_by_slug(pool, self.slug.clone()).await {
@@ -65,7 +69,10 @@ impl Validate for Artist {
         // Check that the record label exists
         if let Err(e) = RecordLabel::get_by_id(pool, self.label_id).await {
             tracing::error!("{e}");
-            return Err(anyhow::anyhow!("Record Label with id {} does not exist.", self.label_id));
+            return Err(anyhow::anyhow!(
+                "Record Label with id {} does not exist.",
+                self.label_id
+            ));
         }
 
         Ok(())
@@ -76,7 +83,10 @@ impl Artist {
     /// Get the primary image URL
     /// If the primary image is None, return the default image
     pub fn primary_image_url(&self) -> String {
-        let primary_image_file = self.primary_image.clone().unwrap_or_else(|| "default-artist.jpg".to_string());
+        let primary_image_file = self
+            .primary_image
+            .clone()
+            .unwrap_or_else(|| "default-artist.jpg".to_string());
         format!("/uploads/artists/{primary_image_file}")
     }
 
@@ -145,7 +155,10 @@ impl Artist {
     /// If the artist cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
-        let row = sqlx::query("SELECT * FROM artists WHERE id = $1").bind(id).fetch_one(pool).await;
+        let row = sqlx::query("SELECT * FROM artists WHERE id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await;
 
         let row = match row {
             Ok(row) => row,
@@ -261,17 +274,22 @@ impl Artist {
     /// If the artist cannot be deleted, return an error
     #[cfg(feature = "ssr")]
     pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<Self> {
-        let artist = sqlx::query_as::<_, Self>("UPDATE artists SET deleted_at = $1 WHERE id = $2 RETURNING *")
-            .bind(chrono::Utc::now())
-            .bind(self.id)
-            .fetch_one(pool)
-            .await;
+        let artist = sqlx::query_as::<_, Self>(
+            "UPDATE artists SET deleted_at = $1 WHERE id = $2 RETURNING *",
+        )
+        .bind(chrono::Utc::now())
+        .bind(self.id)
+        .fetch_one(pool)
+        .await;
 
         match artist {
             Ok(artist) => Ok(artist),
             Err(e) => {
                 eprintln!("{e}");
-                Err(anyhow::anyhow!("Could not delete artist with id {}.", self.id))
+                Err(anyhow::anyhow!(
+                    "Could not delete artist with id {}.",
+                    self.id
+                ))
             }
         }
     }
@@ -344,7 +362,10 @@ mod tests {
         let result = artist.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -366,7 +387,10 @@ mod tests {
         let result = artist.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Name must be less than 255 characters.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Name must be less than 255 characters.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -388,7 +412,10 @@ mod tests {
         let result = artist.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Slug must be less than 255 characters.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Slug must be less than 255 characters.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -401,7 +428,10 @@ mod tests {
         let result = new_artist.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Slug must be unique.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Slug must be unique.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -422,7 +452,10 @@ mod tests {
         let result = artist.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Record Label with id 1 does not exist.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Record Label with id 1 does not exist.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -455,7 +488,10 @@ mod tests {
         .await;
 
         assert!(artist.is_err());
-        assert_eq!(artist.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            artist.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -471,13 +507,18 @@ mod tests {
         let artist = Artist::get_by_id(&pool, 0).await;
 
         assert!(artist.is_err());
-        assert_eq!(artist.unwrap_err().to_string(), "Could not find artist with id 0.".to_string());
+        assert_eq!(
+            artist.unwrap_err().to_string(),
+            "Could not find artist with id 0.".to_string()
+        );
     }
 
     #[sqlx::test]
     async fn test_get_by_slug(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
-        let artist_by_slug = Artist::get_by_slug(&pool, artist.slug.clone()).await.unwrap();
+        let artist_by_slug = Artist::get_by_slug(&pool, artist.slug.clone())
+            .await
+            .unwrap();
 
         assert_eq!(artist, artist_by_slug);
     }
@@ -487,7 +528,10 @@ mod tests {
         let artist = Artist::get_by_slug(&pool, "missing".to_string()).await;
 
         assert!(artist.is_err());
-        assert_eq!(artist.unwrap_err().to_string(), "Could not find artist with slug missing.".to_string());
+        assert_eq!(
+            artist.unwrap_err().to_string(),
+            "Could not find artist with slug missing.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -501,8 +545,14 @@ mod tests {
         let updated_artist = update_artist.update(&pool).await.unwrap();
         assert_eq!(updated_artist.name, "Updated Artist".to_string());
         assert_eq!(updated_artist.slug, "updated-artist".to_string());
-        assert_eq!(updated_artist.description, "This is an updated artist".to_string());
-        assert_eq!(updated_artist.primary_image, Some("an-image.jpg".to_string()));
+        assert_eq!(
+            updated_artist.description,
+            "This is an updated artist".to_string()
+        );
+        assert_eq!(
+            updated_artist.primary_image,
+            Some("an-image.jpg".to_string())
+        );
         assert_ne!(updated_artist.updated_at, artist.updated_at);
     }
 
@@ -514,7 +564,10 @@ mod tests {
         let updated_artist = update_artist.update(&pool).await;
 
         assert!(updated_artist.is_err());
-        assert_eq!(updated_artist.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            updated_artist.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -530,6 +583,9 @@ mod tests {
         let result = artist.delete(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Could not delete artist with id 0.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not delete artist with id 0.".to_string()
+        );
     }
 }

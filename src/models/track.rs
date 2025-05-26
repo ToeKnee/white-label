@@ -57,11 +57,15 @@ impl Validate for Track {
             return Err(anyhow::anyhow!("Name is required."));
         }
         if self.name.len() > 255 {
-            return Err(anyhow::anyhow!("Name must be less than 255 characters.".to_string()));
+            return Err(anyhow::anyhow!(
+                "Name must be less than 255 characters.".to_string()
+            ));
         }
 
         if self.slug.len() > 255 {
-            return Err(anyhow::anyhow!("Slug must be less than 255 characters.".to_string()));
+            return Err(anyhow::anyhow!(
+                "Slug must be less than 255 characters.".to_string()
+            ));
         }
         // Check that the slug is unique
         if let Ok(track) = Self::get_by_slug(pool, self.slug.clone()).await {
@@ -73,12 +77,17 @@ impl Validate for Track {
         // Check that the artist referenced in the primary_artist_id exists
         if let Err(e) = Artist::get_by_id(pool, self.primary_artist_id).await {
             tracing::error!("{e}");
-            return Err(anyhow::anyhow!("Artist with id {} does not exist.", self.primary_artist_id));
+            return Err(anyhow::anyhow!(
+                "Artist with id {} does not exist.",
+                self.primary_artist_id
+            ));
         }
 
         if let Some(ref isrc_code) = self.isrc_code {
             if isrc_code.len() != 12 {
-                return Err(anyhow::anyhow!("ISRC code must be 12 characters.".to_string()));
+                return Err(anyhow::anyhow!(
+                    "ISRC code must be 12 characters.".to_string()
+                ));
             }
             // Check that the catalogue number is unique to the record label
             let row = sqlx::query("SELECT * FROM tracks WHERE isrc_code = $1 AND id != $2")
@@ -99,7 +108,10 @@ impl Track {
     /// Get the primary image URL
     /// If the primary image is None, return the default image
     pub fn primary_image_url(&self) -> String {
-        let primary_image_file = self.primary_image.clone().unwrap_or_else(|| "default-track.jpg".to_string());
+        let primary_image_file = self
+            .primary_image
+            .clone()
+            .unwrap_or_else(|| "default-track.jpg".to_string());
         format!("/uploads/tracks/{primary_image_file}")
     }
 
@@ -399,17 +411,22 @@ impl Track {
     /// If the track cannot be deleted, return an error
     #[cfg(feature = "ssr")]
     pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<Self> {
-        let track = sqlx::query_as::<_, Self>("UPDATE tracks SET deleted_at = $1 WHERE id = $2 RETURNING *")
-            .bind(chrono::Utc::now())
-            .bind(self.id)
-            .fetch_one(pool)
-            .await;
+        let track = sqlx::query_as::<_, Self>(
+            "UPDATE tracks SET deleted_at = $1 WHERE id = $2 RETURNING *",
+        )
+        .bind(chrono::Utc::now())
+        .bind(self.id)
+        .fetch_one(pool)
+        .await;
 
         match track {
             Ok(track) => Ok(track),
             Err(e) => {
                 tracing::error!("{e}");
-                Err(anyhow::anyhow!("Could not delete track with id {}.", self.id))
+                Err(anyhow::anyhow!(
+                    "Could not delete track with id {}.",
+                    self.id
+                ))
             }
         }
     }
@@ -450,7 +467,10 @@ impl Track {
                 Ok(_) => (),
                 Err(e) => {
                     tracing::error!("{e}");
-                    return Err(anyhow::anyhow!("Could not set artists for track with id {}.", self.id));
+                    return Err(anyhow::anyhow!(
+                        "Could not set artists for track with id {}.",
+                        self.id
+                    ));
                 }
             }
         }
@@ -522,7 +542,10 @@ impl Track {
                 Ok(_) => (),
                 Err(e) => {
                     tracing::error!("{e}");
-                    return Err(anyhow::anyhow!("Could not set releases for track with id {}.", self.id));
+                    return Err(anyhow::anyhow!(
+                        "Could not set releases for track with id {}.",
+                        self.id
+                    ));
                 }
             }
         }
@@ -565,12 +588,16 @@ mod tests {
     #[cfg(feature = "ssr")]
     use crate::models::record_label::RecordLabel;
     #[cfg(feature = "ssr")]
-    use crate::models::test_helpers::{create_test_artist, create_test_record_label, create_test_release, create_test_track};
+    use crate::models::test_helpers::{
+        create_test_artist, create_test_record_label, create_test_release, create_test_track,
+    };
 
     #[sqlx::test]
     async fn test_validate_success(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
         let track = Track {
             id: 1,
             name: "Test Track".to_string(),
@@ -612,7 +639,10 @@ mod tests {
         let result = track.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -637,7 +667,10 @@ mod tests {
         let result = track.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Name must be less than 255 characters.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Name must be less than 255 characters.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -662,7 +695,10 @@ mod tests {
         let result = track.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Slug must be less than 255 characters.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Slug must be less than 255 characters.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -675,7 +711,10 @@ mod tests {
         let result = new_track.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Slug must be unique.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Slug must be unique.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -698,7 +737,10 @@ mod tests {
         let result = track.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Artist with id 1 does not exist.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Artist with id 1 does not exist.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -724,7 +766,10 @@ mod tests {
         let result = track.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "ISRC code must be 12 characters.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "ISRC code must be 12 characters.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -738,7 +783,10 @@ mod tests {
         let result = new_track.validate(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "ISRC code must be unique.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "ISRC code must be unique.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -775,7 +823,10 @@ mod tests {
         .await;
 
         assert!(track.is_err());
-        assert_eq!(track.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            track.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -791,12 +842,23 @@ mod tests {
         let track = Track::get_by_slug(&pool, "missing".to_string()).await;
 
         assert!(track.is_err());
-        assert_eq!(track.unwrap_err().to_string(), "Could not find track with slug missing.".to_string());
+        assert_eq!(
+            track.unwrap_err().to_string(),
+            "Could not find track with slug missing.".to_string()
+        );
     }
 
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug_no_tracks(pool: PgPool) {
-        let track = Track::get_by_release_and_artist_and_record_label_and_slug(&pool, 1, 1, 1, "test".to_string(), true).await;
+        let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+            &pool,
+            1,
+            1,
+            1,
+            "test".to_string(),
+            true,
+        )
+        .await;
 
         assert!(track.is_err());
         assert_eq!(
@@ -808,21 +870,37 @@ mod tests {
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug(pool: PgPool) {
         let test_track = create_test_track(&pool, 1, None, None).await.unwrap();
-        let track = Track::get_by_release_and_artist_and_record_label_and_slug(&pool, 1, 1, 1, test_track.slug.clone(), true)
-            .await
-            .unwrap();
+        let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+            &pool,
+            1,
+            1,
+            1,
+            test_track.slug.clone(),
+            true,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(track.id, test_track.id);
         assert_eq!(track.slug, test_track.slug);
     }
 
     #[sqlx::test]
-    async fn test_get_by_release_and_artist_and_record_label_and_slug_deleted_track_include_hidden(pool: PgPool) {
+    async fn test_get_by_release_and_artist_and_record_label_and_slug_deleted_track_include_hidden(
+        pool: PgPool,
+    ) {
         let deleted_track = create_test_track(&pool, 1, None, None).await.unwrap();
         deleted_track.delete(&pool).await.unwrap();
-        let track = Track::get_by_release_and_artist_and_record_label_and_slug(&pool, 1, 1, 1, deleted_track.slug.clone(), true)
-            .await
-            .unwrap();
+        let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+            &pool,
+            1,
+            1,
+            1,
+            deleted_track.slug.clone(),
+            true,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(track.id, deleted_track.id);
     }
@@ -831,7 +909,15 @@ mod tests {
     async fn test_get_by_release_and_artist_and_record_label_and_slug_deleted_track(pool: PgPool) {
         let deleted_track = create_test_track(&pool, 1, None, None).await.unwrap();
         deleted_track.delete(&pool).await.unwrap();
-        let track = Track::get_by_release_and_artist_and_record_label_and_slug(&pool, 1, 1, 1, deleted_track.slug.clone(), false).await;
+        let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+            &pool,
+            1,
+            1,
+            1,
+            deleted_track.slug.clone(),
+            false,
+        )
+        .await;
 
         assert!(track.is_err());
         assert_eq!(
@@ -841,24 +927,43 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn test_get_by_release_and_artist_and_record_label_and_slug_unpublished_track_include_hidden(pool: PgPool) {
+    async fn test_get_by_release_and_artist_and_record_label_and_slug_unpublished_track_include_hidden(
+        pool: PgPool,
+    ) {
         let mut unpublished_track = create_test_track(&pool, 1, None, None).await.unwrap();
         unpublished_track.published_at = None;
         unpublished_track.clone().update(&pool).await.unwrap();
-        let track = Track::get_by_release_and_artist_and_record_label_and_slug(&pool, 1, 1, 1, unpublished_track.slug.clone(), true)
-            .await
-            .unwrap();
+        let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+            &pool,
+            1,
+            1,
+            1,
+            unpublished_track.slug.clone(),
+            true,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(track.id, unpublished_track.id);
         assert_eq!(track.slug, unpublished_track.slug);
     }
 
     #[sqlx::test]
-    async fn test_get_by_release_and_artist_and_record_label_and_slug_unpublished_track(pool: PgPool) {
+    async fn test_get_by_release_and_artist_and_record_label_and_slug_unpublished_track(
+        pool: PgPool,
+    ) {
         let mut unpublished_track = create_test_track(&pool, 1, None, None).await.unwrap();
         unpublished_track.published_at = None;
         unpublished_track.clone().update(&pool).await.unwrap();
-        let track = Track::get_by_release_and_artist_and_record_label_and_slug(&pool, 1, 1, 1, unpublished_track.slug.clone(), false).await;
+        let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+            &pool,
+            1,
+            1,
+            1,
+            unpublished_track.slug.clone(),
+            false,
+        )
+        .await;
 
         assert!(track.is_err());
         assert_eq!(
@@ -868,13 +973,22 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn test_get_by_release_and_artist_and_record_label_and_slug_future_track_include_hidden(pool: PgPool) {
+    async fn test_get_by_release_and_artist_and_record_label_and_slug_future_track_include_hidden(
+        pool: PgPool,
+    ) {
         let mut future_track = create_test_track(&pool, 1, None, None).await.unwrap();
         future_track.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
         future_track.clone().update(&pool).await.unwrap();
-        let track = Track::get_by_release_and_artist_and_record_label_and_slug(&pool, 1, 1, 1, future_track.slug.clone(), true)
-            .await
-            .unwrap();
+        let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+            &pool,
+            1,
+            1,
+            1,
+            future_track.slug.clone(),
+            true,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(track.id, future_track.id);
         assert_eq!(track.slug, future_track.slug);
@@ -885,7 +999,15 @@ mod tests {
         let mut future_track = create_test_track(&pool, 1, None, None).await.unwrap();
         future_track.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
         future_track.clone().update(&pool).await.unwrap();
-        let track = Track::get_by_release_and_artist_and_record_label_and_slug(&pool, 1, 1, 1, future_track.slug.clone(), false).await;
+        let track = Track::get_by_release_and_artist_and_record_label_and_slug(
+            &pool,
+            1,
+            1,
+            1,
+            future_track.slug.clone(),
+            false,
+        )
+        .await;
 
         assert!(track.is_err());
         assert_eq!(
@@ -896,7 +1018,9 @@ mod tests {
 
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_no_tracks(pool: PgPool) {
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 1, true).await.unwrap();
+        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 1, true)
+            .await
+            .unwrap();
 
         assert_eq!(tracks.len(), 0);
     }
@@ -904,58 +1028,110 @@ mod tests {
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_with_tracks(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 1, true).await.unwrap();
+        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 1, true)
+            .await
+            .unwrap();
 
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0].id, track.id);
     }
 
     #[sqlx::test]
-    async fn test_list_by_release_and_artist_and_record_label_with_unpublished_tracks(pool: PgPool) {
+    async fn test_list_by_release_and_artist_and_record_label_with_unpublished_tracks(
+        pool: PgPool,
+    ) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let record_label_id = artist.label_id;
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-        let mut unpublished_track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        unpublished_track.published_at = None;
-        unpublished_track.update(&pool).await.unwrap();
-        let mut published_in_future_track = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        published_in_future_track.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
-        published_in_future_track.update(&pool).await.unwrap();
-        let mut published_track = create_test_track(&pool, 3, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        published_track.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
-        published_track.clone().update(&pool).await.unwrap();
-        let deleted_track = create_test_track(&pool, 4, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        deleted_track.delete(&pool).await.unwrap();
-
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, release.id, artist.id, record_label_id, false)
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
             .await
             .unwrap();
+        let mut unpublished_track =
+            create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        unpublished_track.published_at = None;
+        unpublished_track.update(&pool).await.unwrap();
+        let mut published_in_future_track =
+            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        published_in_future_track.published_at =
+            Some(chrono::Utc::now() + chrono::Duration::days(1));
+        published_in_future_track.update(&pool).await.unwrap();
+        let mut published_track =
+            create_test_track(&pool, 3, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        published_track.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        published_track.clone().update(&pool).await.unwrap();
+        let deleted_track =
+            create_test_track(&pool, 4, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        deleted_track.delete(&pool).await.unwrap();
+
+        let tracks = Track::list_by_release_and_artist_and_record_label(
+            &pool,
+            release.id,
+            artist.id,
+            record_label_id,
+            false,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0].id, published_track.id);
     }
 
     #[sqlx::test]
-    async fn test_list_by_release_and_artist_and_record_label_with_unpublished_tracks_show_all(pool: PgPool) {
+    async fn test_list_by_release_and_artist_and_record_label_with_unpublished_tracks_show_all(
+        pool: PgPool,
+    ) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
         let record_label_id = artist.label_id;
-        let release = create_test_release(&pool, 1, Some(artist.clone())).await.unwrap();
-
-        let mut unpublished_track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        unpublished_track.published_at = None;
-        unpublished_track.clone().update(&pool).await.unwrap();
-        let mut published_in_future_track = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        published_in_future_track.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
-        published_in_future_track.clone().update(&pool).await.unwrap();
-        let mut published_track = create_test_track(&pool, 3, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        published_track.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
-        published_track.clone().update(&pool).await.unwrap();
-        let deleted_track = create_test_track(&pool, 4, Some(release.clone()), Some(artist.clone())).await.unwrap();
-        deleted_track.clone().delete(&pool).await.unwrap();
-
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, release.id, artist.id, record_label_id, true)
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
             .await
             .unwrap();
+
+        let mut unpublished_track =
+            create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        unpublished_track.published_at = None;
+        unpublished_track.clone().update(&pool).await.unwrap();
+        let mut published_in_future_track =
+            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        published_in_future_track.published_at =
+            Some(chrono::Utc::now() + chrono::Duration::days(1));
+        published_in_future_track
+            .clone()
+            .update(&pool)
+            .await
+            .unwrap();
+        let mut published_track =
+            create_test_track(&pool, 3, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        published_track.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        published_track.clone().update(&pool).await.unwrap();
+        let deleted_track =
+            create_test_track(&pool, 4, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        deleted_track.clone().delete(&pool).await.unwrap();
+
+        let tracks = Track::list_by_release_and_artist_and_record_label(
+            &pool,
+            release.id,
+            artist.id,
+            record_label_id,
+            true,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(tracks.len(), 4);
         assert_eq!(tracks[0].id, unpublished_track.id);
@@ -967,7 +1143,9 @@ mod tests {
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_wrong_release(pool: PgPool) {
         create_test_track(&pool, 1, None, None).await.unwrap();
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 2, 1, 1, true).await.unwrap();
+        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 2, 1, 1, true)
+            .await
+            .unwrap();
 
         assert_eq!(tracks.len(), 0);
     }
@@ -975,7 +1153,9 @@ mod tests {
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_wrong_artist(pool: PgPool) {
         create_test_track(&pool, 1, None, None).await.unwrap();
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 2, 1, true).await.unwrap();
+        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 2, 1, true)
+            .await
+            .unwrap();
 
         assert_eq!(tracks.len(), 0);
     }
@@ -983,7 +1163,9 @@ mod tests {
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_wrong_label(pool: PgPool) {
         create_test_track(&pool, 1, None, None).await.unwrap();
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 2, true).await.unwrap();
+        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 2, true)
+            .await
+            .unwrap();
 
         assert_eq!(tracks.len(), 0);
     }
@@ -1000,8 +1182,14 @@ mod tests {
         let updated_track = update_track.update(&pool).await.unwrap();
         assert_eq!(updated_track.name, "Updated Track".to_string());
         assert_eq!(updated_track.slug, "updated-track".to_string());
-        assert_eq!(updated_track.description, "This is an updated track".to_string());
-        assert_eq!(updated_track.primary_image, Some("an-image.jpg".to_string()));
+        assert_eq!(
+            updated_track.description,
+            "This is an updated track".to_string()
+        );
+        assert_eq!(
+            updated_track.primary_image,
+            Some("an-image.jpg".to_string())
+        );
         assert_eq!(updated_track.isrc_code, Some("UKUTK2025321".to_string()));
         assert_ne!(updated_track.updated_at, track.updated_at);
     }
@@ -1014,7 +1202,10 @@ mod tests {
         let updated_track = update_track.update(&pool).await;
 
         assert!(updated_track.is_err());
-        assert_eq!(updated_track.unwrap_err().to_string(), "Name is required.".to_string());
+        assert_eq!(
+            updated_track.unwrap_err().to_string(),
+            "Name is required.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -1030,15 +1221,22 @@ mod tests {
         let result = track.delete(&pool).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Could not delete track with id 0.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not delete track with id 0.".to_string()
+        );
     }
 
     #[sqlx::test]
     async fn test_set_artists(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
         let artist = track.get_artists(&pool).await.unwrap()[0].clone();
-        let record_label = RecordLabel::get_by_id(&pool, artist.label_id).await.unwrap();
-        let artist2 = create_test_artist(&pool, 2, Some(record_label)).await.unwrap();
+        let record_label = RecordLabel::get_by_id(&pool, artist.label_id)
+            .await
+            .unwrap();
+        let artist2 = create_test_artist(&pool, 2, Some(record_label))
+            .await
+            .unwrap();
 
         let result = track.set_artists(&pool, vec![artist.id, artist2.id]).await;
 
@@ -1055,7 +1253,10 @@ mod tests {
         let result = track.set_artists(&pool, vec![1, 2]).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Could not set artists for track with id 0.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not set artists for track with id 0.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -1064,19 +1265,31 @@ mod tests {
         let result = track.set_artists(&pool, vec![]).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Artist IDs cannot be empty.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Artist IDs cannot be empty.".to_string()
+        );
     }
 
     #[sqlx::test]
     async fn test_set_artists_replace(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
         let artist = track.get_artists(&pool).await.unwrap()[0].clone();
-        let record_label = RecordLabel::get_by_id(&pool, artist.label_id).await.unwrap();
-        let artist2 = create_test_artist(&pool, 2, Some(record_label.clone())).await.unwrap();
-        let artist3 = create_test_artist(&pool, 3, Some(record_label)).await.unwrap();
+        let record_label = RecordLabel::get_by_id(&pool, artist.label_id)
+            .await
+            .unwrap();
+        let artist2 = create_test_artist(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let artist3 = create_test_artist(&pool, 3, Some(record_label))
+            .await
+            .unwrap();
 
         // Set the artists for the track
-        track.set_artists(&pool, vec![artist.id, artist2.id]).await.unwrap();
+        track
+            .set_artists(&pool, vec![artist.id, artist2.id])
+            .await
+            .unwrap();
 
         // Replace the artists for the track
         let result = track.set_artists(&pool, vec![artist3.id]).await;
@@ -1092,11 +1305,18 @@ mod tests {
     async fn test_get_artists(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
         let artist = track.get_artists(&pool).await.unwrap()[0].clone();
-        let record_label = RecordLabel::get_by_id(&pool, artist.label_id).await.unwrap();
-        let artist2 = create_test_artist(&pool, 2, Some(record_label)).await.unwrap();
+        let record_label = RecordLabel::get_by_id(&pool, artist.label_id)
+            .await
+            .unwrap();
+        let artist2 = create_test_artist(&pool, 2, Some(record_label))
+            .await
+            .unwrap();
 
         // Set the artists for the track
-        track.set_artists(&pool, vec![artist.id, artist2.id]).await.unwrap();
+        track
+            .set_artists(&pool, vec![artist.id, artist2.id])
+            .await
+            .unwrap();
 
         // Get the artists for the track
         let artists = track.get_artists(&pool).await.unwrap();
@@ -1112,7 +1332,9 @@ mod tests {
         let release = track.get_releases(&pool).await.unwrap()[0].clone();
         let release2 = create_test_release(&pool, 2, None).await.unwrap();
 
-        let result = track.set_releases(&pool, vec![release.id, release2.id]).await;
+        let result = track
+            .set_releases(&pool, vec![release.id, release2.id])
+            .await;
 
         assert!(result.is_ok());
         let releases = track.get_releases(&pool).await.unwrap();
@@ -1127,7 +1349,10 @@ mod tests {
         let result = track.set_releases(&pool, vec![1, 2]).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Could not set releases for track with id 0.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not set releases for track with id 0.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -1136,7 +1361,10 @@ mod tests {
         let result = track.set_releases(&pool, vec![]).await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "release IDs cannot be empty.".to_string());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "release IDs cannot be empty.".to_string()
+        );
     }
 
     #[sqlx::test]
@@ -1147,7 +1375,10 @@ mod tests {
         let release3 = create_test_release(&pool, 3, None).await.unwrap();
 
         // Set the releases for the track
-        track.set_releases(&pool, vec![release.id, release2.id]).await.unwrap();
+        track
+            .set_releases(&pool, vec![release.id, release2.id])
+            .await
+            .unwrap();
 
         // Replace the releases for the track
         let result = track.set_releases(&pool, vec![release3.id]).await;
@@ -1166,7 +1397,10 @@ mod tests {
         let release2 = create_test_release(&pool, 2, None).await.unwrap();
 
         // Set the releases for the track
-        track.set_releases(&pool, vec![release.id, release2.id]).await.unwrap();
+        track
+            .set_releases(&pool, vec![release.id, release2.id])
+            .await
+            .unwrap();
 
         // Get the releases for the track
         let releases = track.get_releases(&pool).await.unwrap();

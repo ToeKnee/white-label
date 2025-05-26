@@ -5,7 +5,10 @@ use server_fn::codec::Cbor;
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 use crate::models::{artist::Artist, release::Release};
 #[cfg(feature = "ssr")]
-use crate::services::release::{create_release_service, delete_release_service, get_release_service, get_releases_service, update_release_service};
+use crate::services::release::{
+    create_release_service, delete_release_service, get_release_service, get_releases_service,
+    update_release_service,
+};
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
@@ -29,7 +32,10 @@ pub async fn get_releases(artist_slug: String) -> Result<ReleasesResult, ServerF
 }
 
 #[server(GetRelease, "/api", endpoint="get_release", output = Cbor)]
-pub async fn get_release(artist_slug: String, slug: String) -> Result<ReleaseResult, ServerFnError> {
+pub async fn get_release(
+    artist_slug: String,
+    slug: String,
+) -> Result<ReleaseResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();

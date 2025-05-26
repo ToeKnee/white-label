@@ -6,10 +6,15 @@ use super::delete::DeleteRelease;
 use crate::components::{
     admin::{
         artist::menu::{Menu, Page},
-        shared::{artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField},
+        shared::{
+            artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
+        },
     },
     files::upload::FileUploadWithProgress,
-    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success},
+    utils::{
+        error::ErrorPage, error::ServerErrors, loading::Loading,
+        permissions::permission_or_redirect, success::Success,
+    },
 };
 use crate::config::upload::UploadConfiguration;
 use crate::models::{artist::Artist, release::Release};
@@ -42,7 +47,10 @@ pub fn EditRelease() -> impl IntoView {
     });
 
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || artist_slug, |artist_slug| get_artist(artist_slug.get()));
+    let artist_resource = Resource::new(
+        move || artist_slug,
+        |artist_slug| get_artist(artist_slug.get()),
+    );
 
     let release = RwSignal::new(Release::default());
     let artists = RwSignal::new(Vec::new()); // Artists on the release
@@ -53,7 +61,12 @@ pub fn EditRelease() -> impl IntoView {
     );
 
     let update_release = ServerAction::<UpdateRelease>::new();
-    let value = Signal::derive(move || update_release.value().get().unwrap_or_else(|| Ok(ReleaseResult::default())));
+    let value = Signal::derive(move || {
+        update_release
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(ReleaseResult::default()))
+    });
     let success = RwSignal::new(false);
 
     let name = move || format!("{} - {}", release.get().name, artist.get().name);
@@ -154,7 +167,11 @@ fn Header(name: String, artist_slug: RwSignal<String>) -> impl IntoView {
 }
 
 #[component]
-fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSignal<Vec<i64>>) -> impl IntoView {
+fn Form(
+    release: RwSignal<Release>,
+    artist: RwSignal<Artist>,
+    artist_ids: RwSignal<Vec<i64>>,
+) -> impl IntoView {
     view! {
         <input
             type="text"

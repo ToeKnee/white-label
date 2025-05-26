@@ -25,7 +25,12 @@ pub fn DeleteRelease(release: Release) -> impl IntoView {
     };
 
     let update_release = ServerAction::<DeleteRelease>::new();
-    let value = Signal::derive(move || update_release.value().get().unwrap_or_else(|| Ok(ReleaseResult::default())));
+    let value = Signal::derive(move || {
+        update_release
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(ReleaseResult::default()))
+    });
 
     view! {
         <button class="btn btn-error" on:click=on_click_show>

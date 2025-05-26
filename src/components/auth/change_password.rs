@@ -2,7 +2,10 @@ use leptos::form::ActionForm;
 use leptos::prelude::*;
 use leptos_meta::Title;
 
-use crate::components::utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::authenticated_or_redirect, success::Success};
+use crate::components::utils::{
+    error::ErrorPage, error::ServerErrors, loading::Loading,
+    permissions::authenticated_or_redirect, success::Success,
+};
 use crate::models::auth::User;
 use crate::routes::auth::ChangePassword;
 
@@ -13,7 +16,8 @@ pub fn ChangePassword() -> impl IntoView {
     });
 
     let change_password = ServerAction::<ChangePassword>::new();
-    let value = Signal::derive(move || change_password.value().get().unwrap_or(Ok(User::default())));
+    let value =
+        Signal::derive(move || change_password.value().get().unwrap_or(Ok(User::default())));
     let (success, set_success) = signal(false);
 
     view! {

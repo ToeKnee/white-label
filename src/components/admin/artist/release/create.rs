@@ -6,9 +6,14 @@ use reactive_stores::Store;
 use crate::components::{
     admin::{
         artist::menu::{Menu, Page},
-        shared::{artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField},
+        shared::{
+            artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
+        },
     },
-    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect},
+    utils::{
+        error::ErrorPage, error::ServerErrors, loading::Loading,
+        permissions::permission_or_redirect,
+    },
 };
 use crate::models::{artist::Artist, release::Release};
 use crate::routes::{
@@ -44,7 +49,12 @@ pub fn CreateRelease() -> impl IntoView {
 
     let (release, _set_release) = signal(Release::default());
     let create_release = ServerAction::<CreateRelease>::new();
-    let value = Signal::derive(move || create_release.value().get().unwrap_or_else(|| Ok(ReleaseResult::default())));
+    let value = Signal::derive(move || {
+        create_release
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(ReleaseResult::default()))
+    });
 
     view! {
         <Transition fallback=Loading>
@@ -108,7 +118,11 @@ pub fn CreateRelease() -> impl IntoView {
 }
 
 #[component]
-fn Form(release: ReadSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSignal<Vec<i64>>) -> impl IntoView {
+fn Form(
+    release: ReadSignal<Release>,
+    artist: RwSignal<Artist>,
+    artist_ids: RwSignal<Vec<i64>>,
+) -> impl IntoView {
     view! {
         <label class="flex gap-2 items-center input">
             <input

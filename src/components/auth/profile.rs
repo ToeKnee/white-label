@@ -4,7 +4,10 @@ use leptos_meta::Title;
 
 use crate::app::UserContext;
 use crate::components::files::upload::FileUploadWithProgress;
-use crate::components::utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::authenticated_or_redirect, success::Success};
+use crate::components::utils::{
+    error::ErrorPage, error::ServerErrors, loading::Loading,
+    permissions::authenticated_or_redirect, success::Success,
+};
 use crate::config::upload::UploadConfiguration;
 use crate::models::auth::User;
 use crate::routes::auth::UpdateUser;
@@ -22,7 +25,12 @@ pub fn EditProfile() -> impl IntoView {
     let username = RwSignal::new(user_context.0.get_untracked().username);
 
     let update_user = ServerAction::<UpdateUser>::new();
-    let value = Signal::derive(move || update_user.value().get().unwrap_or_else(|| Ok(User::default())));
+    let value = Signal::derive(move || {
+        update_user
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(User::default()))
+    });
     let (success, set_success) = signal(false);
 
     view! {

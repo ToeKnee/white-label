@@ -25,7 +25,12 @@ pub fn DeleteTrack(track: Track) -> impl IntoView {
     };
 
     let update_track = ServerAction::<DeleteTrack>::new();
-    let value = Signal::derive(move || update_track.value().get().unwrap_or_else(|| Ok(TrackResult::default())));
+    let value = Signal::derive(move || {
+        update_track
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(TrackResult::default()))
+    });
 
     view! {
         <button class="btn btn-error" on:click=on_click_show>

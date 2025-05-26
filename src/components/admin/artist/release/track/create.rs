@@ -5,9 +5,15 @@ use leptos_router::hooks::use_params_map;
 use crate::components::{
     admin::{
         artist::menu::{Menu, Page},
-        shared::{artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField, release_select::ReleaseSelect},
+        shared::{
+            artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
+            release_select::ReleaseSelect,
+        },
     },
-    utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect},
+    utils::{
+        error::ErrorPage, error::ServerErrors, loading::Loading,
+        permissions::permission_or_redirect,
+    },
 };
 use crate::models::{artist::Artist, release::Release, track::Track};
 use crate::routes::{
@@ -55,7 +61,12 @@ pub fn CreateTrack() -> impl IntoView {
 
     let track = RwSignal::new(Track::default());
     let create_track = ServerAction::<CreateTrack>::new();
-    let value = Signal::derive(move || create_track.value().get().unwrap_or_else(|| Ok(TrackResult::default())));
+    let value = Signal::derive(move || {
+        create_track
+            .value()
+            .get()
+            .unwrap_or_else(|| Ok(TrackResult::default()))
+    });
 
     view! {
         <Transition fallback=Loading>
