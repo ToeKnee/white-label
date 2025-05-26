@@ -2,10 +2,12 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
-use super::super::menu::{Menu, Page};
 use super::delete::DeleteRelease;
 use crate::components::{
-    admin::shared::{artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField},
+    admin::{
+        artist::menu::{Menu, Page},
+        shared::{artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField},
+    },
     files::upload::FileUploadWithProgress,
     utils::{error::ErrorPage, error::ServerErrors, loading::Loading, permissions::permission_or_redirect, success::Success},
 };
@@ -21,7 +23,7 @@ fn artists_ids(artists: &[Artist]) -> Vec<i64> {
     artists.iter().map(|a| a.id).collect::<Vec<_>>()
 }
 
-/// Renders the create artist page.
+/// Renders the edit release page.
 #[component]
 #[allow(clippy::too_many_lines)] // components are a pain to make smaller
 pub fn EditRelease() -> impl IntoView {
@@ -66,7 +68,7 @@ pub fn EditRelease() -> impl IntoView {
                             artist.set(this_artist.artist);
                         }
                         Err(_) => {
-                            redirect("/admin/artists/{artist_slug.get()}/releases");
+                            redirect("/admin/artists/");
                         }
                     }
                     match release_resource.await {
@@ -75,7 +77,9 @@ pub fn EditRelease() -> impl IntoView {
                             artists.set(this_release.artists.clone());
                             artist_ids.set(artists_ids(&this_release.artists));
                         }
-                        Err(_) => redirect("/admin/artists/{artist_slug.get()}/releases"),
+                        Err(_) => {
+                            redirect(&format!("/admin/artists/{}/releases", artist_slug.get()));
+                        }
                     }
 
                     view! {
@@ -155,22 +159,17 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
         <input
             type="text"
             class="hidden"
-            name="release_form[label_id]"
+            name="form[label_id]"
             value=move || { artist.get().label_id }
         />
-        <input
-            type="text"
-            class="hidden"
-            name="release_form[slug]"
-            value=move || { release.get().slug }
-        />
+        <input type="text" class="hidden" name="form[slug]" value=move || { release.get().slug } />
         <div class="divider">Public</div>
         <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
                 placeholder="Release name"
-                name="release_form[name]"
+                name="form[name]"
                 value=move || release.get().name
             />
         </label>
@@ -184,9 +183,7 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
             }
         }}
         {move || {
-            view! {
-                <ArtistSelect primary_artist=artist.get() initial_artist_ids=artist_ids.get() />
-            }
+            view! { <ArtistSelect primary_artist=artist.get() artist_ids=artist_ids /> }
         }}
 
         <label class="flex gap-2 items-center input">
@@ -194,7 +191,7 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
                 type="text"
                 class="grow"
                 placeholder="Catalog number"
-                name="release_form[catalogue_number]"
+                name="form[catalogue_number]"
                 value=move || release.get().catalogue_number
             />
         </label>
@@ -203,7 +200,7 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
             view! {
                 <DateField
                     title="Release Date".to_string()
-                    field="release_form[release_date]"
+                    field="form[release_date]"
                     date=release.get().release_date
                 />
             }
@@ -225,7 +222,7 @@ fn Form(release: RwSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSign
             view! {
                 <DateField
                     title="Published At".to_string()
-                    field="release_form[published_at]"
+                    field="form[published_at]"
                     date=release.get().published_at
                 />
             }

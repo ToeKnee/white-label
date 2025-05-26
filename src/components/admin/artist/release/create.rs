@@ -18,7 +18,7 @@ use crate::routes::{
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
-/// Renders the create artist page.
+/// Renders the create release page.
 #[component]
 pub fn CreateRelease() -> impl IntoView {
     Effect::new_isomorphic(move || {
@@ -95,7 +95,7 @@ pub fn CreateRelease() -> impl IntoView {
                                     type="text"
                                     class="hidden"
                                     placeholder=""
-                                    name="release_form[label_id]"
+                                    name="form[label_id]"
                                     value=move || { record_label().id }
                                 /><Form release artist artist_ids />
                             </div>
@@ -115,26 +115,24 @@ fn Form(release: ReadSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSi
                 type="text"
                 class="grow"
                 placeholder="Release name"
-                name="release_form[name]"
+                name="form[name]"
                 value=move || release.get().name
             />
         </label>
         <MarkdownField
             title="Description".to_string()
-            field="release_form[description]".to_string()
+            field="form[description]".to_string()
             markdown_text=String::new()
         />
         {move || {
-            view! {
-                <ArtistSelect primary_artist=artist.get() initial_artist_ids=artist_ids.get() />
-            }
+            view! { <ArtistSelect primary_artist=artist.get() artist_ids=artist_ids /> }
         }}
         <label class="flex gap-2 items-center input">
             <input
                 type="text"
                 class="grow"
                 placeholder="Catalog number"
-                name="release_form[catalogue_number]"
+                name="form[catalogue_number]"
                 value=move || release.get().catalogue_number
             />
         </label>
@@ -144,14 +142,14 @@ fn Form(release: ReadSignal<Release>, artist: RwSignal<Artist>, artist_ids: RwSi
                     <div class="w-1/2">
                         <DateField
                             title="Release Date".to_string()
-                            field="release_form[release_date]"
+                            field="form[release_date]"
                             date=release.get().release_date
                         />
                     </div>
                     <div class="w-1/2">
                         <DateField
                             title="Published At".to_string()
-                            field="release_form[published_at]"
+                            field="form[published_at]"
                             date=release.get().published_at
                         />
                     </div>

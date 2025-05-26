@@ -6,6 +6,7 @@ use crate::models::auth::{User, ssr::SqlPermissionTokens, ssr::SqlUser};
 use crate::models::page::Page;
 use crate::models::record_label::RecordLabel;
 use crate::models::release::Release;
+use crate::models::track::Track;
 
 /// Create test artist
 ///
@@ -150,6 +151,68 @@ pub async fn create_test_release(pool: &PgPool, id: usize, artist: Option<Artist
         .await?;
 
     Ok(release)
+}
+
+/// Create test track
+///
+/// # Arguments
+/// * `pool` - The database connection pool
+/// * `id` - The ID of the track
+/// * `release` - The release the track is on (optional)
+/// * `artist` - The artist the track is by (optional)
+///
+/// # Returns
+/// The created track
+///
+/// # Errors
+/// If the track cannot be created, return an error
+///
+/// # Panics
+/// If the track cannot be created, panic
+/// If the release is not found or cannot be created, panic
+/// If the artist is not found or cannot be created, panic
+#[cfg(feature = "ssr")]
+pub async fn create_test_track(pool: &PgPool, id: usize, release: Option<Release>, artist: Option<Artist>) -> Result<Track, sqlx::Error> {
+    let artist = match artist {
+        Some(artist) => artist,
+        None => {
+            if release.is_some() {
+                Artist::get_by_id(pool, release.clone().unwrap().primary_artist_id).await.unwrap()
+            } else {
+                create_test_artist(pool, id, None).await.unwrap()
+            }
+        }
+    };
+    let release = match release {
+        Some(release) => release,
+        None => create_test_release(pool, id, Some(artist.clone())).await.unwrap(),
+    };
+
+    let isrc_code = format!("UKUTX25{id:0>5}");
+    let track = sqlx::query_as::<_, Track>("INSERT INTO tracks (name, slug, description, primary_artist_id, isrc_code, bpm, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *")
+        .bind(format!("Test Track {id}"))
+        .bind(format!("test-track-{id}"))
+        .bind(format!("A track for testing purposes with the id of {id}"))
+        .bind(release.primary_artist_id)
+        .bind(isrc_code)
+        .bind(120)
+        .bind(Some(chrono::Utc::now()))
+        .fetch_one(pool)
+        .await?;
+
+    let _track_artists = sqlx::query("INSERT INTO track_artists (track_id, artist_id) VALUES ($1, $2) RETURNING *")
+        .bind(track.id)
+        .bind(artist.id)
+        .fetch_one(pool)
+        .await?;
+
+    let _track_releases = sqlx::query("INSERT INTO release_tracks (release_id, track_id) VALUES ($1, $2) RETURNING *")
+        .bind(release.id)
+        .bind(track.id)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(track)
 }
 
 /// Create test user

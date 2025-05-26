@@ -6,33 +6,43 @@ use crate::components::{
     admin::artist::menu::{Menu, Page},
     utils::{error::ErrorPage, loading::Loading, permissions::permission_or_redirect, status_badge::StatusBadge},
 };
-use crate::models::{artist::Artist, release::Release};
-use crate::routes::{artist::get_artist, release::get_releases};
+use crate::models::{artist::Artist, release::Release, track::Track};
+use crate::routes::{artist::get_artist, release::get_release, track::get_tracks};
 
 use crate::utils::redirect::redirect;
 
-/// Renders the list releases page.
+/// Renders the list tracks page.
 #[component]
 #[allow(clippy::too_many_lines)]
-pub fn Releases() -> impl IntoView {
+pub fn Tracks() -> impl IntoView {
     Effect::new_isomorphic(move || {
         permission_or_redirect("label_owner", "/admin");
     });
 
     let params = use_params_map();
-    let slug = RwSignal::new(String::new());
+    let artist_slug = RwSignal::new(String::new());
+    let release_slug = RwSignal::new(String::new());
     Effect::new_isomorphic(move || {
-        let s = params.read().get("slug").unwrap_or_default();
-        slug.set(s);
+        artist_slug.set(params.read().get("slug").unwrap_or_default());
+        release_slug.set(params.read().get("release_slug").unwrap_or_default());
     });
 
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
+    let artist_resource = Resource::new(move || artist_slug, |slug| get_artist(slug.get()));
 
-    let releases_resource = Resource::new(move || slug, |slug| get_releases(slug.get()));
-    let (releases, set_releases) = signal(Vec::new());
+    let release_resource = Resource::new(
+        move || [artist_slug, release_slug],
+        |[artist_slug, release_slug]| get_release(artist_slug.get(), release_slug.get()),
+    );
+    let release = RwSignal::new(Release::default());
 
-    let title = RwSignal::new("Releases".to_string());
+    let tracks_resource = Resource::new(
+        move || [artist_slug, release_slug],
+        |[artist_slug, release_slug]| get_tracks(artist_slug.get(), release_slug.get()),
+    );
+    let tracks = RwSignal::new(Vec::new());
+
+    let title = RwSignal::new("Tracks".to_string());
 
     view! {
         <Transition fallback=Loading>
@@ -43,30 +53,52 @@ pub fn Releases() -> impl IntoView {
                     match artist_resource.await {
                         Ok(this_artist) => {
                             artist.set(this_artist.artist);
-                            title.set(format!("{} Releases", artist.get().name));
                         }
                         _ => {
                             redirect("/admin/artists");
                         }
                     }
-                    if let Ok(releases) = releases_resource.await {
-                        set_releases.set(releases.releases);
-                    } else {
-                        tracing::error!("Error while getting releases");
-                        redirect("/admin/artists");
+                    match release_resource.await {
+                        Ok(this_release) => {
+                            release.set(this_release.release);
+                            title.set(format!("{} Tracks", release.get().name));
+                        }
+                        _ => {
+                            redirect(&format!("/admin/artist/{}", artist_slug.get()));
+                        }
                     }
-                    let release_rows = releases
+                    match tracks_resource.await {
+                        Ok(this_tracks) => {
+                            tracks.set(this_tracks.tracks);
+                        }
+                        _ => {
+                            redirect(
+                                &format!(
+                                    "/admin/artist/{}/release/{}",
+                                    artist_slug.get(),
+                                    release_slug.get(),
+                                ),
+                            );
+                        }
+                    }
+                    let tracks_rows = tracks
                         .get()
                         .into_iter()
-                        .map(|release| {
-                            view! { <ReleaseRow release=release artist_slug=slug.get() /> }
+                        .map(|track| {
+                            view! {
+                                <TrackRow
+                                    track=track
+                                    artist_slug=artist_slug.get()
+                                    release_slug=release_slug.get()
+                                />
+                            }
                         })
                         .collect::<Vec<_>>();
                     view! {
                         <Title text=title.get() />
                         <h1>{move || title.get()}</h1>
 
-                        <Menu slug=slug selected=&Page::Releases />
+                        <Menu slug=artist_slug selected=&Page::Releases />
 
                         <div class="overflow-x-auto">
                             <table class="table">
@@ -74,26 +106,28 @@ pub fn Releases() -> impl IntoView {
                                     <tr>
                                         <th></th>
                                         <th>Name</th>
-                                        <th>Tracks</th>
-                                        <th>Release Date</th>
                                         <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {if releases.get().is_empty() {
+                                    {if tracks.get().is_empty() {
                                         view! {
                                             <tr>
-                                                <td colspan="5">No releases found.</td>
+                                                <td colspan="5">No tracks found.</td>
                                             </tr>
                                         }
                                             .into_any()
                                     } else {
-                                        view! { {release_rows} }.into_any()
+                                        view! { {tracks_rows} }.into_any()
                                     }} <tr>
-                                        <td colspan="4"></td>
+                                        <td colspan="2"></td>
                                         <td>
                                             <a
-                                                href=format!("/admin/artist/{}/releases/new", slug.get())
+                                                href=format!(
+                                                    "/admin/artist/{}/release/{}/tracks/new",
+                                                    artist_slug.get(),
+                                                    release_slug.get(),
+                                                )
                                                 class="btn btn-primary"
                                             >
                                                 Add
@@ -105,8 +139,6 @@ pub fn Releases() -> impl IntoView {
                                     <tr>
                                         <th></th>
                                         <th>Name</th>
-                                        <th>Tracks</th>
-                                        <th>Release Date</th>
                                         <th></th>
                                     </tr>
                                 </tfoot>
@@ -120,46 +152,42 @@ pub fn Releases() -> impl IntoView {
 }
 
 #[component]
-fn ReleaseRow(#[prop(into)] release: Release, artist_slug: String) -> impl IntoView {
-    let release_date = release
-        .release_date
-        .map_or_else(|| "Unreleased".to_string(), |date| date.format("%e %B %Y").to_string());
-
+fn TrackRow(#[prop(into)] track: Track, artist_slug: String, release_slug: String) -> impl IntoView {
     view! {
         <tr>
-            <th>
-                <StatusBadge deleted_at=release.deleted_at published_at=release.published_at />
-            </th>
+            <td>
+                <StatusBadge deleted_at=track.deleted_at published_at=track.published_at />
+            </td>
             <td>
                 <div class="flex gap-3 items-center">
                     <div class="avatar">
                         <div class="w-12 rounded-full not-prose">
-                            <img
-                                class="m-0"
-                                src=release.primary_image_url()
-                                alt=release.name.clone()
-                            />
+                            <img class="m-0" src=track.primary_image_url() alt=track.name.clone() />
                         </div>
                     </div>
                     <div>
                         <div class="font-bold">
                             <a href=format!(
-                                "/admin/artist/{}/release/{}",
+                                "/admin/artist/{}/release/{}/track/{}",
                                 artist_slug,
-                                release.slug,
-                            )>{release.name.clone()}</a>
+                                release_slug,
+                                track.slug,
+                            )>{track.name.clone()}</a>
                         </div>
                         <div class="text-sm opacity-50">
-                            {release.catalogue_number.clone()} <br /> {release.slug.clone()}
+                            {track.isrc_code.clone()} <br /> {track.slug.clone()}
                         </div>
                     </div>
                 </div>
             </td>
-            <td>0</td>
-            <td>{release_date}</td>
             <td>
                 <a
-                    href=format!("/admin/artist/{}/release/{}", artist_slug, release.slug)
+                    href=format!(
+                        "/admin/artist/{}/release/{}/track/{}",
+                        artist_slug,
+                        release_slug,
+                        track.slug,
+                    )
                     class="btn btn-primary"
                 >
                     Edit
@@ -175,21 +203,12 @@ fn ArtistRowFallback() -> impl IntoView {
         <tr>
             <td class="w-full h-4 skeleton"></td>
             <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
         </tr>
         <tr>
             <td class="w-full h-4 skeleton"></td>
             <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
         </tr>
         <tr>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
             <td class="w-full h-4 skeleton"></td>
             <td class="w-full h-4 skeleton"></td>
         </tr>

@@ -19,7 +19,12 @@ use crate::components::{
         artist::{
             create::CreateArtist,
             edit::EditArtist,
-            release::{create::CreateRelease, edit::EditRelease, list::Releases},
+            release::{
+                create::CreateRelease,
+                edit::EditRelease,
+                list::Releases,
+                track::{create::CreateTrack, edit::EditTrack, list::Tracks},
+            },
         },
         dashboard::Dashboard,
         edit_label::EditLabel,
@@ -131,6 +136,18 @@ pub fn WhiteLabel() -> impl IntoView {
                         <Route path=path!("artist/:slug/releases") view=Releases />
                         <Route path=path!("artist/:slug/releases/new") view=CreateRelease />
                         <Route path=path!("artist/:slug/release/:release_slug") view=EditRelease />
+                        <Route
+                            path=path!("artist/:slug/release/:release_slug/tracks")
+                            view=Tracks
+                        />
+                        <Route
+                            path=path!("artist/:slug/release/:release_slug/tracks/new")
+                            view=CreateTrack
+                        />
+                        <Route
+                            path=path!("artist/:slug/release/:release_slug/track/:track_slug")
+                            view=EditTrack
+                        />
                         <Route path=path!("page") view=CreatePage />
                         <Route path=path!("page/:slug") view=EditPage />
                     </ParentRoute>

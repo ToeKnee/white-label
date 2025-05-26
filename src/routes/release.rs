@@ -37,19 +37,19 @@ pub async fn get_release(artist_slug: String, slug: String) -> Result<ReleaseRes
 }
 
 #[server(CreateRelease, "/api", endpoint="create_release", output = Cbor)]
-pub async fn create_release(release_form: CreateReleaseForm) -> Result<ReleaseResult, ServerFnError> {
+pub async fn create_release(form: CreateReleaseForm) -> Result<ReleaseResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
-    create_release_service(&pool, user, release_form).await
+    create_release_service(&pool, user, form).await
 }
 
 #[server(UpdateRelease, "/api", endpoint="update_release", output = Cbor)]
-pub async fn update_release(release_form: UpdateReleaseForm) -> Result<ReleaseResult, ServerFnError> {
+pub async fn update_release(form: UpdateReleaseForm) -> Result<ReleaseResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
-    update_release_service(&pool, user, release_form).await
+    update_release_service(&pool, user, form).await
 }
 
 #[server(DeleteRelease, "/api", endpoint="delete_release", output = Cbor)]

@@ -13,7 +13,7 @@ use super::{artist::Artist, record_label::RecordLabel};
 use crate::utils::slugify::slugify;
 
 /// The Release struct is used to represent a record release in the database.
-#[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "ssr", derive(FromRow))]
 pub struct Release {
     /// The unique identifier of the release

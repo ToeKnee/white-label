@@ -54,6 +54,7 @@ pub async fn get_label_artists(record_label_id: i64) -> Result<LabelArtistResult
 pub struct LabelPageResult {
     pub pages: Vec<Page>,
 }
+
 #[server(GetLabelPages, "/api", endpoint="record_label_pages", output = Cbor)]
 pub async fn get_label_pages(record_label_id: i64) -> Result<LabelPageResult, ServerFnError> {
     let auth = auth()?;

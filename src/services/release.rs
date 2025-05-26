@@ -103,7 +103,7 @@ pub async fn get_release_service(
 /// # Arguments
 /// pool: `PgPool` - The database connection pool
 /// user: Option<&User> - The user creating the release
-/// `release_form`: `CreateReleaseForm` - The form to create the release
+/// `form`: `CreateReleaseForm` - The form to create the release
 ///
 /// # Returns
 /// Result<`ReleaseResult`, `ServerFnError`> - The created release
@@ -113,7 +113,7 @@ pub async fn get_release_service(
 /// If the release cannot be created, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn create_release_service(pool: &PgPool, user: Option<&User>, release_form: CreateReleaseForm) -> Result<ReleaseResult, ServerFnError> {
+pub async fn create_release_service(pool: &PgPool, user: Option<&User>, form: CreateReleaseForm) -> Result<ReleaseResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -121,13 +121,13 @@ pub async fn create_release_service(pool: &PgPool, user: Option<&User>, release_
 
     let release = Release::create(
         pool,
-        release_form.name,
-        release_form.description,
-        release_form.primary_artist_id,
-        release_form.catalogue_number,
-        release_form.release_date,
-        release_form.label_id,
-        release_form.published_at,
+        form.name,
+        form.description,
+        form.primary_artist_id,
+        form.catalogue_number,
+        form.release_date,
+        form.label_id,
+        form.published_at,
     )
     .await
     .map_err(|e| {
@@ -136,11 +136,7 @@ pub async fn create_release_service(pool: &PgPool, user: Option<&User>, release_
         ServerFnError::new(e)
     })?;
 
-    let artist_ids = release_form
-        .artist_ids
-        .split(',')
-        .filter_map(|s| s.parse::<i64>().ok())
-        .collect::<Vec<i64>>();
+    let artist_ids = form.artist_ids.split(',').filter_map(|s| s.parse::<i64>().ok()).collect::<Vec<i64>>();
     release.set_artists(pool, artist_ids).await.map_err(|e| {
         let err = format!("Error while setting artists: {e:?}");
         tracing::error!("{err}");
@@ -161,7 +157,7 @@ pub async fn create_release_service(pool: &PgPool, user: Option<&User>, release_
 /// # Arguments
 /// `pool`: `PgPool` - The database connection pool
 /// `user`: `Option<&User>` - The user creating the release
-/// `release_form`: `CreateReleaseForm` - The form to create the release
+/// `form`: `CreateReleaseForm` - The form to create the release
 ///
 /// # Returns
 /// Result<`ReleaseResult`, `ServerFnError`> - The created release
@@ -171,24 +167,24 @@ pub async fn create_release_service(pool: &PgPool, user: Option<&User>, release_
 /// If the release cannot be created, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "ssr")]
-pub async fn update_release_service(pool: &PgPool, user: Option<&User>, release_form: UpdateReleaseForm) -> Result<ReleaseResult, ServerFnError> {
+pub async fn update_release_service(pool: &PgPool, user: Option<&User>, form: UpdateReleaseForm) -> Result<ReleaseResult, ServerFnError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let mut release = Release::get_by_slug(pool, release_form.slug).await.map_err(|e| {
+    let mut release = Release::get_by_slug(pool, form.slug).await.map_err(|e| {
         let err = format!("Error while getting release by slug: {e:?}");
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;
 
-    release.name = release_form.name;
-    release.description = release_form.description;
-    release.primary_artist_id = release_form.primary_artist_id;
-    release.catalogue_number = release_form.catalogue_number;
-    release.release_date = release_form.release_date;
-    release.published_at = release_form.published_at;
+    release.name = form.name;
+    release.description = form.description;
+    release.primary_artist_id = form.primary_artist_id;
+    release.catalogue_number = form.catalogue_number;
+    release.release_date = form.release_date;
+    release.published_at = form.published_at;
 
     release = release.update(pool).await.map_err(|e| {
         let err = format!("Error while updating release: {e:?}");
@@ -196,11 +192,7 @@ pub async fn update_release_service(pool: &PgPool, user: Option<&User>, release_
         ServerFnError::new(e)
     })?;
 
-    let artist_ids = release_form
-        .artist_ids
-        .split(',')
-        .filter_map(|s| s.parse::<i64>().ok())
-        .collect::<Vec<i64>>();
+    let artist_ids = form.artist_ids.split(',').filter_map(|s| s.parse::<i64>().ok()).collect::<Vec<i64>>();
     release.set_artists(pool, artist_ids).await.map_err(|e| {
         let err = format!("Error while setting artists: {e:?}");
         tracing::error!("{err}");
@@ -358,7 +350,7 @@ mod tests {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
         let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
 
-        let release_form = CreateReleaseForm {
+        let form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
             primary_artist_id: artist.id,
@@ -369,7 +361,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), release_form.clone()).await.unwrap();
+        let release_result = create_release_service(&pool, Some(&user), form.clone()).await.unwrap();
 
         assert_eq!(release_result.release.name, "Test Release");
         assert_eq!(release_result.release.description, "Test Release Description");
@@ -390,7 +382,7 @@ mod tests {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
         let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
 
-        let release_form = CreateReleaseForm {
+        let form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
             primary_artist_id: artist.id,
@@ -401,7 +393,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), release_form).await;
+        let release_result = create_release_service(&pool, Some(&user), form).await;
         assert!(release_result.is_err());
         assert_eq!(
             release_result.unwrap_err().to_string(),
@@ -417,7 +409,7 @@ mod tests {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
         let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
 
-        let release_form = CreateReleaseForm {
+        let form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
             primary_artist_id: artist.id,
@@ -428,7 +420,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), release_form).await;
+        let release_result = create_release_service(&pool, Some(&user), form).await;
         assert!(release_result.is_err());
         assert_eq!(
             release_result.unwrap_err().to_string(),
@@ -444,7 +436,7 @@ mod tests {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
         let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
 
-        let release_form = CreateReleaseForm {
+        let form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
             catalogue_number: "TEST-123".to_string(),
@@ -455,7 +447,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), release_form).await;
+        let release_result = create_release_service(&pool, Some(&user), form).await;
         assert!(release_result.is_ok());
         let release = release_result.unwrap();
 
@@ -494,7 +486,7 @@ mod tests {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
         let artist = create_test_artist(&pool, 1, Some(record_label.clone())).await.unwrap();
 
-        let release_form = CreateReleaseForm {
+        let form = CreateReleaseForm {
             name: "Test Release".to_string(),
             description: "Test Release Description".to_string(),
             primary_artist_id: artist.id,
@@ -505,7 +497,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), release_form).await;
+        let release_result = create_release_service(&pool, Some(&user), form).await;
         assert!(release_result.is_ok());
         let release = release_result.unwrap();
 

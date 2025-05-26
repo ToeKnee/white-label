@@ -25,10 +25,9 @@ fn artist_ids_str(artist_ids: RwSignal<Vec<i64>>) -> String {
 
 #[component]
 #[allow(clippy::needless_pass_by_value)]
-pub fn ArtistSelect(primary_artist: Artist, initial_artist_ids: Vec<i64>) -> impl IntoView {
-    let (artists, set_artists) = signal(vec![]);
+pub fn ArtistSelect(primary_artist: Artist, artist_ids: RwSignal<Vec<i64>>) -> impl IntoView {
+    let artists = RwSignal::new(vec![]);
     let artists_resource = Resource::new(move || primary_artist.label_id, get_label_artists);
-    let artist_ids = RwSignal::new(initial_artist_ids);
 
     view! {
         <Transition fallback=Loading>
@@ -38,7 +37,7 @@ pub fn ArtistSelect(primary_artist: Artist, initial_artist_ids: Vec<i64>) -> imp
                 {move || Suspend::new(async move {
                     if artists.get().is_empty() {
                         if let Ok(artist_list) = artists_resource.await {
-                            set_artists.set(artist_list.artists);
+                            artists.set(artist_list.artists);
                         }
                     }
                     view! {
@@ -47,7 +46,7 @@ pub fn ArtistSelect(primary_artist: Artist, initial_artist_ids: Vec<i64>) -> imp
                             <legend class="label">
                                 <span class="label-text">"Main Artist"</span>
                             </legend>
-                            <select class="select" name="release_form[primary_artist_id]">
+                            <select class="select" name="form[primary_artist_id]">
                                 {move || {
                                     let artist_rows = artists
                                         .get()
@@ -69,30 +68,7 @@ pub fn ArtistSelect(primary_artist: Artist, initial_artist_ids: Vec<i64>) -> imp
                                     .get()
                                     .into_iter()
                                     .map(|artist| {
-                                        let checked = artist_ids.get().contains(&artist.id);
-                                        view! {
-                                            <label class="flex flex-row gap-4 label bg-base-100 border-base-300 rounded-box">
-
-                                                <input
-                                                    class="checkbox"
-                                                    type="checkbox"
-                                                    checked=checked
-                                                    value=artist.id
-                                                    on:input:target=move |_ev| {
-                                                        toggle_artist_id(artist_ids, artist.id);
-                                                    }
-                                                />
-                                                <div class="avatar not-prose">
-                                                    <div class="w-8 rounded-full">
-                                                        <img
-                                                            src=artist.primary_image_url()
-                                                            alt=artist.name.clone()
-                                                        />
-                                                    </div>
-                                                </div>
-                                                {artist.name}
-                                            </label>
-                                        }
+                                        view! { <ArtistCheckbox artist artist_ids /> }
                                     })
                                     .collect::<Vec<_>>();
                                 if artist_rows.is_empty() {
@@ -115,10 +91,34 @@ pub fn ArtistSelect(primary_artist: Artist, initial_artist_ids: Vec<i64>) -> imp
                 <input
                     type="text"
                     class="hidden"
-                    name="release_form[artist_ids]"
+                    name="form[artist_ids]"
                     value=move || artist_ids_str(artist_ids)
                 />
             </ErrorBoundary>
         </Transition>
+    }
+}
+
+#[component]
+pub fn ArtistCheckbox(artist: Artist, artist_ids: RwSignal<Vec<i64>>) -> impl IntoView {
+    let checked = move || artist_ids.get().contains(&artist.id);
+    view! {
+        <label class="flex flex-row gap-4 label bg-base-100 border-base-300 rounded-box">
+            <input
+                class="checkbox"
+                type="checkbox"
+                checked=checked
+                value=artist.id
+                on:input:target=move |_ev| {
+                    toggle_artist_id(artist_ids, artist.id);
+                }
+            />
+            <div class="avatar not-prose">
+                <div class="w-8 rounded-full">
+                    <img src=artist.primary_image_url() alt=artist.name.clone() />
+                </div>
+            </div>
+            {artist.name}
+        </label>
     }
 }
