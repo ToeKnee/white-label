@@ -97,11 +97,10 @@ impl User {
     }
 
     pub fn avatar_url(&self) -> String {
-        let avatar_file = self
-            .avatar
-            .clone()
-            .unwrap_or_else(|| "default-avatar.jpg".to_string());
-        format!("/uploads/avatars/{avatar_file}")
+        self.avatar.clone().map_or_else(
+            || "/Logo.svg".to_string(),
+            |file| format!("/uploads/avatars/{file}"),
+        )
     }
 
     /// Get user by username
@@ -638,5 +637,41 @@ mod tests {
             };
             assert!(user.is_authenticated());
         }
+    }
+
+    #[test]
+    fn test_avatar_url() {
+        let test_user = User {
+            id: 1,
+            username: "test".into(),
+            first_name: None,
+            last_name: None,
+            email: "test@example.com".into(),
+            description: None,
+            avatar: None,
+            permissions: HashSet::new(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        let url = test_user.avatar_url();
+        assert_eq!(url, "/Logo.svg");
+    }
+
+    #[test]
+    fn test_avatar_url_with_custom_image() {
+        let test_user = User {
+            id: 1,
+            username: "test".into(),
+            first_name: None,
+            last_name: None,
+            email: "test@example.com".into(),
+            description: None,
+            avatar: Some("custom-image.jpg".to_string()),
+            permissions: HashSet::new(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        let url = test_user.avatar_url();
+        assert_eq!(url, "/uploads/avatars/custom-image.jpg");
     }
 }

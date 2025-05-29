@@ -128,11 +128,10 @@ impl Release {
     /// Get the primary image URL
     /// If the primary image is None, return the default image
     pub fn primary_image_url(&self) -> String {
-        let primary_image_file = self
-            .primary_image
-            .clone()
-            .unwrap_or_else(|| "default-release.jpg".to_string());
-        format!("/uploads/releases/{primary_image_file}")
+        self.primary_image.clone().map_or_else(
+            || "/Logo.svg".to_string(),
+            |file| format!("/uploads/releases/{file}"),
+        )
     }
 
     /// Create a new release
@@ -1257,7 +1256,7 @@ mod tests {
     async fn test_primary_image_url(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
         let url = release.primary_image_url();
-        assert_eq!(url, "/uploads/releases/default-release.jpg");
+        assert_eq!(url, "/Logo.svg");
     }
 
     #[sqlx::test]

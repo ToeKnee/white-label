@@ -108,11 +108,10 @@ impl Track {
     /// Get the primary image URL
     /// If the primary image is None, return the default image
     pub fn primary_image_url(&self) -> String {
-        let primary_image_file = self
-            .primary_image
-            .clone()
-            .unwrap_or_else(|| "default-track.jpg".to_string());
-        format!("/uploads/tracks/{primary_image_file}")
+        self.primary_image.clone().map_or_else(
+            || "/Logo.svg".to_string(),
+            |file| format!("/uploads/tracks/{file}"),
+        )
     }
 
     /// Create a new track
@@ -1414,7 +1413,7 @@ mod tests {
     async fn test_primary_image_url(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
         let url = track.primary_image_url();
-        assert_eq!(url, "/uploads/tracks/default-track.jpg");
+        assert_eq!(url, "/Logo.svg");
     }
 
     #[sqlx::test]

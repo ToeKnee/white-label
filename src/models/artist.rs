@@ -83,11 +83,10 @@ impl Artist {
     /// Get the primary image URL
     /// If the primary image is None, return the default image
     pub fn primary_image_url(&self) -> String {
-        let primary_image_file = self
-            .primary_image
-            .clone()
-            .unwrap_or_else(|| "default-artist.jpg".to_string());
-        format!("/uploads/artists/{primary_image_file}")
+        self.primary_image.clone().map_or_else(
+            || "/Logo.svg".to_string(),
+            |file| format!("/uploads/artists/{file}"),
+        )
     }
 
     /// Create a new artist
@@ -587,5 +586,20 @@ mod tests {
             result.unwrap_err().to_string(),
             "Could not delete artist with id 0.".to_string()
         );
+    }
+
+    #[sqlx::test]
+    async fn test_primary_image_url(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let url = artist.primary_image_url();
+        assert_eq!(url, "/Logo.svg");
+    }
+
+    #[sqlx::test]
+    async fn test_primary_image_url_with_custom_image(pool: PgPool) {
+        let mut artist = create_test_artist(&pool, 1, None).await.unwrap();
+        artist.primary_image = Some("custom-image.jpg".to_string());
+        let url = artist.primary_image_url();
+        assert_eq!(url, "/uploads/artists/custom-image.jpg");
     }
 }
