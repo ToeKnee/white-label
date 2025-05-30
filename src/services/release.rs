@@ -433,7 +433,9 @@ mod tests {
 
         assert_eq!(release_result.release.id, release.id);
         assert_eq!(release_result.tracks.len(), 1);
-        assert_eq!(release_result.tracks[0].id, track.id);
+        assert_eq!(release_result.tracks[0].track.id, track.id);
+        assert_eq!(release_result.artists.len(), 1);
+        assert_eq!(release_result.artists[0].id, artist.id);
     }
 
     #[sqlx::test]

@@ -4,7 +4,7 @@ use leptos_router::hooks::use_params_map;
 use markdown;
 
 use crate::components::utils::{error::ErrorPage, loading::Loading};
-use crate::models::{artist::Artist, release::Release, track::Track};
+use crate::models::{artist::Artist, release::Release, track_with_artists::TrackWithArtists};
 use crate::routes::{artist::get_artist, release::get_release};
 use crate::utils::{redirect::redirect, shorten_string::shorten_string};
 
@@ -87,7 +87,7 @@ pub fn ReleasePage() -> impl IntoView {
 
 #[component]
 /// Fetch and display the list of tracks for this release.
-pub fn TrackList(tracks: RwSignal<Vec<Track>>) -> impl IntoView {
+pub fn TrackList(tracks: RwSignal<Vec<TrackWithArtists>>) -> impl IntoView {
     move || {
         let track_tows = tracks
             .get()
@@ -115,7 +115,7 @@ pub fn TrackList(tracks: RwSignal<Vec<Track>>) -> impl IntoView {
 /// # Returns
 /// * A view of the release
 #[component]
-pub fn Track(#[prop(into)] track: Track) -> impl IntoView {
+pub fn Track(#[prop(into)] track: TrackWithArtists) -> impl IntoView {
     let track = RwSignal::new(track);
 
     view! {
@@ -123,17 +123,17 @@ pub fn Track(#[prop(into)] track: Track) -> impl IntoView {
             <div>
                 <img
                     class="not-prose size-10"
-                    src=move || track.get().primary_image_url()
-                    alt=move || track.get().name
+                    src=move || track.get().track.primary_image_url()
+                    alt=move || track.get().track.name
                 />
             </div>
             <div>
-                <div>{move || track.get().name}</div>
+                <div>{move || track.get().track.name}</div>
                 <div class="text-xs font-semibold uppercase opacity-60">
                     {move || view! { <FeaturedTrackArtists track=track /> }}
                 </div>
                 <p class="text-xs list-col-wrap">
-                    {move || shorten_string(track.get().description)}
+                    {move || shorten_string(track.get().track.description)}
                 </p>
             </div>
 
@@ -173,7 +173,26 @@ pub fn Track(#[prop(into)] track: Track) -> impl IntoView {
 /// # Returns
 /// * A view of the featured artists
 #[component]
-pub fn FeaturedTrackArtists(#[prop(into)] track: RwSignal<Track>) -> impl IntoView {
-    tracing::info!("Rendering featured artists for track: {:?}", track.get());
-    view! { <span class="text-xs font-semibold uppercase opacity-60"></span> }
+pub fn FeaturedTrackArtists(#[prop(into)] track: RwSignal<TrackWithArtists>) -> impl IntoView {
+    tracing::info!(
+        "Rendering featured artists for track: {:?}",
+        track.get().artists
+    );
+    let featured_artists = track
+        .get()
+        .artists
+        .iter()
+        .filter(|artist| artist.id != track.get().track.primary_artist_id)
+        .map(|artist| artist.name.clone())
+        .collect::<Vec<_>>()
+        .join(", ");
+    if featured_artists.is_empty() {
+        return view! { "" }.into_any();
+    }
+    view! {
+        <span class="text-xs font-semibold uppercase opacity-60">
+            "Featuring " {featured_artists}
+        </span>
+    }
+    .into_any()
 }

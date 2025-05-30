@@ -8,7 +8,9 @@ use sqlx::{FromRow, PgPool, Row};
 
 use super::traits::Validate;
 #[cfg(feature = "ssr")]
-use super::{artist::Artist, record_label::RecordLabel, track::Track};
+use super::{
+    artist::Artist, record_label::RecordLabel, track::Track, track_with_artists::TrackWithArtists,
+};
 #[cfg(feature = "ssr")]
 use crate::utils::slugify::slugify;
 
@@ -573,7 +575,7 @@ impl Release {
     /// # Panics
     /// If the release cannot be found, return an error
     #[cfg(feature = "ssr")]
-    pub async fn get_tracks(&self, pool: &PgPool) -> anyhow::Result<Vec<Track>> {
+    pub async fn get_tracks(&self, pool: &PgPool) -> anyhow::Result<Vec<TrackWithArtists>> {
         let tracks = sqlx::query_as::<_, Track>(
             "SELECT tracks.* FROM tracks
              INNER JOIN release_tracks ON tracks.id = release_tracks.track_id
@@ -583,7 +585,20 @@ impl Release {
         .fetch_all(pool)
         .await?;
 
-        Ok(tracks)
+        tracing::debug!("Loaded {} tracks for release {}", tracks.len(), self.name);
+        let mut tracks_with_artists: Vec<TrackWithArtists> = Vec::new();
+        for track in &tracks {
+            // Ensure each track has its artists loaded
+            let artists = track.get_artists(pool).await?;
+
+            tracks_with_artists.push(TrackWithArtists {
+                track: track.clone(),
+                artists: artists.clone(),
+            });
+            tracing::debug!("Loaded {} artists for track {}", artists.len(), track.name);
+        }
+
+        Ok(tracks_with_artists)
     }
 }
 
@@ -1380,7 +1395,7 @@ mod tests {
         let track2 = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
             .await
             .unwrap();
-        let track3 = create_test_track(&pool, 3, Some(release.clone()), Some(artist))
+        let track3 = create_test_track(&pool, 3, Some(release.clone()), Some(artist.clone()))
             .await
             .unwrap();
 
@@ -1396,7 +1411,9 @@ mod tests {
         assert!(result.is_ok());
         let tracks = release.get_tracks(&pool).await.unwrap();
         assert_eq!(tracks.len(), 1);
-        assert_eq!(tracks[0].id, track3.id);
+        assert_eq!(tracks[0].track.id, track3.id);
+        assert_eq!(tracks[0].artists.len(), 1);
+        assert_eq!(tracks[0].artists[0].id, artist.id);
     }
 
     /// Test get_tracks
@@ -1412,7 +1429,7 @@ mod tests {
         let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
             .await
             .unwrap();
-        let track2 = create_test_track(&pool, 2, Some(release.clone()), Some(artist))
+        let track2 = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
             .await
             .unwrap();
 
@@ -1426,8 +1443,12 @@ mod tests {
         let tracks = release.get_tracks(&pool).await.unwrap();
 
         assert_eq!(tracks.len(), 2);
-        assert_eq!(tracks[0].id, track.id);
-        assert_eq!(tracks[1].id, track2.id);
+        assert_eq!(tracks[0].track.id, track.id);
+        assert_eq!(tracks[1].track.id, track2.id);
+        assert_eq!(tracks[0].artists.len(), 1);
+        assert_eq!(tracks[1].artists.len(), 1);
+        assert_eq!(tracks[0].artists[0].id, artist.clone().id);
+        assert_eq!(tracks[1].artists[0].id, artist.id);
     }
 
     #[sqlx::test]
