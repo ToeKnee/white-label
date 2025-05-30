@@ -112,8 +112,17 @@ pub async fn get_release_service(
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;
+    let tracks = release.get_tracks(pool).await.map_err(|e| {
+        let err = format!("Error while getting tracks: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
 
-    Ok(ReleaseResult { release, artists })
+    Ok(ReleaseResult {
+        release,
+        artists,
+        tracks,
+    })
 }
 
 /// Create a new release
@@ -174,8 +183,17 @@ pub async fn create_release_service(
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;
+    let tracks = release.get_tracks(pool).await.map_err(|e| {
+        let err = format!("Error while getting tracks: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
 
-    Ok(ReleaseResult { release, artists })
+    Ok(ReleaseResult {
+        release,
+        artists,
+        tracks,
+    })
 }
 
 /// Update a release
@@ -237,8 +255,17 @@ pub async fn update_release_service(
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;
+    let tracks = release.get_tracks(pool).await.map_err(|e| {
+        let err = format!("Error while getting tracks: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
 
-    Ok(ReleaseResult { release, artists })
+    Ok(ReleaseResult {
+        release,
+        artists,
+        tracks,
+    })
 }
 
 /// Soft delete a release
@@ -282,6 +309,11 @@ pub async fn delete_release_service(
             tracing::error!("{err}");
             ServerFnError::new(e)
         })?,
+        tracks: release.get_tracks(pool).await.map_err(|e| {
+            let err = format!("Error while getting tracks: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?,
     })
 }
 
@@ -290,8 +322,8 @@ mod tests {
     use super::*;
     #[cfg(feature = "ssr")]
     use crate::models::test_helpers::{
-        create_test_artist, create_test_record_label, create_test_release, create_test_user,
-        create_test_user_with_permissions,
+        create_test_artist, create_test_record_label, create_test_release, create_test_track,
+        create_test_user, create_test_user_with_permissions,
     };
 
     #[sqlx::test]
@@ -386,6 +418,9 @@ mod tests {
         let release = create_test_release(&pool, 1, Some(artist.clone()))
             .await
             .unwrap();
+        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
 
         let release_result = get_release_service(
             &pool,
@@ -397,6 +432,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(release_result.release.id, release.id);
+        assert_eq!(release_result.tracks.len(), 1);
+        assert_eq!(release_result.tracks[0].id, track.id);
     }
 
     #[sqlx::test]

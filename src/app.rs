@@ -32,7 +32,7 @@ use crate::components::{
         page::edit::EditPage,
         root::AdminRoot,
     },
-    artist::home::ArtistPage,
+    artist::{home::ArtistPage, release::ReleasePage},
     auth::{
         change_password::ChangePassword, login::Login, logout::Logout, profile::EditProfile,
         register::Register,
@@ -123,6 +123,7 @@ pub fn WhiteLabel() -> impl IntoView {
                     <Route path=StaticSegment("") view=RecordLabelHome />
                     <Route path=path!("artists") view=RecordLabelHome />
                     <Route path=path!("artists/:slug") view=ArtistPage />
+                    <Route path=path!("artists/:artist_slug/:release_slug") view=ReleasePage />
                     <Route path=path!("pages/:slug") view=PageDetails />
 
                     <Route path=path!("login") view=Login />

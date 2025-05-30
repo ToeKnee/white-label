@@ -3,7 +3,7 @@ use leptos::server;
 use server_fn::codec::Cbor;
 
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
-use crate::models::{artist::Artist, release::Release};
+use crate::models::{artist::Artist, release::Release, track::Track};
 #[cfg(feature = "ssr")]
 use crate::services::release::{
     create_release_service, delete_release_service, get_release_service, get_releases_service,
@@ -21,6 +21,7 @@ pub struct ReleasesResult {
 pub struct ReleaseResult {
     pub release: Release,
     pub artists: Vec<Artist>,
+    pub tracks: Vec<Track>,
 }
 
 #[server(GetReleases, "/api", endpoint="get_releases", output = Cbor)]

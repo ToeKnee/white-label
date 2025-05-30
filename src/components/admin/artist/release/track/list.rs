@@ -11,7 +11,6 @@ use crate::components::{
 };
 use crate::models::{artist::Artist, release::Release, track::Track};
 use crate::routes::{artist::get_artist, release::get_release, track::get_tracks};
-
 use crate::utils::redirect::redirect;
 
 /// Renders the list tracks page.

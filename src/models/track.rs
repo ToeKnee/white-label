@@ -717,7 +717,7 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn test_primary_artist_dow_not_exist(pool: PgPool) {
+    async fn test_primary_artist_does_not_exist(pool: PgPool) {
         let track = Track {
             id: 1,
             name: "Test Track".to_string(),
