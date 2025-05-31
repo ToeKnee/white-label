@@ -3,11 +3,13 @@ use leptos::server;
 use server_fn::codec::Cbor;
 
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
+#[cfg(feature = "ssr")]
+use crate::models::record_label::RecordLabel;
 use crate::models::{artist::Artist, release::Release, track_with_artists::TrackWithArtists};
 #[cfg(feature = "ssr")]
 use crate::services::release::{
-    create_release_service, delete_release_service, get_release_service, get_releases_service,
-    update_release_service,
+    create_release_service, delete_release_service, get_next_scheduled_release_service,
+    get_release_service, get_releases_service, update_release_service,
 };
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
@@ -30,6 +32,24 @@ pub async fn get_releases(artist_slug: String) -> Result<ReleasesResult, ServerF
     let auth = auth()?;
     let user = auth.current_user.as_ref();
     get_releases_service(&pool, user, artist_slug).await
+}
+
+#[server(GetNextScheduledRelease, "/api", endpoint="get_next_scheduled_release", output = Cbor)]
+pub async fn get_next_scheduled_release(
+    artist_slug: Option<String>,
+) -> Result<Option<ReleaseResult>, ServerFnError> {
+    let pool = pool()?;
+    let record_label = RecordLabel::first(&pool)
+        .await
+        .map_err(|_| ServerFnError::new("Failed to retrieve record label"))?;
+    let artist_id = match artist_slug {
+        Some(slug) if slug.is_empty() => match Artist::get_by_slug(&pool, slug).await {
+            Ok(artist) => Some(artist.id),
+            Err(_) => None,
+        },
+        _ => None,
+    };
+    get_next_scheduled_release_service(&pool, artist_id, record_label.id).await
 }
 
 #[server(GetRelease, "/api", endpoint="get_release", output = Cbor)]

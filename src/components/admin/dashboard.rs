@@ -1,11 +1,13 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 
-use crate::components::admin::dash::{
-    artists::ArtistsTable, pages::PagesTable, record_label::RecordLabel,
+use crate::components::{
+    admin::dash::{
+        artists::ArtistsTable, pages::PagesTable, record_label::RecordLabel,
+        upcoming_release::UpcomingRelease,
+    },
+    utils::{error::ErrorPage, loading::Loading},
 };
-use crate::components::utils::error::ErrorPage;
-use crate::components::utils::loading::Loading;
 
 /// Renders the record label page.
 #[component]
@@ -30,37 +32,7 @@ pub fn Dashboard() -> impl IntoView {
                                 </div>
                             </div>
 
-                            <div class="shadow-xl grow not-prose card bg-neutral text-neutral-content bg-base-100">
-                                <div class="card-body">
-                                    <h2 class="card-title">New Release</h2>
-                                    <div class="grid grid-flow-col auto-cols-max gap-5 text-center">
-                                        <div class="flex flex-col">
-                                            <span class="font-mono text-5xl countdown">
-                                                <span style="--value:15;"></span>
-                                            </span>
-                                            days
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-mono text-5xl countdown">
-                                                <span style="--value:10;"></span>
-                                            </span>
-                                            hours
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-mono text-5xl countdown">
-                                                <span style="--value:24;"></span>
-                                            </span>
-                                            min
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-mono text-5xl countdown">
-                                                <span style="--value:${counter};"></span>
-                                            </span>
-                                            sec
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <UpcomingRelease />
 
                             <div class="shadow-xl grow not-prose card bg-neutral text-neutral-content bg-base-100">
                                 <div class="card-body">

@@ -7,6 +7,55 @@ use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 use crate::models::{artist::Artist, auth::User, release::Release};
 use crate::routes::release::{ReleaseResult, ReleasesResult};
 
+/// Get the next scheduled release, optionally filtered by artist slug.
+///
+/// # Arguments
+/// * `pool` - The database connection pool
+/// * `Option<artist_slug>` - The slug of the artist to filter by
+///
+/// # Returns
+/// The next scheduled release, or None if there are no scheduled releases.
+///
+/// # Errors
+/// If there is an error querying the database, return an error
+#[cfg(feature = "ssr")]
+pub async fn get_next_scheduled_release_service(
+    pool: &PgPool,
+    artist_id: Option<i64>,
+    label_id: i64,
+) -> Result<Option<ReleaseResult>, ServerFnError> {
+    let release = match Release::get_next_scheduled_release(pool, artist_id, label_id).await {
+        Ok(release) => Ok(release),
+        Err(e) => {
+            let err = format!("Error while getting next scheduled release: {e:?}");
+            tracing::error!("{err}");
+            Err(ServerFnError::new(e))
+        }
+    };
+    match release {
+        Ok(Some(release)) => {
+            let artists = release.get_artists(pool).await.map_err(|e| {
+                let err = format!("Error while getting artists: {e:?}");
+                tracing::error!("{err}");
+                ServerFnError::new(e)
+            })?;
+            let tracks = release.get_tracks(pool).await.map_err(|e| {
+                let err = format!("Error while getting tracks: {e:?}");
+                tracing::error!("{err}");
+                ServerFnError::new(e)
+            })?;
+
+            Ok(Some(ReleaseResult {
+                release,
+                artists,
+                tracks,
+            }))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// Get an artists releases
 ///
 /// # Arguments
@@ -402,6 +451,41 @@ mod tests {
 
         assert_eq!(releases.releases.len(), 1);
         assert_eq!(releases.releases[0].id, release.id);
+    }
+
+    #[sqlx::test]
+    async fn test_get_next_scheduled_release_service(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let mut release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        release.release_date = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        release.clone().update(&pool).await.unwrap();
+
+        let next_release =
+            get_next_scheduled_release_service(&pool, Some(artist.id), record_label.id)
+                .await
+                .unwrap();
+
+        assert!(next_release.is_some());
+        assert_eq!(next_release.unwrap().release.id, release.id);
+    }
+
+    #[sqlx::test]
+    async fn test_get_next_scheduled_release_service_no_artist(pool: PgPool) {
+        let mut release = create_test_release(&pool, 1, None).await.unwrap();
+        release.release_date = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        release.clone().update(&pool).await.unwrap();
+
+        let next_release = get_next_scheduled_release_service(&pool, None, release.label_id)
+            .await
+            .unwrap();
+
+        assert!(next_release.is_some());
+        assert_eq!(next_release.unwrap().release.id, release.id);
     }
 
     #[sqlx::test]

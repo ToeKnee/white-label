@@ -2,13 +2,10 @@ use leptos::prelude::*;
 use reactive_stores::Store;
 
 use crate::app::UserContext;
-use crate::components::utils::error::ErrorPage;
-use crate::components::utils::status_badge::StatusBadge;
+use crate::components::utils::{error::ErrorPage, status_badge::StatusBadge};
 use crate::models::auth::User;
-use crate::models::page::Page;
-use crate::routes::record_label::get_label_pages;
-use crate::store::GlobalState;
-use crate::store::GlobalStateStoreFields;
+use crate::store::{GlobalState, GlobalStateStoreFields};
+use crate::{models::page::Page, routes::record_label::get_label_pages};
 
 /// Renders the record label page.
 #[component]

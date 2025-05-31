@@ -306,6 +306,46 @@ impl Release {
         }
     }
 
+    /// Get next release by (optional) artist and record label
+    /// If there are no upcoming releases, return None
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `artist_id` - The ID of the artist (optional)
+    /// * `record_label_id` - The ID of the record label (optional)
+    ///
+    /// # Returns
+    /// The next release, if it exists
+    ///
+    /// # Errors
+    /// If there is an error getting the next release, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn get_next_scheduled_release(
+        pool: &PgPool,
+        artist_id: Option<i64>,
+        record_label_id: i64,
+    ) -> anyhow::Result<Option<Self>> {
+        let mut query = "SELECT * FROM releases WHERE release_date > NOW() AND published_at IS NOT NULL AND label_id = $1".to_string();
+        if artist_id.is_some() {
+            query.push_str(" AND primary_artist_id = $2");
+        }
+        query.push_str(" ORDER BY release_date ASC LIMIT 1");
+
+        let mut query_builder = sqlx::query_as::<_, Self>(&query).bind(record_label_id);
+        if let Some(artist_id) = artist_id {
+            query_builder = query_builder.bind(artist_id);
+        }
+
+        let release = query_builder.fetch_optional(pool).await;
+        match release {
+            Ok(release) => Ok(release),
+            Err(e) => {
+                tracing::error!("{e}");
+                Err(anyhow::anyhow!("Could not find next scheduled release."))
+            }
+        }
+    }
+
     /// List releases by artist and record label
     /// This is used to get all releases by an artist on a record label
     ///
@@ -1063,6 +1103,52 @@ mod tests {
             release.unwrap_err().to_string(),
             "Could not find release test-release-1 for artist with id 1 and record label with id 1.".to_string()
         );
+    }
+
+    #[sqlx::test]
+    async fn test_get_next_scheduled_release_no_releases(pool: PgPool) {
+        let release = Release::get_next_scheduled_release(&pool, None, 1)
+            .await
+            .unwrap();
+        assert!(release.is_none());
+    }
+
+    #[sqlx::test]
+    async fn test_get_next_scheduled_release_with_releases(pool: PgPool) {
+        let mut release = create_test_release(&pool, 1, None).await.unwrap();
+        release.release_date = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        release.clone().update(&pool).await.unwrap();
+
+        let next_release = Release::get_next_scheduled_release(&pool, None, release.label_id)
+            .await
+            .unwrap();
+
+        assert!(next_release.is_some());
+        assert_eq!(next_release.unwrap().id, release.id);
+    }
+
+    #[sqlx::test]
+    async fn test_get_next_scheduled_release_with_artist(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let mut release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        release.release_date = Some(chrono::Utc::now() + chrono::Duration::days(2));
+        release.clone().update(&pool).await.unwrap();
+        let other_artist = create_test_artist(&pool, 2, None).await.unwrap();
+        let mut other_upcoming_release = create_test_release(&pool, 2, Some(other_artist.clone()))
+            .await
+            .unwrap();
+        other_upcoming_release.release_date = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        other_upcoming_release.clone().update(&pool).await.unwrap();
+
+        let next_release =
+            Release::get_next_scheduled_release(&pool, Some(artist.id), release.label_id)
+                .await
+                .unwrap();
+
+        assert!(next_release.is_some());
+        assert_eq!(next_release.unwrap().id, release.id);
     }
 
     #[sqlx::test]
