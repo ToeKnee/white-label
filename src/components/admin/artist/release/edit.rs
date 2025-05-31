@@ -194,7 +194,7 @@ fn Form(
             view! {
                 <MarkdownField
                     title="Description".to_string()
-                    field="release_form[description]".to_string()
+                    field="form[description]".to_string()
                     markdown_text=release.get().description
                 />
             }
