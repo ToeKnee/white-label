@@ -40,15 +40,19 @@ pub fn ReleasePage() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     if let Ok(this_artist) = artist_resource.await {
-                        artist.set(this_artist.artist);
+                        if !this_artist.artist.slug.is_empty() {
+                            artist.set(this_artist.artist);
+                        }
                     } else {
                         tracing::error!("Error while getting artist");
                         redirect("/artists");
                     }
                     if let Ok(this_release) = release_resource.await {
-                        release.set(this_release.release.clone());
-                        artists.set(this_release.artists);
-                        tracks.set(this_release.tracks);
+                        if !this_release.release.slug.is_empty() {
+                            release.set(this_release.release.clone());
+                            artists.set(this_release.artists);
+                            tracks.set(this_release.tracks);
+                        }
                     } else {
                         tracing::error!("Error while getting release");
                         redirect(&format!("/artists/{}", artist.get().slug));
@@ -130,7 +134,7 @@ pub fn Track(#[prop(into)] track: TrackWithArtists) -> impl IntoView {
             <div>
                 <div>{move || track.get().track.name}</div>
                 <div class="text-xs font-semibold uppercase opacity-60">
-                    {move || view! { <FeaturedTrackArtists track=track /> }}
+                    {move || view! { <FeaturedTrackArtists track=track.get() /> }}
                 </div>
                 <p class="text-xs list-col-wrap">
                     {move || shorten_string(track.get().track.description)}
@@ -173,19 +177,18 @@ pub fn Track(#[prop(into)] track: TrackWithArtists) -> impl IntoView {
 /// # Returns
 /// * A view of the featured artists
 #[component]
-pub fn FeaturedTrackArtists(#[prop(into)] track: RwSignal<TrackWithArtists>) -> impl IntoView {
-    tracing::info!(
-        "Rendering featured artists for track: {:?}",
-        track.get().artists
-    );
-    let featured_artists = track
-        .get()
-        .artists
-        .iter()
-        .filter(|artist| artist.id != track.get().track.primary_artist_id)
-        .map(|artist| artist.name.clone())
-        .collect::<Vec<_>>()
-        .join(", ");
+#[allow(clippy::needless_pass_by_value)]
+pub fn FeaturedTrackArtists(#[prop(into)] track: TrackWithArtists) -> impl IntoView {
+    let primary_artist_id = track.track.primary_artist_id;
+    let featured_artists = {
+        track
+            .artists
+            .iter()
+            .filter(|artist| artist.id != primary_artist_id)
+            .map(|artist| artist.name.clone())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
     if featured_artists.is_empty() {
         return view! { "" }.into_any();
     }
