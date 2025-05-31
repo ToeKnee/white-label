@@ -30,7 +30,7 @@ pub fn RecordLabel() -> impl IntoView {
                         {if user.get().permissions.contains("label_owner") {
                             view! {
                                 <div class="basis-1/3">
-                                    <div class="shadow-xl card bg-base-100">
+                                    <div class="shadow-xl not-prose card bg-neutral text-neutral-content bg-base-100">
                                         <div class="card-body">
                                             <h2 class="card-title">{record_label.get().name}</h2>
                                             <p>"ISRC: "{record_label.get().isrc_base}" YY XXXXX"</p>

@@ -23,7 +23,7 @@ pub fn Dashboard() -> impl IntoView {
                             <ArtistsTable />
                             <PagesTable />
                             <div class="basis-auto">
-                                <div class="shadow-xl card bg-base-100">
+                                <div class="shadow-xl not-prose card bg-neutral text-neutral-content bg-base-100">
                                     <div class="card-body">
                                         <h2 class="card-title">Social Tips!</h2>
                                         Why not post on threads?
@@ -31,7 +31,7 @@ pub fn Dashboard() -> impl IntoView {
                                 </div>
                             </div>
                             <div class="basis-auto">
-                                <div class="shadow-xl card bg-base-100">
+                                <div class="shadow-xl not-prose card bg-neutral text-neutral-content bg-base-100">
                                     <div class="card-body">
                                         <h2 class="card-title">New Release</h2>
                                         <div class="grid grid-flow-col auto-cols-max gap-5 text-center">
@@ -64,7 +64,7 @@ pub fn Dashboard() -> impl IntoView {
                                 </div>
                             </div>
                             <div class="basis-auto">
-                                <div class="shadow-xl card bg-base-100">
+                                <div class="shadow-xl not-prose card bg-neutral text-neutral-content bg-base-100">
                                     <div class="card-body">
                                         <h2 class="card-title">Mailing list</h2>
                                         <div class="shadow stats">

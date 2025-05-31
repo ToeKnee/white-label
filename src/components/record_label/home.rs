@@ -80,7 +80,7 @@ pub fn ArtistList(record_label_id: i64) -> impl IntoView {
                             view! { <ArtistBox artist /> }
                         })
                         .collect::<Vec<_>>();
-                    view! { <div class="grid grid-cols-3 grid-flow-row-dense">{artist_rows}</div> }
+                    view! { <div class="flex flex-wrap gap-4 justify-between">{artist_rows}</div> }
                 })}
             </ErrorBoundary>
         </Transition>
@@ -91,7 +91,7 @@ pub fn ArtistList(record_label_id: i64) -> impl IntoView {
 fn ArtistBox(#[prop(into)] artist: Artist) -> impl IntoView {
     view! {
         <a href=format!("/artists/{}", artist.slug) class="no-underline">
-            <div class="w-96 shadow-xl card card-compact bg-base-100 indicator">
+            <div class="w-96 shadow-xl not-prose card card-compact bg-base-100 bg-neutral text-neutral-content indicator">
                 <StatusBadge deleted_at=artist.deleted_at published_at=artist.published_at />
                 <figure>
                     <img src=artist.primary_image_url() alt=artist.name.clone() />

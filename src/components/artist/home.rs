@@ -117,7 +117,7 @@ pub fn Release(#[prop(into)] release: Release, artist_slug: RwSignal<String>) ->
             href=move || format!("/artists/{}/{}", artist_slug.get(), release.get().slug)
             class="w-1/4 link link-hover min-w-96"
         >
-            <div class="shadow-sm card bg-base-100 bg-neutral text-neutral-content">
+            <div class="shadow-sm not-prose card bg-base-100 bg-neutral text-neutral-content">
                 <figure class="not-prose">
                     <img
                         src=move || release.get().primary_image_url()

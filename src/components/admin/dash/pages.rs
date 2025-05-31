@@ -26,7 +26,7 @@ pub fn PagesTable() -> impl IntoView {
 
     view! {
         <div class="basis-1/2">
-            <div class="overflow-x-auto shadow-xl card bg-base-100">
+            <div class="overflow-x-auto shadow-xl not-prose card bg-neutral text-neutral-content bg-base-100">
                 <div class="card-body">
                     <h2 class="card-title">Pages</h2>
                     <table class="table">
