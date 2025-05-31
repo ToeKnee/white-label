@@ -29,17 +29,15 @@ pub fn RecordLabel() -> impl IntoView {
                     view! {
                         {if user.get().permissions.contains("label_owner") {
                             view! {
-                                <div class="basis-1/3">
-                                    <div class="shadow-xl not-prose card bg-neutral text-neutral-content bg-base-100">
-                                        <div class="card-body">
-                                            <h2 class="card-title">{record_label.get().name}</h2>
-                                            <p>"ISRC: "{record_label.get().isrc_base}" YY XXXXX"</p>
-                                            <p>{shorten_string(record_label.get().description)}</p>
-                                            <div class="justify-end card-actions">
-                                                <a href="/admin/label" class="btn btn-primary">
-                                                    Edit
-                                                </a>
-                                            </div>
+                                <div class="overflow-x-auto shadow-xl basis-sm not-prose card bg-neutral text-neutral-content bg-base-100">
+                                    <div class="card-body">
+                                        <h2 class="card-title">{record_label.get().name}</h2>
+                                        <p>"ISRC: "{record_label.get().isrc_base}" YY XXXXX"</p>
+                                        <p>{shorten_string(record_label.get().description)}</p>
+                                        <div class="justify-end card-actions">
+                                            <a href="/admin/label" class="btn btn-primary">
+                                                Edit
+                                            </a>
                                         </div>
                                     </div>
                                 </div>
