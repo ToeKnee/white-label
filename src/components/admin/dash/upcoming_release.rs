@@ -1,4 +1,6 @@
 use leptos::prelude::*;
+#[cfg(feature = "hydrate")]
+use std::time::Duration;
 
 use crate::components::utils::{error::ErrorPage, loading::Loading};
 use crate::models::release::Release;
@@ -35,14 +37,17 @@ pub fn UpcomingRelease() -> impl IntoView {
     let release = RwSignal::new(Release::default());
     let release_resource = Resource::new(move || {}, move |()| get_next_scheduled_release(None));
     let count_down = RwSignal::new(Countdown::default());
+    let now = RwSignal::new(chrono::Utc::now());
+
+    #[cfg(feature = "hydrate")]
+    set_interval(move || now.set(chrono::Utc::now()), Duration::from_secs(1));
 
     Effect::new(move || {
-        let now = chrono::Utc::now();
         let release_date = release
             .get()
             .release_date
             .map_or_else(chrono::Utc::now, |date| date);
-        let diff = release_date - now;
+        let diff = release_date - now.get();
         count_down.set(Countdown {
             days: diff.num_days(),
             hours: diff.num_hours() % 24,
@@ -69,8 +74,10 @@ pub fn UpcomingRelease() -> impl IntoView {
                     view! {
                         <div class="shadow-xl grow not-prose card bg-neutral text-neutral-content bg-base-100">
                             <div class="card-body">
-                                <h2 class="card-title">Upcoming Release {release.get().name}</h2>
-                                <div class="grid grid-flow-col auto-cols-max gap-5 text-center justify-center-safe">
+                                <h2 class="card-title">
+                                    "Upcoming Release — " {release.get().name}
+                                </h2>
+                                <div class="grid grid-flow-col auto-cols-max gap-5 pt-6 text-center justify-center-safe">
                                     <div class="flex flex-col">
                                         <span class="font-mono text-5xl countdown">
                                             <span style=count_down.get().view_days()></span>
