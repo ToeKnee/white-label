@@ -1,3 +1,5 @@
+//! This module contains the front-end components of the application.
+
 pub mod admin;
 pub mod artist;
 pub mod auth;

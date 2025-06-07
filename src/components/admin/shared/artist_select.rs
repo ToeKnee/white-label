@@ -1,3 +1,5 @@
+//! Artist selection component for a form.
+
 use leptos::prelude::*;
 
 use crate::components::utils::{error::ErrorPage, loading::Loading};
@@ -23,9 +25,15 @@ fn artist_ids_str(artist_ids: RwSignal<Vec<i64>>) -> String {
         .join(",")
 }
 
+/// Select component for choosing artists in a form.
 #[component]
 #[allow(clippy::needless_pass_by_value)]
-pub fn ArtistSelect(primary_artist: Artist, artist_ids: RwSignal<Vec<i64>>) -> impl IntoView {
+pub fn ArtistSelect(
+    /// The primary artist is the one that will be selected by default. It is the primary artist for the release.
+    primary_artist: Artist,
+    /// The list of artist IDs that are selected. This should also include the primary artist ID.
+    artist_ids: RwSignal<Vec<i64>>,
+) -> impl IntoView {
     let artists = RwSignal::new(vec![]);
     let artists_resource = Resource::new(move || primary_artist.label_id, get_label_artists);
 
@@ -99,8 +107,14 @@ pub fn ArtistSelect(primary_artist: Artist, artist_ids: RwSignal<Vec<i64>>) -> i
     }
 }
 
+/// Checkbox component for selecting an artist in the form.
 #[component]
-pub fn ArtistCheckbox(artist: Artist, artist_ids: RwSignal<Vec<i64>>) -> impl IntoView {
+pub fn ArtistCheckbox(
+    /// The artist to display in the checkbox
+    artist: Artist,
+    /// The signal containing the list of selected artist IDs
+    artist_ids: RwSignal<Vec<i64>>,
+) -> impl IntoView {
     let checked = move || artist_ids.get().contains(&artist.id);
     view! {
         <label class="flex flex-row gap-4 label bg-base-100 border-base-300 rounded-box">

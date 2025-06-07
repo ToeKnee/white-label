@@ -1,3 +1,5 @@
+//! Components for the admin sections of the application.
+
 pub mod artist;
 pub mod dash;
 pub mod dashboard;

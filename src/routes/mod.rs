@@ -1,3 +1,5 @@
+//! This module contains the API endpoints for the application. It maps between the web API request and the service layer.
+
 pub mod artist;
 pub mod artists;
 #[allow(clippy::unused_async)]

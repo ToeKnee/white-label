@@ -1,3 +1,5 @@
+//! Create an artist
+
 use leptos::prelude::*;
 use leptos_meta::Title;
 use reactive_stores::Store;

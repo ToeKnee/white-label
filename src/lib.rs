@@ -2,7 +2,7 @@
 //!
 //! White Label is a web application for managing record labels, artists and releases.
 
-//#![warn(missing_docs)]
+#![warn(missing_docs)]
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::complexity)]

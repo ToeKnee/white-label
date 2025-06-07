@@ -1,3 +1,5 @@
+//! Error handling components for the application.
+
 use leptos::prelude::*;
 
 use crate::utils::split_at_colon::split_at_colon;
@@ -21,7 +23,10 @@ pub fn ErrorPage() -> impl IntoView {
 
 /// Inline error message.
 #[component]
-pub fn InlineError(message: String) -> impl IntoView {
+pub fn InlineError(
+    /// The message to display in the inline error.
+    message: String,
+) -> impl IntoView {
     view! {
         <div role="alert" class="alert alert-error">
             <svg
@@ -44,7 +49,10 @@ pub fn InlineError(message: String) -> impl IntoView {
 
 /// Display ServerFnError as an inline error message.
 #[component]
-pub fn ServerErrors(server_errors: Option<ServerFnError>) -> impl IntoView {
+pub fn ServerErrors(
+    /// The server errors to display.
+    server_errors: Option<ServerFnError>,
+) -> impl IntoView {
     server_errors.map_or_else(
         || view! { "" }.into_any(),
         |errors| view! { <InlineError message=split_at_colon(&errors.to_string()).1 /> }.into_any(),

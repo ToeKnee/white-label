@@ -1,3 +1,5 @@
+//! Footer component for the record label page.
+//! This component displays the footer with links to services, legal information, and the record label's details.
 use leptos::prelude::*;
 use reactive_stores::Store;
 
@@ -8,7 +10,7 @@ use crate::routes::record_label::get_record_label;
 use crate::store::GlobalState;
 use crate::store::GlobalStateStoreFields;
 
-/// Renders the record label page.
+/// Renders the footer for the application.
 #[component]
 pub fn LabelFooter() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();

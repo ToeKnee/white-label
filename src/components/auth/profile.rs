@@ -1,3 +1,4 @@
+//! Profile edit page.
 use leptos::form::ActionForm;
 use leptos::prelude::*;
 use leptos_meta::Title;

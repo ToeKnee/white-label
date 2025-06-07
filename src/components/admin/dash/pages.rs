@@ -1,3 +1,4 @@
+//! This module defines the `PagesTable` component, which displays a table of pages
 use leptos::prelude::*;
 use reactive_stores::Store;
 
@@ -7,7 +8,7 @@ use crate::models::auth::User;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::{models::page::Page, routes::record_label::get_label_pages};
 
-/// Renders the record label page.
+/// Renders the page list component.
 #[component]
 pub fn PagesTable() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();

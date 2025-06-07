@@ -14,8 +14,11 @@ use crate::models::auth::ssr::AuthSession;
 /// item in Axum's State. Leptos requires you to have leptosOptions in your State struct for the leptos route handlers
 #[derive(FromRef, Debug, Clone)]
 pub struct AppState {
+    /// Options for the application - See <https://docs.rs/leptos_config/latest/leptos_config/struct.LeptosOptions.html> for detiails
     pub leptos_options: LeptosOptions,
+    /// The database connection pool
     pub pool: PgPool,
+    /// The routes for the application
     pub routes: Vec<AxumRouteListing>,
 }
 

@@ -1,3 +1,4 @@
+//! A component that displays a countdown for a new release.
 use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
 use std::time::Duration;

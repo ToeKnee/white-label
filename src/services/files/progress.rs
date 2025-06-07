@@ -1,3 +1,5 @@
+//! This module provides functionality to handle file uploads and progress tracking.
+
 /// In theory, you could create a single server function which
 /// 1) received multipart form data
 /// 2) returned a stream that contained updates on the progress
@@ -18,12 +20,14 @@ use dashmap::DashMap;
 use futures::Stream;
 use std::sync::LazyLock;
 
+/// This represents the state of a file upload.
 pub struct File {
     total: usize,
     tx: Sender<usize>,
     rx: Receiver<usize>,
 }
 
+/// This is a global map of all file uploads.
 pub static FILES: LazyLock<DashMap<String, File>> = LazyLock::new(DashMap::new);
 
 /// Add a chunk to the progress of a file upload.

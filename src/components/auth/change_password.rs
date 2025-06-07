@@ -1,3 +1,4 @@
+//! Change Password Component
 use leptos::form::ActionForm;
 use leptos::prelude::*;
 use leptos_meta::Title;
@@ -9,6 +10,7 @@ use crate::components::utils::{
 use crate::models::auth::User;
 use crate::routes::auth::ChangePassword;
 
+/// ChangePassword component allows users to change their password.
 #[component]
 pub fn ChangePassword() -> impl IntoView {
     Effect::new_isomorphic(move || {
@@ -65,6 +67,7 @@ pub fn ChangePassword() -> impl IntoView {
     }
 }
 
+/// Form component for changing the password.
 #[component]
 fn Form() -> impl IntoView {
     view! {

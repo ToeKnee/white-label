@@ -1,3 +1,5 @@
+//! This module provides helper functions to create test data for artists, pages, record labels, releases, tracks,
+//! and users in a `PostgreSQL` database using `SQLx`.
 use sqlx::PgPool;
 
 use crate::models::artist::Artist;

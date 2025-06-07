@@ -1,3 +1,5 @@
+//! Edit Record Label Page
+
 use leptos::prelude::*;
 use leptos_meta::Title;
 use reactive_stores::Store;
@@ -125,7 +127,10 @@ pub fn EditLabel() -> impl IntoView {
 
 /// Managed description so we can preview markdown
 #[component]
-pub fn DescriptionFields(record_label: RecordLabel) -> impl IntoView {
+pub fn DescriptionFields(
+    /// The record label
+    record_label: RecordLabel,
+) -> impl IntoView {
     let (description, set_description) = signal(record_label.description);
     let (markdown_description, set_markdown_description) = signal(String::new());
     Effect::new(move || {
@@ -164,6 +169,7 @@ pub fn DescriptionFields(record_label: RecordLabel) -> impl IntoView {
     }
 }
 
+/// ISRC Description component
 #[component]
 pub fn ISRCDescription() -> impl IntoView {
     view! {

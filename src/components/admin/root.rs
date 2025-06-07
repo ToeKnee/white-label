@@ -1,3 +1,5 @@
+//! The admin root component for the application.
+
 use leptos::prelude::*;
 use leptos_router::{components::Outlet, components::Redirect};
 

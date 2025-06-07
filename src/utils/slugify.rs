@@ -1,9 +1,18 @@
-//! # Utils
-//! This module contains utility functions that are used throughout the application.
+//! Turn a string into a slug
 //!
-//! ## Slugify
-//! The `slugify` function is used to convert a string into a slug.
-//!
+//! This module provides a function to slugify a string, which means
+//! - Transliterate unicode text to ASCII
+//! - Remove double spaces from the text
+//! - Replace spaces with hyphens
+//! # Example
+//! ```
+//! use white_label::utils::slugify;
+//! let slug = slugify("The Quick Brown Fox");
+//! assert_eq!(slug, "the-quick-brown-fox");
+//! ```
+//! # Note
+//! This function is useful for creating slugs for URLs, filenames, etc.
+
 use deunicode::deunicode;
 
 /// Slugify a text

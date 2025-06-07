@@ -1,3 +1,5 @@
+//! Routes for handling track-related operations.
+
 use leptos::prelude::ServerFnError;
 use leptos::server;
 use server_fn::codec::Cbor;
@@ -12,21 +14,40 @@ use crate::services::track::{
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
+/// Contains multiple Tracks.
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
 pub struct TracksResult {
+    /// A vector of tracks.
     pub tracks: Vec<Track>,
 }
 
+/// The result of fetching a single track along with its associated artists and releases.
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
 pub struct TrackResult {
+    /// The track being fetched.
     pub track: Track,
+    /// A vector of artists associated with the track.
     pub artists: Vec<Artist>,
+    /// A vector of releases associated with the track.
     pub releases: Vec<Release>,
 }
 
+/// Get all tracks for a specific artist and release.
+///
+/// # Arguments:
+/// * `artist_slug`: The slug of the artist.
+/// * `release_slug`: The slug of the release.
+///
+/// # Returns:
+/// * A `TracksResult` containing a vector of tracks associated with the specified artist and release.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if the artist or release cannot be found, or if there is an issue with the database connection.
 #[server(GetTracks, "/api", endpoint="get_tracks", output = Cbor)]
 pub async fn get_tracks(
+    /// The slug of the artist.
     artist_slug: String,
+    /// The slug of the release.
     release_slug: String,
 ) -> Result<TracksResult, ServerFnError> {
     let pool = pool()?;
@@ -35,10 +56,25 @@ pub async fn get_tracks(
     get_tracks_service(&pool, user, artist_slug, release_slug).await
 }
 
+/// Get a specific track by its slug, along with its associated artists and releases.
+///
+/// # Arguments:
+/// * `artist_slug`: The slug of the artist.
+/// * `release_slug`: The slug of the release.
+/// * `slug`: The slug of the track.
+///
+/// # Returns:
+/// * A `TrackResult` containing the track, its associated artists, and releases.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if the track cannot be found or if there is an issue with the database connection.
 #[server(GetTrack, "/api", endpoint="get_track", output = Cbor)]
 pub async fn get_track(
+    /// The slug of the artist.
     artist_slug: String,
+    /// The slug of the release.
     release_slug: String,
+    /// The slug of the track.
     slug: String,
 ) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
@@ -47,25 +83,62 @@ pub async fn get_track(
     get_track_service(&pool, user, artist_slug, release_slug, slug).await
 }
 
+/// Create a new track with the provided form data.
+///
+/// # Arguments:
+/// * `form`: The form data containing the details of the track to be created.
+///
+/// # Returns:
+/// * A `TrackResult` containing the created track and its associated artists and releases.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
 #[server(CreateTrack, "/api", endpoint="create_track", output = Cbor)]
-pub async fn create_track(form: CreateTrackForm) -> Result<TrackResult, ServerFnError> {
+pub async fn create_track(
+    /// The form data containing the details of the track to be created.
+    form: CreateTrackForm,
+) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
     create_track_service(&pool, user, form).await
 }
 
+/// Update an existing track with the provided form data.
+///
+/// # Arguments:
+/// * `form`: The form data containing the updated details of the track.
+///
+/// # Returns:
+/// * A `TrackResult` containing the updated track and its associated artists and releases.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
 #[server(UpdateTrack, "/api", endpoint="update_track", output = Cbor)]
-pub async fn update_track(form: UpdateTrackForm) -> Result<TrackResult, ServerFnError> {
+pub async fn update_track(
+    /// The form data containing the updated details of the track.
+    form: UpdateTrackForm,
+) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();
-    tracing::info!("Updating track with form: {:?}", form);
     update_track_service(&pool, user, form).await
 }
 
+/// Delete a track by its slug.
+///
+/// # Arguments:
+/// * `slug`: The slug of the track to be deleted.
+/// # Returns:
+/// * A `TrackResult` containing the deleted track and its associated artists and releases.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
 #[server(DeleteTrack, "/api", endpoint="delete_track", output = Cbor)]
-pub async fn delete_track(slug: String) -> Result<TrackResult, ServerFnError> {
+pub async fn delete_track(
+    /// The slug of the track to be deleted.
+    slug: String,
+) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
     let auth = auth()?;
     let user = auth.current_user.as_ref();

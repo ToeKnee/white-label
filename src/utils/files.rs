@@ -1,3 +1,5 @@
+//! Provides utility functions for handling file names and extensions.
+
 #[cfg(feature = "ssr")]
 use leptos::prelude::ServerFnError;
 

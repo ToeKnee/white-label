@@ -1,3 +1,5 @@
+//! Page details component
+
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;

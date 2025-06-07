@@ -1,3 +1,5 @@
+//! Redirects to a new page using Leptos Router.
+
 use leptos_router::{NavigateOptions, hooks::use_navigate};
 
 /// Redirects to a new page.

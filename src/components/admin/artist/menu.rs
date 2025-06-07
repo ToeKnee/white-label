@@ -1,11 +1,13 @@
+//! Aritst admin menu component.
+
 use leptos::prelude::*;
 
 /// The artist admin menu options.
 #[derive(Clone, Eq, PartialEq)]
 pub enum Page {
-    // The artist profile.
+    /// The artist profile.
     Profile,
-    // The artist releases.
+    /// The artist releases.
     Releases,
 }
 
@@ -19,8 +21,17 @@ fn classes(selected: &Page, current_menu_item: &Page) -> String {
 }
 
 /// Renders the artist admin menu.
+///
+/// Arguments:
+/// * `slug` - The slug of the artist.
+/// * `selected` - The currently selected menu item.
 #[component]
-pub fn Menu<'a>(slug: RwSignal<std::string::String>, selected: &'a Page) -> impl IntoView {
+pub fn Menu<'a>(
+    /// The slug of the artist.
+    slug: RwSignal<std::string::String>,
+    /// The currently selected menu item.
+    selected: &'a Page,
+) -> impl IntoView {
     view! {
         <ul class="menu menu-horizontal bg-base-200">
             <li class="menu-active">

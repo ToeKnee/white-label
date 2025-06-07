@@ -13,8 +13,14 @@ use crate::routes::track::{DeleteTrack, TrackResult};
 use crate::utils::redirect::redirect;
 
 /// Renders the delete track component.
+///
+/// Arguments:
+/// * `track` - The track to be deleted.
 #[component]
-pub fn DeleteTrack(track: Track) -> impl IntoView {
+pub fn DeleteTrack(
+    /// The track to be deleted
+    track: Track,
+) -> impl IntoView {
     let dialog_element: NodeRef<html::Dialog> = NodeRef::new();
 
     let on_click_show = move |ev: MouseEvent| {

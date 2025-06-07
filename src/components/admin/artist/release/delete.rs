@@ -13,8 +13,14 @@ use crate::routes::release::{DeleteRelease, ReleaseResult};
 use crate::utils::redirect::redirect;
 
 /// Renders the delete release component.
+///
+/// Arguments:
+/// * `release` - The release to be deleted.
 #[component]
-pub fn DeleteRelease(release: Release) -> impl IntoView {
+pub fn DeleteRelease(
+    /// The release to be deleted
+    release: Release,
+) -> impl IntoView {
     let dialog_element: NodeRef<html::Dialog> = NodeRef::new();
 
     let on_click_show = move |ev: MouseEvent| {

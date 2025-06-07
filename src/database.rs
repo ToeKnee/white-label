@@ -1,3 +1,8 @@
+//! This module provides functionality to create a connection pool for a `PostgreSQL` database using `SQLx`.
+//!
+//! It reads the database URL from the `DATABASE_URL` environment variable, which can be set in a `.env` file.
+//! It also runs migrations to ensure the database schema is up-to-date.
+
 use anyhow::Context;
 use sqlx::postgres::PgPoolOptions;
 

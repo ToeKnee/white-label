@@ -14,7 +14,10 @@ use crate::utils::redirect::redirect;
 
 /// Renders the delete artist component.
 #[component]
-pub fn DeleteArtist(artist: Artist) -> impl IntoView {
+pub fn DeleteArtist(
+    /// The artist to delete
+    artist: Artist,
+) -> impl IntoView {
     let dialog_element: NodeRef<html::Dialog> = NodeRef::new();
 
     let on_click_show = move |ev: MouseEvent| {

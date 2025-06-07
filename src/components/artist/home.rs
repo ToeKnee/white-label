@@ -1,3 +1,5 @@
+//! The artist home page module
+
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
@@ -73,7 +75,12 @@ pub fn ArtistPage() -> impl IntoView {
 
 #[component]
 /// Fetch and display the list of releases for the artist
-pub fn ReleaseList(artist_slug: String, releases: RwSignal<Vec<Release>>) -> impl IntoView {
+pub fn ReleaseList(
+    /// The slug of the artist
+    artist_slug: String,
+    /// The releases to display
+    releases: RwSignal<Vec<Release>>,
+) -> impl IntoView {
     let artist_slug = RwSignal::new(artist_slug);
 
     view! {
@@ -103,7 +110,13 @@ pub fn ReleaseList(artist_slug: String, releases: RwSignal<Vec<Release>>) -> imp
 /// # Returns
 /// * A view of the release
 #[component]
-pub fn Release(#[prop(into)] release: Release, artist_slug: RwSignal<String>) -> impl IntoView {
+pub fn Release(
+    /// The release to display
+    #[prop(into)]
+    release: Release,
+    /// The slug of the artist
+    artist_slug: RwSignal<String>,
+) -> impl IntoView {
     let release = RwSignal::new(release);
     let release_date = move || {
         release.get().release_date.map_or_else(

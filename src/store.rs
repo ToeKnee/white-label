@@ -1,4 +1,5 @@
 //! Global store for the application.
+#![allow(missing_docs)] // Store macro does not have documentation
 use reactive_stores::Store;
 
 use crate::models::record_label::RecordLabel;

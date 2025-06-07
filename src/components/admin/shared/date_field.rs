@@ -1,3 +1,4 @@
+//! Date field component
 use leptos::prelude::*;
 
 /// Date field
@@ -7,8 +8,11 @@ use leptos::prelude::*;
 /// To work around this, we add the current time zone to the input value.
 #[component]
 pub fn DateField<'a>(
+    /// This is the title of the field, e.g. "Published At"
     title: String,
+    /// This is the name of the field, e.g. "published_at"
     field: &'a str,
+    /// This is the date to set in the field
     date: Option<chrono::DateTime<chrono::Utc>>,
 ) -> impl IntoView {
     let date = RwSignal::new(date);

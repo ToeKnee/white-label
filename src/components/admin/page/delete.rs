@@ -14,7 +14,10 @@ use crate::utils::redirect::redirect;
 
 /// Renders the delete page component.
 #[component]
-pub fn DeletePage(page: Page) -> impl IntoView {
+pub fn DeletePage(
+    /// The page to delete
+    page: Page,
+) -> impl IntoView {
     let dialog_element: NodeRef<html::Dialog> = NodeRef::new();
 
     let on_click_show = move |ev: MouseEvent| {

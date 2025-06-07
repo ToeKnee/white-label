@@ -1,3 +1,4 @@
+//! Edit Page component for the admin interface.
 use leptos::prelude::*;
 use leptos_meta::{Meta, Title, provide_meta_context};
 use leptos_router::hooks::use_params_map;

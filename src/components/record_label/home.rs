@@ -1,3 +1,4 @@
+//! This module contains the record label home page and its components.
 use leptos::prelude::*;
 use leptos_meta::Title;
 use markdown;
@@ -55,7 +56,10 @@ pub fn RecordLabelHome() -> impl IntoView {
 
 /// Render a list of artists for a record label.
 #[component]
-pub fn ArtistList(record_label_id: i64) -> impl IntoView {
+pub fn ArtistList(
+    /// The ID of the record label to fetch artists for
+    record_label_id: i64,
+) -> impl IntoView {
     let (artists, set_artists) = signal(vec![]);
     let artists_resource = Resource::new(move || record_label_id, get_label_artists);
 
@@ -88,7 +92,11 @@ pub fn ArtistList(record_label_id: i64) -> impl IntoView {
 }
 
 #[component]
-fn ArtistBox(#[prop(into)] artist: Artist) -> impl IntoView {
+fn ArtistBox(
+    /// The artist to display
+    #[prop(into)]
+    artist: Artist,
+) -> impl IntoView {
     view! {
         <a href=format!("/artists/{}", artist.slug) class="no-underline">
             <div class="w-96 shadow-xl not-prose card card-compact bg-base-100 bg-neutral text-neutral-content indicator">

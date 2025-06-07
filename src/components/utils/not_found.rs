@@ -1,3 +1,5 @@
+//! A generic 404 not found page.
+
 use leptos::prelude::*;
 
 /// A generic 404 not found page.

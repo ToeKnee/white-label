@@ -1,3 +1,4 @@
+//! Artists table component.
 use leptos::prelude::*;
 use reactive_stores::Store;
 
@@ -10,7 +11,7 @@ use crate::routes::record_label::get_label_artists;
 use crate::store::GlobalState;
 use crate::store::GlobalStateStoreFields;
 
-/// Renders the record label page.
+/// Renders the artists table component.
 #[component]
 pub fn ArtistsTable() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();

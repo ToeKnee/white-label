@@ -1,3 +1,4 @@
+//! The dashboard admin page.
 use leptos::prelude::*;
 use leptos_meta::Title;
 

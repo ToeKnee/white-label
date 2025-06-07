@@ -1,3 +1,5 @@
+//! This module defines the `User` struct and its associated methods for user management in the system.
+
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use sqlx::PgPool;
@@ -5,21 +7,38 @@ use std::collections::HashSet;
 
 use super::traits::Validate;
 
+/// Represents a user in the system.
+///
+/// This struct contains all the necessary information about a user, including their ID, username, email, and permissions.
+/// It also includes optional fields for first name, last name, description, and avatar.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct User {
+    /// Unique identifier for the user.
     pub id: i64,
+    /// Unique username of the user.
     pub username: String,
+    /// Optional first name of the user.
     pub first_name: Option<String>,
+    /// Optional last name of the user.
     pub last_name: Option<String>,
+    /// Email address of the user.
     pub email: String,
+    /// Optional description of the user - useful for user profiles.
     pub description: Option<String>,
+    /// Optional avatar URL of the user - can be used to display a profile picture.
     pub avatar: Option<String>,
+    /// Set of permissions assigned to the user.
     pub permissions: HashSet<String>,
+    /// Timestamp when the user was created.
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Timestamp when the user was last updated.
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-// Explicitly is not Serialize/Deserialize!
+/// Contains the user's passhash.
+///
+/// This is used for authentication purposes and should be kept secret.
+/// Explicitly is not Serialize/Deserialize!
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserPasshash(pub String);
 
@@ -84,18 +103,22 @@ impl Validate for User {
 }
 
 impl User {
+    /// Check if the user is authenticated.
     pub const fn is_authenticated(&self) -> bool {
         self.id != -1
     }
 
+    /// Check if the user is active.
     pub const fn is_active(&self) -> bool {
         self.id != -1
     }
 
+    /// Check if the user is anonymous.
     pub const fn is_anonymous(&self) -> bool {
         self.id == -1
     }
 
+    /// Get the avatar URL of the user.
     pub fn avatar_url(&self) -> String {
         self.avatar.clone().map_or_else(
             || "/Logo.svg".to_string(),
@@ -175,17 +198,31 @@ impl User {
     }
 }
 
+/// This module contains auth models that are only compiled when the `ssr` feature is enabled.
 #[cfg(feature = "ssr")]
 pub mod ssr {
     pub use super::{User, UserPasshash};
+    pub use async_trait::async_trait;
     pub use axum_session_auth::Authentication;
     use axum_session_sqlx::SessionPgPool;
     pub use sqlx::PgPool;
     pub use std::collections::HashSet;
+
+    /// The authentication session type for the user.
     pub type AuthSession = axum_session_auth::AuthSession<User, i64, SessionPgPool, PgPool>;
-    pub use async_trait::async_trait;
 
     impl User {
+        /// Get user by ID with passhash
+        ///
+        /// # Arguments
+        /// * `id` - The ID of the user
+        /// * `pool` - The database connection pool
+        ///
+        /// # Returns
+        /// A tuple containing the user and their passhash
+        ///
+        /// # Errors
+        /// If the user cannot be found, return an error
         pub async fn get_with_passhash(id: i64, pool: &PgPool) -> Option<(Self, UserPasshash)> {
             let sqluser = sqlx::query_as::<_, SqlUser>("SELECT * FROM users WHERE id = $1")
                 .bind(id)
@@ -205,12 +242,28 @@ pub mod ssr {
             Some(sqluser.into_user(Some(sql_user_perms)))
         }
 
+        /// Get user by ID
+        ///
+        /// # Arguments
+        /// * `id` - The ID of the user
+        /// * `pool` - The database connection pool
+        ///
+        /// # Returns
+        /// An option containing the user if found, otherwise None
         pub async fn get(id: i64, pool: &PgPool) -> Option<Self> {
             Self::get_with_passhash(id, pool)
                 .await
                 .map(|(user, _)| user)
         }
 
+        /// Get user from username with passhash
+        ///
+        /// # Arguments
+        /// * `name` - The username of the user
+        /// * `pool` - The database connection pool
+        ///
+        /// # Returns
+        /// An option containing a tuple of the user and their passhash if found, otherwise None
         pub async fn get_from_username_with_passhash(
             name: String,
             pool: &PgPool,
@@ -233,18 +286,33 @@ pub mod ssr {
             Some(sqluser.into_user(Some(sql_user_perms)))
         }
 
+        /// Get user from username
+        /// # Arguments
+        /// * `name` - The username of the user
+        /// * `pool` - The database connection pool
+        ///
+        /// # Returns
+        /// An option containing the user if found, otherwise None
         pub async fn get_from_username(name: String, pool: &PgPool) -> Option<Self> {
             Self::get_from_username_with_passhash(name, pool)
                 .await
                 .map(|(user, _)| user)
         }
 
+        /// Get user from email with passhash
+        ///
+        /// # Arguments
+        /// * `email` - The email of the user
+        /// * `pool` - The database connection pool
+        ///
+        /// # Returns
+        /// An option containing a tuple of the user and their passhash if found, otherwise None
         pub async fn get_from_email_with_passhash(
-            name: String,
+            email: String,
             pool: &PgPool,
         ) -> Option<(Self, UserPasshash)> {
             let sqluser = sqlx::query_as::<_, SqlUser>("SELECT * FROM users WHERE email = $1")
-                .bind(name)
+                .bind(email)
                 .fetch_one(pool)
                 .await
                 .ok()?;
@@ -261,6 +329,14 @@ pub mod ssr {
             Some(sqluser.into_user(Some(sql_user_perms)))
         }
 
+        /// Get user from email
+        ///
+        /// # Arguments
+        /// * `name` - The email of the user
+        /// * `pool` - The database connection pool
+        ///
+        /// # Returns
+        /// An option containing the user if found, otherwise None
         pub async fn get_from_email(name: String, pool: &PgPool) -> Option<Self> {
             Self::get_from_email_with_passhash(name, pool)
                 .await
@@ -268,8 +344,10 @@ pub mod ssr {
         }
     }
 
+    /// Represents a permission token for a user.
     #[derive(sqlx::FromRow, Clone)]
     pub struct SqlPermissionTokens {
+        /// The unique identifier for the permission token.
         pub token: String,
     }
 
@@ -298,21 +376,44 @@ pub mod ssr {
         }
     }
 
+    /// Represents a user in the SQL database.
+    ///
+    /// This struct is used to map the database rows to a Rust struct using `SQLx`.
+    /// It contains all the fields that are stored in the `users` table.
+    /// It implements the `FromRow` trait from `SQLx` to allow for easy conversion from database rows.
+    /// # Note: This struct is not used directly in the application logic, but rather as an intermediary
     #[derive(sqlx::FromRow, Clone, Debug)]
     pub struct SqlUser {
+        /// Unique identifier for the user.
         pub id: i64,
+        /// Unique username of the user.
         pub username: String,
+        /// Optional first name of the user.
         pub first_name: Option<String>,
+        /// Optional last name of the user.
         pub last_name: Option<String>,
+        /// Email address of the user.
         pub email: String,
+        /// Optional description of the user - useful for user profiles.
         pub description: Option<String>,
+        /// Optional avatar URL of the user - can be used to display a profile picture.
         pub avatar: Option<String>,
+        /// Password hash of the user.
         pub password: String,
+        /// Timestamp when the user was created.
         pub created_at: chrono::DateTime<chrono::Utc>,
+        /// Timestamp when the user was last updated.
         pub updated_at: chrono::DateTime<chrono::Utc>,
     }
 
     impl SqlUser {
+        /// Converts the `SqlUser` into a `User` and `UserPasshash`.
+        ///
+        /// # Arguments
+        /// * `sql_user_perms` - Optional vector of `SqlPermissionTokens` to convert into user permissions.
+        ///
+        /// # Returns
+        /// A tuple containing the `User` and `UserPasshash`.
         pub fn into_user(
             self,
             sql_user_perms: Option<Vec<SqlPermissionTokens>>,

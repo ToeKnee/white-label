@@ -1,3 +1,4 @@
+//! This module contains the file upload component with progress tracking.
 use futures::StreamExt;
 use leptos::{prelude::*, task::spawn_local};
 use wasm_bindgen::JsCast;
@@ -9,7 +10,12 @@ use crate::routes::files::upload::{file_progress, upload_file};
 /// This component uses server functions to upload a file, while streaming updates on the upload
 /// progress.
 #[component]
-pub fn FileUploadWithProgress(config: UploadConfiguration, slug: String) -> impl IntoView {
+pub fn FileUploadWithProgress(
+    /// The configuration for the upload, which will determine the type and details of the upload
+    config: UploadConfiguration,
+    /// The slug of the item being uploaded, which will be used to identify the upload
+    slug: String,
+) -> impl IntoView {
     let (filename, set_filename) = signal(None);
     let (max, set_max) = signal(None);
     let (current, set_current) = signal(None);

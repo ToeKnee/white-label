@@ -1,3 +1,4 @@
+//! Logout page component.
 use leptos::form::ActionForm;
 use leptos::prelude::*;
 
@@ -6,7 +7,7 @@ use crate::models::auth::User;
 use crate::routes::auth::Logout;
 use crate::utils::split_at_colon::split_at_colon;
 
-/// Renders the login page.
+/// Renders the logout page.
 #[component]
 pub fn Logout() -> impl IntoView {
     let logout = ServerAction::<Logout>::new();

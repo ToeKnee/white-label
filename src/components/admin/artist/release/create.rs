@@ -1,3 +1,5 @@
+//! Create a new release in an artist's discography
+
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;

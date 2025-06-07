@@ -1,3 +1,5 @@
+//! Split a string at the first occurrence of a colon
+
 /// Split a string at the first occurrence of a colon
 /// Returns a tuple of the string before the colon and the string after the semi-colon
 pub fn split_at_colon(s: &str) -> (String, String) {

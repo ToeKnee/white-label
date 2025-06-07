@@ -1,3 +1,7 @@
+//! Traits for models
+//!
+//! This module contains traits that define the behavior of various models in the application.
+
 #[cfg(feature = "ssr")]
 use sqlx::PgPool;
 

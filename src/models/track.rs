@@ -30,11 +30,11 @@ pub struct Track {
     pub primary_artist_id: i64,
     /// The primary image of the track
     pub primary_image: Option<String>,
-    // The ISRC code of the track
-    // This is a unique identifier for the track (changes for different versions/masters etc.)
+    /// The ISRC code of the track
+    /// This is a unique identifier for the track (changes for different versions/masters etc.)
     pub isrc_code: Option<String>,
-    // The BPM or beats per minute of the track
-    // For tracks with variable BPM, this value is undefined
+    /// The BPM or beats per minute of the track
+    /// For tracks with variable BPM, this value is undefined
     pub bpm: Option<i32>,
     /// The date the track is published.
     /// If this is None, the track is not published

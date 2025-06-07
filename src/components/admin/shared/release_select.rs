@@ -1,3 +1,4 @@
+//! Release selection component for artists admin.
 use leptos::prelude::*;
 
 use crate::components::utils::{error::ErrorPage, loading::Loading};
@@ -21,11 +22,15 @@ fn ids_to_str(ids: &[i64]) -> String {
         .join(",")
 }
 
+/// Select component for choosing releases associated with an artist.
 #[component]
 #[allow(clippy::needless_pass_by_value)]
 pub fn ReleaseSelect(
+    /// The IDs of the artists to fetch releases for.
     artist_ids: Vec<i64>,
+    /// The primary release to be selected by default.
     primary_release: Release,
+    /// The initial release IDs to be checked by default.
     initial_release_ids: Vec<i64>,
 ) -> impl IntoView {
     let (releases, set_releases) = signal(vec![]);

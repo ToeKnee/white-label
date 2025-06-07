@@ -1,3 +1,5 @@
+//! List tracks for an artist's release in the admin panel.
+
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;

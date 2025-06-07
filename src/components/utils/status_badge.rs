@@ -1,8 +1,13 @@
+//! A component to display the status of an item based on its deletion and publication dates.
+
 use leptos::prelude::*;
 
 #[component]
 pub fn StatusBadge(
-    #[prop(into)] deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// The date when the item was deleted, if applicable.
+    #[prop(into)]
+    deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// The date when the item was published, if applicable. This can also use the `release_date` field for releases.
     published_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> impl IntoView {
     let mut badge_text = String::new();

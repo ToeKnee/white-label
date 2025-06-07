@@ -1,3 +1,6 @@
+//! Header component for the application.
+//! Displays the record label name and user menu.
+
 use leptos::prelude::*;
 use reactive_stores::Store;
 

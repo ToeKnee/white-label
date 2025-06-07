@@ -65,6 +65,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
+/// Context for managing user state across the application.
 #[derive(Copy, Clone)]
 pub struct UserContext(pub ReadSignal<User>, pub WriteSignal<User>);
 

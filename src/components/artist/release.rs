@@ -1,3 +1,5 @@
+//! This displays a release for an artist.
+
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
@@ -91,7 +93,10 @@ pub fn ReleasePage() -> impl IntoView {
 
 #[component]
 /// Fetch and display the list of tracks for this release.
-pub fn TrackList(tracks: RwSignal<Vec<TrackWithArtists>>) -> impl IntoView {
+pub fn TrackList(
+    /// The tracks to display
+    tracks: RwSignal<Vec<TrackWithArtists>>,
+) -> impl IntoView {
     move || {
         let track_tows = tracks
             .get()
@@ -119,7 +124,11 @@ pub fn TrackList(tracks: RwSignal<Vec<TrackWithArtists>>) -> impl IntoView {
 /// # Returns
 /// * A view of the release
 #[component]
-pub fn Track(#[prop(into)] track: TrackWithArtists) -> impl IntoView {
+pub fn Track(
+    /// The track to display
+    #[prop(into)]
+    track: TrackWithArtists,
+) -> impl IntoView {
     let track = RwSignal::new(track);
 
     view! {
@@ -178,7 +187,11 @@ pub fn Track(#[prop(into)] track: TrackWithArtists) -> impl IntoView {
 /// * A view of the featured artists
 #[component]
 #[allow(clippy::needless_pass_by_value)]
-pub fn FeaturedTrackArtists(#[prop(into)] track: TrackWithArtists) -> impl IntoView {
+pub fn FeaturedTrackArtists(
+    /// The track to display featured artists for
+    #[prop(into)]
+    track: TrackWithArtists,
+) -> impl IntoView {
     let primary_artist_id = track.track.primary_artist_id;
     let featured_artists = {
         track

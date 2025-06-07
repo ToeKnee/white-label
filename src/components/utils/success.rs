@@ -1,8 +1,15 @@
+//! A success alert component for displaying success messages in a web application.
+
 use leptos::prelude::*;
 
 /// A success alert component.
 #[component]
-pub fn Success(message: String, show: bool) -> impl IntoView {
+pub fn Success(
+    /// The message to display in the alert
+    message: String,
+    /// Whether to show the alert
+    show: bool,
+) -> impl IntoView {
     if show {
         view! {
             <div role="alert" class="alert alert-success">

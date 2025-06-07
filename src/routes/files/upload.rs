@@ -1,3 +1,9 @@
+//! This module contains server functions for handling file uploads and managing progress of file uploads.
+//!
+//! It includes functionality to upload files, retrieve progress information about ongoing uploads, and handle various types of file uploads such as artist primary images, avatars, and release primary images.
+//!
+//! The module leverages Rust's asynchronous capabilities to efficiently manage file operations on the server side. It also integrates with a database to associate uploaded files with specific objects (like artists or releases) based on configuration settings.
+
 use leptos::prelude::*;
 use server_fn::codec::{MultipartData, MultipartFormData, StreamingText, TextStream};
 #[cfg(feature = "ssr")]
@@ -17,12 +23,17 @@ use crate::state::{auth, pool, user_context};
 #[cfg(feature = "ssr")]
 use crate::utils::files::valid_file_name;
 
-/// Get the configuration upload details.
+/// Get the upload details based on the upload configuration type.
+/// This function parses the upload configuration string and returns the details for the upload.
 ///
-/// This function will return the upload details for the given configuration.
+/// # Arguments
+/// * `config_str`: A string representing the upload configuration type.
 ///
-/// Errors:
-/// - Invalid upload configuration
+/// # Returns
+/// * `Ok(UploadDetails)`: If the configuration is valid, it returns the upload details.
+///
+/// # Errors
+/// * `ServerFnError`: If the configuration string is invalid or if there is an error parsing it.
 #[cfg(feature = "ssr")]
 fn upload_details(config_str: &str) -> Result<UploadDetails, ServerFnError> {
     let upload_config = match config_str.parse::<UploadConfiguration>() {
@@ -41,9 +52,21 @@ fn upload_details(config_str: &str) -> Result<UploadDetails, ServerFnError> {
 
 /// Upload a file.
 /// This function will receive a multipart form data request and save the file to disk.
+///
+/// # Arguments
+/// * `data`: The multipart form data containing the file and other fields.
+///
+/// # Returns
+/// * `Ok(())`: If the file is uploaded successfully.
+///
+/// # Errors
+/// * `ServerFnError`: If there is an error during the upload process, such as invalid configuration, file size limit exceeded, or issues with file storage.
 #[allow(clippy::too_many_lines)]
 #[server(UploadFile, "/api", endpoint="upload_file", input = MultipartFormData,)]
-pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
+pub async fn upload_file(
+    /// The multipart form data containing the file and other fields
+    data: MultipartData,
+) -> Result<(), ServerFnError> {
     tracing::warn!("TODO: Error handling");
 
     let Some(mut data) = data.into_inner() else {
@@ -201,10 +224,20 @@ pub async fn upload_file(data: MultipartData) -> Result<(), ServerFnError> {
 /// This function will move the file from the temporary location to the final location.
 /// It will also associate the file with the object.
 ///
+/// # Arguments
+/// * `upload_config_type`: The type of upload configuration (e.g., "Artist", "Avatar", "Release").
+/// * `file_name`: The name of the file that was uploaded.
+/// * `original_file_name`: The original name of the file.
+/// * `slug_field`: The slug or identifier for the object to which the file is being associated.
+/// * `user`: The user who uploaded the file.
+///
+/// # Returns
+/// * `Ok(())`: If the file is moved and associated successfully.
+///
 /// # Errors
-/// - No upload path specified
-/// - Unable to move the file
-/// - Unable to associate the file with the object
+/// * No upload path specified
+/// * Unable to move the file
+/// * Unable to associate the file with the object
 #[cfg(feature = "ssr")]
 async fn finalise_file_upload(
     upload_config_type: String,
@@ -243,10 +276,18 @@ async fn finalise_file_upload(
 /// Store the file to the identified object.
 /// This function will store the file name the database.
 ///
+/// # Arguments
+/// * `file_name`: The name of the file that was uploaded.
+/// * `upload_config_type`: The type of upload configuration (e.g., "Artist", "Avatar", "Release").
+/// * `slug_field`: The slug or identifier for the object to which the file is being associated.
+///
+/// # Returns
+/// * `Ok(())`: If the file is stored successfully.
+///
 /// # Errors
-/// - No user found in request
-/// - Unable to get the user from the database
-/// - Unable to to update the user
+/// * No user found in request
+/// * Unable to get the user from the database
+/// * Unable to to update the user
 #[cfg(feature = "ssr")]
 async fn store_file_to_object(
     file_name: &str,
@@ -267,6 +308,21 @@ async fn store_file_to_object(
     Ok(())
 }
 
+/// Store the artist primary image.
+/// This function will update the artist's primary image field in the database.
+///
+/// # Arguments
+/// * `file_name`: The name of the file that was uploaded.
+/// * `slug_field`: The slug or identifier for the artist to which the file is being associated.
+///
+/// # Returns
+/// * `Ok(())`: If the artist's primary image is updated successfully.
+///
+/// # Errors
+/// * No user found in request
+/// * Unable to get the user from the database
+/// * Unable to get the artist from the database
+/// * Unable to update the artist's primary image field
 #[cfg(feature = "ssr")]
 async fn store_artist_primary_image(
     file_name: &str,
@@ -301,6 +357,20 @@ async fn store_artist_primary_image(
     Ok(())
 }
 
+/// Store the avatar for the current user.
+/// This function will update the user's avatar field in the database.
+///
+/// # Arguments
+/// * `file_name`: The name of the file that was uploaded.
+/// * `slug_field`: The slug or identifier for the user to which the file is being associated.
+///
+/// # Returns
+/// * `Ok(())`: If the user's avatar is updated successfully.
+///
+/// # Errors
+/// * No user found in request
+/// * Unable to get the user from the database
+/// * Unable to update the user's avatar field
 #[cfg(feature = "ssr")]
 async fn store_avatar(file_name: &str, slug_field: &str) -> Result<(), ServerFnError> {
     let mut auth = auth()?;
@@ -333,6 +403,20 @@ async fn store_avatar(file_name: &str, slug_field: &str) -> Result<(), ServerFnE
     Ok(())
 }
 
+/// Store the primary image for the release.
+/// This function will update the release's primary image field in the database.
+///
+/// # Arguments
+/// * `file_name`: The name of the file that was uploaded.
+/// * `slug_field`: The slug or identifier for the release to which the file is being associated.
+///
+/// # Returns
+/// * `Ok(())`: If the release's primary image is updated successfully.
+///
+/// # Errors
+/// * No user found in request
+/// * Unable to get the user from the database
+/// * Unable to get the release from the database
 #[cfg(feature = "ssr")]
 async fn store_release(file_name: &str, slug_field: &str) -> Result<(), ServerFnError> {
     let auth = auth()?;
@@ -369,9 +453,21 @@ async fn store_release(file_name: &str, slug_field: &str) -> Result<(), ServerFn
 /// The stream will be a series of `usize` values, each separated by a newline.
 ///
 /// Although this function doesn't use `async`, it's required for the `#[server]` macro
+///
+/// # Arguments
+/// * `filename`: The unique identifier for the file being uploaded.
+///
+/// # Returns
+/// * `Ok(TextStream)`: A stream of text containing the progress of the file upload, with each value separated by a newline.
+///
+/// # Errors
+/// * `ServerFnError`: If there is an error retrieving the user or if the user does not have the required permissions to view the file progress.
 #[allow(clippy::unused_async)]
 #[server(FileProgress, "/api", endpoint="file_progress", output = StreamingText)]
-pub async fn file_progress(filename: String) -> Result<TextStream, ServerFnError> {
+pub async fn file_progress(
+    /// The filename is the unique identifier for the file being uploaded
+    filename: String,
+) -> Result<TextStream, ServerFnError> {
     use futures::StreamExt;
 
     let auth = auth()?;

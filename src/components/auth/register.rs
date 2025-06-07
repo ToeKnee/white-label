@@ -1,3 +1,4 @@
+//! Register page for the application.
 use leptos::form::ActionForm;
 use leptos::prelude::*;
 

@@ -1,3 +1,4 @@
+//! Login page component.
 use leptos::form::ActionForm;
 use leptos::prelude::*;
 

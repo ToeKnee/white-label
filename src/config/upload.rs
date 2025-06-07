@@ -1,6 +1,9 @@
+//! Upload configuration details.
+
 use anyhow::{Result, bail};
 use std::{fmt, str::FromStr};
 
+/// Represents the details required for file uploads in different locations, with specific configurations for artists, avatars, and releases etc.
 #[derive(Debug, Clone)]
 pub struct UploadDetails {
     /// The allowed mime types for uploads to this location.
@@ -16,10 +19,14 @@ pub struct UploadDetails {
     pub rename: bool,
 }
 
+/// Represents the configuration for different upload types.
 #[derive(Debug, Clone, Copy)]
 pub enum UploadConfiguration {
+    /// Upload configuration for artist images.
     Artist,
+    /// Upload configuration for user avatars.
     Avatar,
+    /// Upload configuration for release images.
     Release,
 }
 
@@ -37,6 +44,7 @@ impl FromStr for UploadConfiguration {
 }
 
 impl UploadConfiguration {
+    /// Returns the upload details for the given configuration.
     pub fn get_details(&self) -> UploadDetails {
         match self {
             Self::Artist => UploadDetails {

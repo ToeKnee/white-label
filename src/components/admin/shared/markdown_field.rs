@@ -1,8 +1,16 @@
+//! `MarkdownField` component for displaying and editing markdown text with a live preview.
 use leptos::prelude::*;
 
 /// Managed description so we can preview markdown
 #[component]
-pub fn MarkdownField(title: String, field: String, markdown_text: String) -> impl IntoView {
+pub fn MarkdownField(
+    /// The title of the field
+    title: String,
+    /// The field name for the textarea
+    field: String,
+    /// The initial markdown text to display
+    markdown_text: String,
+) -> impl IntoView {
     let (description, set_description) = signal(markdown_text);
     let (markdown_description, set_markdown_description) = signal(String::new());
     Effect::new(move || {

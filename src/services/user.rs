@@ -1,3 +1,5 @@
+//! User service module
+
 #[cfg(feature = "ssr")]
 use bcrypt::{DEFAULT_COST, hash, verify};
 use leptos::prelude::ServerFnError;

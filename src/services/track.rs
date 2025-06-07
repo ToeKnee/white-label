@@ -19,10 +19,10 @@ use crate::routes::track::{TrackResult, TracksResult};
 /// The tracks for the artist
 ///
 /// # Errors
-/// If the artist cannot be found, return an error
-/// If the release cannot be found, return an error
-/// If the user cannot be found, return an error
-/// If the tracks cannot be found, return an error
+/// * If the artist cannot be found, return an error
+/// * If the release cannot be found, return an error
+/// * If the user cannot be found, return an error
+/// * If the tracks cannot be found, return an error
 #[cfg(feature = "ssr")]
 pub async fn get_tracks_service(
     pool: &PgPool,

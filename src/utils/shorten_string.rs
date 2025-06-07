@@ -1,3 +1,5 @@
+//! Shorten a string to the first period or newline, and remove markdown characters.
+
 /// Shorten a string. It will either be to the first . or the first new line
 #[must_use]
 pub fn shorten_string(s: String) -> String {

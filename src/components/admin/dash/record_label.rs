@@ -1,3 +1,4 @@
+//! This module contains the `RecordLabel` component, which displays quick information about a record label.
 use leptos::prelude::*;
 use reactive_stores::Store;
 
@@ -9,7 +10,7 @@ use crate::store::GlobalState;
 use crate::store::GlobalStateStoreFields;
 use crate::utils::shorten_string::shorten_string;
 
-/// Renders the record label page.
+/// Renders the record label dashboard component.
 #[component]
 pub fn RecordLabel() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
