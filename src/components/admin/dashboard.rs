@@ -5,7 +5,7 @@ use leptos_meta::Title;
 use crate::components::{
     admin::dash::{
         artists::ArtistsTable, pages::PagesTable, record_label::RecordLabel,
-        upcoming_release::UpcomingRelease,
+        social_media_tips::SocialMediaTips, upcoming_release::UpcomingRelease,
     },
     utils::{error::ErrorPage, loading::Loading},
 };
@@ -25,14 +25,7 @@ pub fn Dashboard() -> impl IntoView {
                             <RecordLabel />
                             <ArtistsTable />
                             <PagesTable />
-
-                            <div class="shadow-xl grow not-prose card bg-neutral text-neutral-content bg-base-100">
-                                <div class="card-body">
-                                    <h2 class="card-title">Social Tips!</h2>
-                                    Why not post on threads?
-                                </div>
-                            </div>
-
+                            <SocialMediaTips />
                             <UpcomingRelease />
 
                             <div class="shadow-xl grow not-prose card bg-neutral text-neutral-content bg-base-100">

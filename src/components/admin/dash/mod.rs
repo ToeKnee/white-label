@@ -2,4 +2,5 @@
 pub mod artists;
 pub mod pages;
 pub mod record_label;
+pub mod social_media_tips;
 pub mod upcoming_release;
