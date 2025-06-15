@@ -6,12 +6,9 @@ use leptos_router::hooks::use_params_map;
 
 use super::delete::DeleteTrack;
 use crate::components::{
-    admin::{
-        artist::menu::{Menu, Page},
-        shared::{
-            artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
-            release_select::ReleaseSelect,
-        },
+    admin::shared::{
+        artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
+        release_select::ReleaseSelect,
     },
     utils::{
         error::ErrorPage, error::ServerErrors, loading::Loading,
@@ -128,8 +125,6 @@ pub fn EditTrack() -> impl IntoView {
                     view! {
                         <Title text=title />
                         <h1>{title}</h1>
-
-                        <Menu slug=artist_slug selected=&Page::Releases />
 
                         <ActionForm action=update_track>
                             <div class="grid gap-6">

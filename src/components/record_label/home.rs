@@ -27,8 +27,8 @@ pub fn RecordLabelHome() -> impl IntoView {
                         match record_label_resource.await {
                             Ok(label) => {
                                 let record_label = store.record_label();
-                                *record_label.write() = label.label.clone();
-                                label.label
+                                *record_label.write() = label.record_label.clone();
+                                label.record_label
                             }
                             Err(_) => RecordLabel::default(),
                         };
@@ -36,7 +36,7 @@ pub fn RecordLabelHome() -> impl IntoView {
                     let record_label = store.record_label().get();
                     view! {
                         <Title text=record_label.name.clone() />
-                        <article class="md:container md:mx-auto prose">
+                        <article class="my-6 md:container md:mx-auto prose">
                             <h1>{record_label.name.clone()}</h1>
                             <div inner_html=markdown::to_html_with_options(
                                     &record_label.description,

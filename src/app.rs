@@ -119,7 +119,7 @@ pub fn WhiteLabel() -> impl IntoView {
         <Router>
             <LabelHeader />
 
-            <main class="flex flex-col-reverse gap-6 justify-between my-6 space-y-6 xl:flex-row padding">
+            <main>
                 <Routes fallback=NotFound>
                     <Route path=StaticSegment("") view=RecordLabelHome />
                     <Route path=path!("artists") view=RecordLabelHome />

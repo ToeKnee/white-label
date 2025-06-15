@@ -6,7 +6,7 @@ use leptos::prelude::*;
 #[component]
 pub fn Loading() -> impl IntoView {
     view! {
-        <article class="md:container md:mx-auto prose">
+        <article class="my-6 md:container md:mx-auto prose">
             <span class="loading loading-ring loading-lg"></span>
         </article>
     }

@@ -45,7 +45,7 @@ pub fn EditLabel() -> impl IntoView {
                                 {move || {
                                     match value.get() {
                                         Ok(label_result) => {
-                                            let record_label = label_result.label;
+                                            let record_label = label_result.record_label;
                                             if record_label.id > 0 {
                                                 let store_record_label = store.record_label();
                                                 *store_record_label.write() = record_label;

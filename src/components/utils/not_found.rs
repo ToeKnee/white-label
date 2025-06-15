@@ -6,7 +6,7 @@ use leptos::prelude::*;
 #[component]
 pub fn NotFound() -> impl IntoView {
     view! {
-        <article class="md:container md:mx-auto prose">
+        <article class="my-6 md:container md:mx-auto prose">
             <div class="min-h-screen hero bg-base-200">
                 <div class="text-center hero-content">
                     <div class="max-w-md">

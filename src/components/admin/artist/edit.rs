@@ -4,10 +4,7 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
-use super::{
-    delete::DeleteArtist,
-    menu::{Menu, Page},
-};
+use super::delete::DeleteArtist;
 use crate::components::{
     admin::shared::{date_field::DateField, markdown_field::MarkdownField},
     files::upload::FileUploadWithProgress,
@@ -63,8 +60,6 @@ pub fn EditArtist() -> impl IntoView {
                     view! {
                         <Title text=move || format!("{} Profile", artist.get().name) />
                         <h1>{move || view! { {artist.get().name} }}" Profile"</h1>
-
-                        <Menu slug=slug selected=&Page::Profile />
 
                         <ActionForm action=update_artist>
                             <div class="grid gap-6">

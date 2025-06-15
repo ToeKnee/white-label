@@ -23,7 +23,7 @@ pub fn Register() -> impl IntoView {
     let user_context = expect_context::<UserContext>();
 
     view! {
-        <article class="md:container md:mx-auto prose">
+        <article class="my-6 md:container md:mx-auto prose">
             <h1>Register</h1>
             <ActionForm action=register>
                 <div class="grid gap-6">

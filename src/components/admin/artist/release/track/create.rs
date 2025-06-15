@@ -5,12 +5,9 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
 use crate::components::{
-    admin::{
-        artist::menu::{Menu, Page},
-        shared::{
-            artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
-            release_select::ReleaseSelect,
-        },
+    admin::shared::{
+        artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
+        release_select::ReleaseSelect,
     },
     utils::{
         error::ErrorPage, error::ServerErrors, loading::Loading,
@@ -95,8 +92,6 @@ pub fn CreateTrack() -> impl IntoView {
                     view! {
                         <Title text="New Release" />
                         <h1>New Release</h1>
-
-                        <Menu slug=artist_slug selected=&Page::Releases />
 
                         <ActionForm action=create_track>
                             <div class="grid gap-6">

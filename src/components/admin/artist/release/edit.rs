@@ -7,7 +7,7 @@ use leptos_router::hooks::use_params_map;
 use super::delete::DeleteRelease;
 use crate::components::{
     admin::{
-        artist::menu::{Menu, Page},
+        artist::release::track::list::Tracks,
         shared::{
             artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
         },
@@ -73,98 +73,99 @@ pub fn EditRelease() -> impl IntoView {
 
     let name = move || format!("{} - {}", release.get().name, artist.get().name);
     view! {
-        <Transition fallback=Loading>
-            <ErrorBoundary fallback=|_| {
-                ErrorPage
-            }>
-                {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            artist.set(this_artist.artist);
-                        }
-                        Err(_) => {
-                            redirect("/admin/artists/");
-                        }
-                    }
-                    match release_resource.await {
-                        Ok(this_release) => {
-                            release.set(this_release.release);
-                            artists.set(this_release.artists.clone());
-                            artist_ids.set(artists_ids(&this_release.artists));
-                        }
-                        Err(_) => {
-                            redirect(&format!("/admin/artists/{}/releases", artist_slug.get()));
-                        }
-                    }
+        <div class="flex gap-6 justify-around w-full">
+            <div class="w-2/3">
+                <Transition fallback=Loading>
+                    <ErrorBoundary fallback=|_| {
+                        ErrorPage
+                    }>
+                        {move || Suspend::new(async move {
+                            match artist_resource.await {
+                                Ok(this_artist) => {
+                                    artist.set(this_artist.artist);
+                                }
+                                Err(_) => {
+                                    redirect("/admin/artists/");
+                                }
+                            }
+                            match release_resource.await {
+                                Ok(this_release) => {
+                                    release.set(this_release.release);
+                                    artists.set(this_release.artists.clone());
+                                    artist_ids.set(artists_ids(&this_release.artists));
+                                }
+                                Err(_) => {
+                                    redirect(
+                                        &format!("/admin/artists/{}/releases", artist_slug.get()),
+                                    );
+                                }
+                            }
 
-                    view! {
-                        <Header name=name() artist_slug=artist_slug />
+                            view! {
+                                <Title text=name />
+                                <h1>{name}</h1>
 
-                        <ActionForm action=update_release>
-                            <div class="grid gap-6">
-                                {move || {
-                                    match value.get() {
-                                        Ok(release_result) => {
-                                            let fresh_release = release_result.release;
-                                            let fresh_artists = release_result.artists;
-                                            if fresh_release.id > 0 {
-                                                if fresh_release.slug != release.get().slug {
-                                                    redirect(
-                                                        &format!(
-                                                            "/admin/artist/{}/release/{}",
-                                                            artist.get().slug,
-                                                            fresh_release.slug,
-                                                        ),
-                                                    );
+                                <ActionForm action=update_release>
+                                    <div class="grid gap-6">
+                                        {move || {
+                                            match value.get() {
+                                                Ok(release_result) => {
+                                                    let fresh_release = release_result.release;
+                                                    let fresh_artists = release_result.artists;
+                                                    if fresh_release.id > 0 {
+                                                        if fresh_release.slug != release.get().slug {
+                                                            redirect(
+                                                                &format!(
+                                                                    "/admin/artist/{}/release/{}",
+                                                                    artist.get().slug,
+                                                                    fresh_release.slug,
+                                                                ),
+                                                            );
+                                                        }
+                                                        if fresh_release != release.get() {
+                                                            release.set(fresh_release);
+                                                        }
+                                                        if fresh_artists != artists.get() {
+                                                            artists.set(fresh_artists.clone());
+                                                            artist_ids.set(artists_ids(&fresh_artists));
+                                                        }
+                                                        if !success.get() {
+                                                            success.set(true);
+                                                        }
+                                                    } else {
+                                                        success.set(false);
+                                                    }
+
+                                                    view! { "" }
+                                                        .into_any()
                                                 }
-                                                if fresh_release != release.get() {
-                                                    release.set(fresh_release);
+                                                Err(errors) => {
+                                                    success.set(false);
+                                                    view! { <ServerErrors server_errors=Some(errors) /> }
+                                                        .into_any()
                                                 }
-                                                if fresh_artists != artists.get() {
-                                                    artists.set(fresh_artists.clone());
-                                                    artist_ids.set(artists_ids(&fresh_artists));
-                                                }
-                                                if !success.get() {
-                                                    success.set(true);
-                                                }
-                                            } else {
-                                                success.set(false);
                                             }
-
-                                            view! { "" }
-                                                .into_any()
-                                        }
-                                        Err(errors) => {
-                                            success.set(false);
-                                            view! { <ServerErrors server_errors=Some(errors) /> }
-                                                .into_any()
-                                        }
-                                    }
-                                }}
-                                {move || {
-                                    view! {
-                                        <Success
-                                            message=format!("{} Updated!", release.get().name)
-                                            show=success.get()
-                                        />
-                                    }
-                                }} <Form release=release artist=artist artist_ids=artist_ids />
-                            </div>
-                        </ActionForm>
-                    }
-                })}
-            </ErrorBoundary>
-        </Transition>
-    }
-}
-
-#[component]
-fn Header(name: String, artist_slug: RwSignal<String>) -> impl IntoView {
-    view! {
-        <Title text=name.clone() />
-        <h1>{name}</h1>
-
-        <Menu slug=artist_slug selected=&Page::Releases />
+                                        }}
+                                        {move || {
+                                            view! {
+                                                <Success
+                                                    message=format!("{} Updated!", release.get().name)
+                                                    show=success.get()
+                                                />
+                                            }
+                                        }}
+                                        <Form release=release artist=artist artist_ids=artist_ids />
+                                    </div>
+                                </ActionForm>
+                            }
+                        })}
+                    </ErrorBoundary>
+                </Transition>
+            </div>
+            <div class="w-1/3">
+                <Tracks />
+            </div>
+        </div>
     }
 }
 

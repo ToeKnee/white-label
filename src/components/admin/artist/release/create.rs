@@ -6,11 +6,8 @@ use leptos_router::hooks::use_params_map;
 use reactive_stores::Store;
 
 use crate::components::{
-    admin::{
-        artist::menu::{Menu, Page},
-        shared::{
-            artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
-        },
+    admin::shared::{
+        artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
     },
     utils::{
         error::ErrorPage, error::ServerErrors, loading::Loading,
@@ -75,8 +72,6 @@ pub fn CreateRelease() -> impl IntoView {
                     view! {
                         <Title text="New Release" />
                         <h1>New Release</h1>
-
-                        <Menu slug=slug selected=&Page::Releases />
 
                         <ActionForm action=create_release>
                             <div class="grid gap-6">

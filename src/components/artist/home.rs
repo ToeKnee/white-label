@@ -42,7 +42,7 @@ pub fn ArtistPage() -> impl IntoView {
 
                     view! {
                         <Title text=artist.get().name />
-                        <article class="md:container md:mx-auto prose">
+                        <article class="my-6 md:container md:mx-auto prose">
                             <h1>{artist.get().name}</h1>
                             <div class="flex flex-wrap justify-between">
                                 <div

@@ -26,8 +26,8 @@ pub fn LabelFooter() -> impl IntoView {
                         match record_label_resource.await {
                             Ok(label) => {
                                 let store_record_label = store.record_label();
-                                *store_record_label.write() = label.label.clone();
-                                label.label
+                                *store_record_label.write() = label.record_label.clone();
+                                label.record_label
                             }
                             Err(_) => RecordLabel::default(),
                         };

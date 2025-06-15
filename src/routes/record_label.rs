@@ -11,7 +11,7 @@ use crate::state::{auth, pool};
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
 pub struct LabelResult {
     /// The record label being returned.
-    pub label: RecordLabel,
+    pub record_label: RecordLabel,
 }
 
 /// A result containing a list of artists associated with a `RecordLabel`.
@@ -39,13 +39,12 @@ pub struct LabelPageResult {
 pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
     let pool = pool()?;
 
-    Ok(LabelResult {
-        label: RecordLabel::first(&pool).await.map_err(|x| {
-            let err = format!("Error while getting labels: {x:?}");
-            tracing::error!("{err}");
-            ServerFnError::new("Could not retrieve labels, try again later")
-        })?,
-    })
+    let record_label = RecordLabel::first(&pool).await.map_err(|x| {
+        tracing::error!("Error while getting record label: {x:?}");
+        ServerFnError::new("Could not retrieve record label, try again later")
+    })?;
+
+    Ok(LabelResult { record_label })
 }
 
 /// Get the `Artitst` objects associated with a specific record label.
@@ -170,9 +169,7 @@ pub async fn update_record_label(
     record_label.description = description;
     record_label.isrc_base = isrc_base;
     match record_label.clone().update(&pool).await {
-        Ok(record_label) => Ok(LabelResult {
-            label: record_label,
-        }),
+        Ok(record_label) => Ok(LabelResult { record_label }),
         Err(e) => {
             let err = format!("Error while updating label: {e}");
             tracing::error!("{err}");

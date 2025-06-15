@@ -4,12 +4,9 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
-use crate::components::{
-    admin::artist::menu::{Menu, Page},
-    utils::{
-        error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
-        status_badge::StatusBadge,
-    },
+use crate::components::utils::{
+    error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
+    status_badge::StatusBadge,
 };
 use crate::models::{artist::Artist, release::Release};
 use crate::routes::{artist::get_artist, release::get_releases};
@@ -70,8 +67,6 @@ pub fn Releases() -> impl IntoView {
                     view! {
                         <Title text=title.get() />
                         <h1>{move || title.get()}</h1>
-
-                        <Menu slug=slug selected=&Page::Releases />
 
                         <div class="overflow-x-auto">
                             <table class="table">

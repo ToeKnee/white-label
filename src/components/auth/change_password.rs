@@ -23,7 +23,7 @@ pub fn ChangePassword() -> impl IntoView {
     let (success, set_success) = signal(false);
 
     view! {
-        <article class="md:container md:mx-auto prose">
+        <article class="my-6 md:container md:mx-auto prose">
             <Title text="Change Password" />
             <h1>{"Change Password"}</h1>
             <Transition fallback=Loading>

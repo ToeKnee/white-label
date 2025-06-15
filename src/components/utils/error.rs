@@ -8,7 +8,7 @@ use crate::utils::split_at_colon::split_at_colon;
 #[component]
 pub fn ErrorPage() -> impl IntoView {
     view! {
-        <article class="md:container md:mx-auto prose">
+        <article class="my-6 md:container md:mx-auto prose">
             <div class="min-h-screen hero bg-base-200">
                 <div class="text-center hero-content">
                     <div class="max-w-md">
@@ -27,6 +27,7 @@ pub fn InlineError(
     /// The message to display in the inline error.
     message: String,
 ) -> impl IntoView {
+    tracing::error!(message);
     view! {
         <div role="alert" class="alert alert-error">
             <svg

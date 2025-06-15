@@ -4,8 +4,10 @@ use leptos::prelude::*;
 use leptos_router::{components::Outlet, components::Redirect};
 
 use crate::app::UserContext;
-use crate::components::utils::error::ErrorPage;
-use crate::components::utils::loading::Loading;
+use crate::components::{
+    admin::menu::AdminMenu,
+    utils::{error::ErrorPage, loading::Loading},
+};
 use crate::models::auth::User;
 
 /// Renders the record label page.
@@ -15,24 +17,27 @@ pub fn AdminRoot() -> impl IntoView {
     let (user, set_user) = signal(User::default());
 
     view! {
-        <Transition fallback=Loading>
-            <ErrorBoundary fallback=|_| {
-                ErrorPage
-            }>
-                {move || Suspend::new(async move {
-                    set_user.set(user_context.0.get());
-                    if user.get().permissions.contains("admin") {
-                        view! {
-                            <article class="md:container md:mx-auto prose">
-                                <Outlet />
-                            </article>
+        <div class="flex">
+            <AdminMenu />
+            <Transition fallback=Loading>
+                <ErrorBoundary fallback=|_| {
+                    ErrorPage
+                }>
+                    {move || Suspend::new(async move {
+                        set_user.set(user_context.0.get());
+                        if user.get().permissions.contains("admin") {
+                            view! {
+                                <article class="my-6 md:container md:mx-auto prose">
+                                    <Outlet />
+                                </article>
+                            }
+                                .into_any()
+                        } else {
+                            view! { <Redirect path="/login" /> }.into_any()
                         }
-                            .into_any()
-                    } else {
-                        view! { <Redirect path="/login" /> }.into_any()
-                    }
-                })}
-            </ErrorBoundary>
-        </Transition>
+                    })}
+                </ErrorBoundary>
+            </Transition>
+        </div>
     }
 }

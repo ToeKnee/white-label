@@ -36,7 +36,7 @@ pub fn EditProfile() -> impl IntoView {
 
     view! {
         <Title text="Edit Profile" />
-        <article class="md:container md:mx-auto prose">
+        <article class="my-6 md:container md:mx-auto prose">
             <h1>"Edit Profile"</h1>
 
             {move || {

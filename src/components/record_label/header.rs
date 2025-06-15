@@ -7,7 +7,6 @@ use reactive_stores::Store;
 use crate::app::UserContext;
 use crate::components::utils::{error::ErrorPage, loading::Loading};
 use crate::models::auth::User;
-use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::get_record_label;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 
@@ -26,20 +25,14 @@ pub fn LabelHeader() -> impl IntoView {
                 }>
                     {move || Suspend::new(async move {
                         if store.record_label().get().id == 0 {
-                            match record_label_resource.await {
-                                Ok(label) => {
-                                    let store_record_label = store.record_label();
-                                    *store_record_label.write() = label.label.clone();
-                                    label.label
-                                }
-                                Err(_) => RecordLabel::default(),
-                            };
+                            if let Ok(record_label_result) = record_label_resource.await {
+                                store.record_label().set(record_label_result.record_label);
+                            }
                         }
-                        let record_label = store.record_label().get();
                         view! {
                             <div class="navbar-start">
                                 <a href="/" class="text-xl btn btn-ghost">
-                                    {record_label.name}
+                                    {store.record_label().get().name}
                                 </a>
                             </div>
                         }

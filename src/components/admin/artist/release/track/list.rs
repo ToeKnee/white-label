@@ -1,15 +1,10 @@
 //! List tracks for an artist's release in the admin panel.
 
 use leptos::prelude::*;
-use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
-use crate::components::{
-    admin::artist::menu::{Menu, Page},
-    utils::{
-        error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
-        status_badge::StatusBadge,
-    },
+use crate::components::utils::{
+    error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
 };
 use crate::models::{artist::Artist, release::Release, track::Track};
 use crate::routes::{artist::get_artist, release::get_release, track::get_tracks};
@@ -99,16 +94,14 @@ pub fn Tracks() -> impl IntoView {
                         })
                         .collect::<Vec<_>>();
                     view! {
-                        <Title text=title.get() />
-                        <h1>{move || title.get()}</h1>
+                        <h1>"Tracks"</h1>
 
-                        <Menu slug=artist_slug selected=&Page::Releases />
+                        <div class="divider"></div>
 
                         <div class="overflow-x-auto">
                             <table class="table">
                                 <thead>
                                     <tr>
-                                        <th></th>
                                         <th>Name</th>
                                         <th></th>
                                     </tr>
@@ -117,14 +110,14 @@ pub fn Tracks() -> impl IntoView {
                                     {if tracks.get().is_empty() {
                                         view! {
                                             <tr>
-                                                <td colspan="5">No tracks found.</td>
+                                                <td colspan="2">No tracks found.</td>
                                             </tr>
                                         }
                                             .into_any()
                                     } else {
                                         view! { {tracks_rows} }.into_any()
                                     }} <tr>
-                                        <td colspan="2"></td>
+                                        <td></td>
                                         <td>
                                             <a
                                                 href=format!(
@@ -141,7 +134,6 @@ pub fn Tracks() -> impl IntoView {
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <th></th>
                                         <th>Name</th>
                                         <th></th>
                                     </tr>
@@ -163,9 +155,7 @@ fn TrackRow(
 ) -> impl IntoView {
     view! {
         <tr>
-            <td>
-                <StatusBadge deleted_at=track.deleted_at published_at=track.published_at />
-            </td>
+
             <td>
                 <div class="flex gap-3 items-center">
                     <div class="avatar">

@@ -37,7 +37,7 @@ pub fn PageDetails() -> impl IntoView {
 
                     view! {
                         <Title text=page.get().name />
-                        <article class="md:container md:mx-auto prose">
+                        <article class="my-6 md:container md:mx-auto prose">
                             <h1>{page.get().name}</h1>
                             <div inner_html=markdown::to_html_with_options(
                                     &page.get().body,
