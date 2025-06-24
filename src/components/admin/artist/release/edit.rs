@@ -203,7 +203,13 @@ fn Form(
             }
         }}
         {move || {
-            view! { <ArtistSelect primary_artist=artist.get() artist_ids=artist_ids /> }
+            view! {
+                <ArtistSelect
+                    primary_artist_id=release.get().primary_artist_id
+                    artist_ids=artist_ids
+                    label_id=artist.get().label_id
+                />
+            }
         }}
 
         <label class="flex gap-2 items-center input">

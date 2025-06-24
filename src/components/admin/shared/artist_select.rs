@@ -30,12 +30,14 @@ fn artist_ids_str(artist_ids: RwSignal<Vec<i64>>) -> String {
 #[allow(clippy::needless_pass_by_value)]
 pub fn ArtistSelect(
     /// The primary artist is the one that will be selected by default. It is the primary artist for the release.
-    primary_artist: Artist,
+    primary_artist_id: i64,
     /// The list of artist IDs that are selected. This should also include the primary artist ID.
     artist_ids: RwSignal<Vec<i64>>,
+    /// The id of the record label to fetch artists from
+    label_id: i64,
 ) -> impl IntoView {
     let artists = RwSignal::new(vec![]);
-    let artists_resource = Resource::new(move || primary_artist.label_id, get_label_artists);
+    let artists_resource = Resource::new(move || label_id, get_label_artists);
 
     view! {
         <Transition fallback=Loading>
@@ -55,21 +57,20 @@ pub fn ArtistSelect(
                                 <span class="label-text">"Main Artist"</span>
                             </legend>
                             <select class="select" name="form[primary_artist_id]">
-                                {move || {
-                                    let artist_rows = artists
-                                        .get()
-                                        .into_iter()
-                                        .map(|artist| {
-                                            let checked = artist.id == primary_artist.id;
-                                            view! {
-                                                <option class="option" value=artist.id selected=checked>
-                                                    {artist.name}
-                                                </option>
-                                            }
-                                        })
-                                        .collect::<Vec<_>>();
-                                    view! { {artist_rows} }
-                                }}
+                                <For
+                                    each=move || artists.get()
+                                    key=|artist| (artist.slug.clone(), artist.name.clone())
+                                    let(artist)
+                                >
+                                    <option
+                                        class="option"
+                                        value=artist.id
+                                        selected=primary_artist_id == artist.id
+                                    >
+                                        {artist.name}
+                                    </option>
+                                </For>
+
                             </select>
                             {move || {
                                 let artist_rows = artists
