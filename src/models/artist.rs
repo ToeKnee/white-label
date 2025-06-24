@@ -221,6 +221,55 @@ impl Artist {
         })
     }
 
+    /// List artist by record label
+    /// This is used to get all artists on a record label
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `record_label_id` - The ID of the record label
+    /// * `include_hidden` - Whether to include unreleased releases
+    ///
+    /// # Returns
+    /// The artists
+    ///
+    /// # Errors
+    /// If there is an error getting the artists, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn list_by_record_label(
+        pool: &PgPool,
+        record_label_id: i64,
+        include_hidden: bool,
+    ) -> anyhow::Result<Vec<Self>> {
+        let query = if include_hidden {
+            "SELECT artists.* FROM artists
+             WHERE artists.label_id = $1
+             ORDER BY deleted_at DESC, published_at DESC, name ASC"
+        } else {
+            "SELECT artists.* FROM artists
+             WHERE artists.label_id = $1
+              AND deleted_at IS NULL
+              AND published_at < NOW()
+              AND published_at IS NOT NULL
+             ORDER BY published_at DESC, name ASC"
+        };
+
+        let artists = sqlx::query_as::<_, Self>(query)
+            .bind(record_label_id)
+            .fetch_all(pool)
+            .await;
+
+        match artists {
+            Ok(artists) => Ok(artists),
+            Err(e) => {
+                tracing::error!("{e}");
+                Err(anyhow::anyhow!(
+                    "Could not find artists for record label with id {}.",
+                    record_label_id
+                ))
+            }
+        }
+    }
+
     /// Update an artist
     ///
     /// # Arguments
@@ -531,6 +580,48 @@ mod tests {
             artist.unwrap_err().to_string(),
             "Could not find artist with slug missing.".to_string()
         );
+    }
+
+    #[sqlx::test]
+    async fn test_list_by_record_label(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist1 = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let artist2 = create_test_artist(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+
+        let artists = Artist::list_by_record_label(&pool, record_label.id, false)
+            .await
+            .unwrap();
+
+        assert_eq!(artists.len(), 2);
+        assert!(artists.contains(&artist1));
+        assert!(artists.contains(&artist2));
+    }
+
+    #[sqlx::test]
+    async fn test_list_by_record_label_with_hidden(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let mut artist1 = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        artist1.deleted_at = Some(chrono::Utc::now()); // Simulate deleted artist
+        artist1 = artist1.clone().update(&pool).await.unwrap();
+        let mut artist2 = create_test_artist(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        artist2.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1)); // Future date to simulate hidden artist
+        artist2 = artist2.clone().update(&pool).await.unwrap();
+
+        let artists = Artist::list_by_record_label(&pool, record_label.id, true)
+            .await
+            .unwrap();
+
+        assert_eq!(artists.len(), 2);
+        assert!(artists.contains(&artist1));
+        assert!(artists.contains(&artist2));
     }
 
     #[sqlx::test]

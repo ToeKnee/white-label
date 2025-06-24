@@ -181,6 +181,58 @@ impl Page {
         })
     }
 
+    /// List all pages
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `include_hidden` - Whether to include hidden pages
+    ///
+    /// # Returns
+    /// A vector of pages
+    ///
+    /// # Errors
+    /// If the pages cannot be listed, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn list(pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Self>> {
+        let query = if include_hidden {
+            "SELECT * FROM pages
+            ORDER BY deleted_at DESC, published_at DESC, name ASC"
+        } else {
+            "SELECT pages.* FROM pages
+            WHERE deleted_at IS NULL
+            AND published_at < NOW()
+            AND published_at IS NOT NULL
+            ORDER BY published_at DESC, name ASC"
+        };
+
+        let rows = sqlx::query(query).fetch_all(pool).await;
+
+        match rows {
+            Ok(rows) => {
+                let pages: Vec<Self> = rows
+                    .into_iter()
+                    .map(|row| Self {
+                        id: row.get("id"),
+                        name: row.get("name"),
+                        slug: row.get("slug"),
+                        description: row.get("description"),
+                        body: row.get("body"),
+                        label_id: row.get("label_id"),
+                        published_at: row.get("published_at"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                        deleted_at: row.get("deleted_at"),
+                    })
+                    .collect();
+                Ok(pages)
+            }
+            Err(e) => {
+                tracing::error!("{e}");
+                Err(anyhow::anyhow!("Could not list pages."))
+            }
+        }
+    }
+
     /// Update an page
     ///
     /// # Arguments
@@ -500,6 +552,42 @@ mod tests {
             page.unwrap_err().to_string(),
             "Could not find page with slug missing.".to_string()
         );
+    }
+
+    #[sqlx::test]
+    async fn test_list(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let page1 = create_test_page(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let page2 = create_test_page(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+
+        let pages = Page::list(&pool, false).await.unwrap();
+        assert_eq!(pages.len(), 2);
+        assert!(pages.contains(&page1));
+        assert!(pages.contains(&page2));
+    }
+
+    #[sqlx::test]
+    async fn test_list_with_hidden(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let mut page1 = create_test_page(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        page1.deleted_at = Some(chrono::Utc::now());
+        page1 = page1.clone().update(&pool).await.unwrap();
+        let mut page2 = create_test_page(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        page2.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1)); // Set to future date
+        page2 = page2.clone().update(&pool).await.unwrap();
+
+        let pages = Page::list(&pool, true).await.unwrap();
+        assert_eq!(pages.len(), 2); // Should include the deleted page
+        assert!(pages.contains(&page1));
+        assert!(pages.contains(&page2));
     }
 
     #[sqlx::test]
