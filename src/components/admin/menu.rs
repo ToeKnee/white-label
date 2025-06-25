@@ -1,6 +1,7 @@
 //! Admin menu module
 
 use leptos::prelude::*;
+use leptos_router::components::A;
 
 use crate::components::utils::{error::ErrorPage, loading::Loading};
 use crate::models::artist::Artist;
@@ -29,10 +30,16 @@ pub fn AdminMenu() -> impl IntoView {
                     view! {
                         <ul class="w-56 menu bg-base-200 rounded-box">
                             <li>
-                                <a href="/admin">"Dashboard"</a>
+                                <A href="/admin">"Dashboard"</A>
                             </li>
                             <li>
-                                <a href=menu.get().url>{menu.get().record_label.name}</a>
+                                {move || {
+                                    view! {
+                                        <A href=menu
+                                            .get()
+                                            .url>{move || menu.get().record_label.name}</A>
+                                    }
+                                }}
                             </li>
                             <li>
                                 <ArtistsMenu artists=menu.get().artists />
@@ -55,7 +62,7 @@ fn ArtistsMenu(artists: Vec<MenuArtist>) -> impl IntoView {
     view! {
         <details open>
             <summary>
-                <a href="/admin/artists">Artists</a>
+                <A href="/admin/artists">Artists</A>
             </summary>
             <ul>
                 <Show
@@ -76,7 +83,7 @@ fn ArtistsMenu(artists: Vec<MenuArtist>) -> impl IntoView {
                     </For>
                 </Show>
                 <li>
-                    <a href="/admin/artist">"Create Artist"</a>
+                    <A href="/admin/artist">"Create Artist"</A>
                 </li>
             </ul>
         </details>
@@ -94,11 +101,15 @@ fn ArtistMenuRow(menu_artist: MenuArtist) -> impl IntoView {
     view! {
         <details>
             <summary>
-                <a href=artist_url>{move || artist.get().name}</a>
+                {move || {
+                    view! { <A href=artist_url.get()>{move || artist.get().name}</A> }
+                }}
             </summary>
             <ul>
                 <li>
-                    <a href=move || releases_url>"All Releases"</a>
+                    {move || {
+                        view! { <A href=releases_url()>"All Releases"</A> }
+                    }}
                 </li>
 
                 <Show
@@ -106,7 +117,7 @@ fn ArtistMenuRow(menu_artist: MenuArtist) -> impl IntoView {
                     fallback=move || {
                         view! {
                             <li>
-                                <a href=create_release_url>"No releases yet..."</a>
+                                <A href=create_release_url>"No releases yet..."</A>
                             </li>
                         }
                     }
@@ -125,7 +136,7 @@ fn ArtistMenuRow(menu_artist: MenuArtist) -> impl IntoView {
                     </For>
                 </Show>
                 <li>
-                    <a href=create_release_url>"Create Release"</a>
+                    <A href=create_release_url>"Create Release"</A>
                 </li>
             </ul>
         </details>
@@ -147,7 +158,7 @@ fn ReleaseMenuRow(
             view! { <span title="Featured artist">"○"</span> }.into_any()
         }
     };
-    view! { <a href=release_url>{primary_release_icon}" "{move || release.get().name}</a> }
+    view! { <A href=release_url>{primary_release_icon}" "{move || release.get().name}</A> }
 }
 
 #[component]
@@ -156,7 +167,7 @@ fn PagesMenu(#[prop(into)] pages: Vec<MenuPage>) -> impl IntoView {
     view! {
         <details>
             <summary>
-                <a href="/admin/pages">Pages</a>
+                <A href="/admin/pages">Pages</A>
             </summary>
             <ul>
                 <Show
@@ -169,12 +180,12 @@ fn PagesMenu(#[prop(into)] pages: Vec<MenuPage>) -> impl IntoView {
                         let(menu_page)
                     >
                         <li>
-                            <a href=menu_page.url>{menu_page.page.name}</a>
+                            <A href=menu_page.url>{menu_page.page.name}</A>
                         </li>
                     </For>
                 </Show>
                 <li>
-                    <a href="/admin/page">"Create Page"</a>
+                    <A href="/admin/page">"Create Page"</A>
                 </li>
             </ul>
         </details>

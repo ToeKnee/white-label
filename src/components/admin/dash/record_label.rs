@@ -1,5 +1,6 @@
 //! This module contains the `RecordLabel` component, which displays quick information about a record label.
 use leptos::prelude::*;
+use leptos_router::components::A;
 use reactive_stores::Store;
 
 use crate::app::UserContext;
@@ -36,9 +37,9 @@ pub fn RecordLabel() -> impl IntoView {
                                         <p>"ISRC: "{record_label.get().isrc_base}" YY XXXXX"</p>
                                         <p>{shorten_string(record_label.get().description)}</p>
                                         <div class="justify-end card-actions">
-                                            <a href="/admin/label" class="btn btn-primary">
+                                            <A href="/admin/label" attr:class="btn btn-primary">
                                                 Edit
-                                            </a>
+                                            </A>
                                         </div>
                                     </div>
                                 </div>

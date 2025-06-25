@@ -1,7 +1,7 @@
 //! List tracks for an artist's release in the admin panel.
 
 use leptos::prelude::*;
-use leptos_router::hooks::use_params_map;
+use leptos_router::{components::A, hooks::use_params_map};
 
 use crate::components::utils::{
     error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
@@ -119,16 +119,16 @@ pub fn Tracks() -> impl IntoView {
                                     }} <tr>
                                         <td></td>
                                         <td>
-                                            <a
+                                            <A
                                                 href=format!(
                                                     "/admin/artist/{}/release/{}/tracks/new",
                                                     artist_slug.get(),
                                                     release_slug.get(),
                                                 )
-                                                class="btn btn-primary"
+                                                attr:class="btn btn-primary"
                                             >
                                                 Add
-                                            </a>
+                                            </A>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -165,12 +165,12 @@ fn TrackRow(
                     </div>
                     <div>
                         <div class="font-bold">
-                            <a href=format!(
+                            <A href=format!(
                                 "/admin/artist/{}/release/{}/track/{}",
                                 artist_slug,
                                 release_slug,
                                 track.slug,
-                            )>{track.name.clone()}</a>
+                            )>{track.name.clone()}</A>
                         </div>
                         <div class="text-sm opacity-50">
                             {track.isrc_code.clone()} <br /> {track.slug.clone()}
@@ -179,17 +179,17 @@ fn TrackRow(
                 </div>
             </td>
             <td>
-                <a
+                <A
                     href=format!(
                         "/admin/artist/{}/release/{}/track/{}",
                         artist_slug,
                         release_slug,
                         track.slug,
                     )
-                    class="btn btn-primary"
+                    attr:class="btn btn-primary"
                 >
                     Edit
-                </a>
+                </A>
             </td>
         </tr>
     }

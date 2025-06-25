@@ -2,6 +2,7 @@
 //! Displays the record label name and user menu.
 
 use leptos::prelude::*;
+use leptos_router::components::A;
 use reactive_stores::Store;
 
 use crate::app::UserContext;
@@ -31,9 +32,9 @@ pub fn LabelHeader() -> impl IntoView {
                         }
                         view! {
                             <div class="navbar-start">
-                                <a href="/" class="text-xl btn btn-ghost">
-                                    {store.record_label().get().name}
-                                </a>
+                                <A href="/" attr:class="text-xl btn btn-ghost">
+                                    {move || store.record_label().get().name}
+                                </A>
                             </div>
                         }
                     })}
@@ -85,21 +86,24 @@ pub fn UserMenu() -> impl IntoView {
                                                 class="p-2 rounded-t-none bg-base-100"
                                             >
                                                 <li>
-                                                    <a href="/profile" class="btn btn-ghost">
+                                                    <A href="/profile" attr:class="btn btn-ghost">
                                                         "Profile"
-                                                    </a>
+                                                    </A>
                                                 </li>
                                                 <li>
-                                                    <a href="/profile/change-password" class="btn btn-ghost">
+                                                    <A
+                                                        href="/profile/change-password"
+                                                        attr:class="btn btn-ghost"
+                                                    >
                                                         "Change Password"
-                                                    </a>
+                                                    </A>
                                                 </li>
                                                 {if user.get().permissions.contains("admin") {
                                                     view! {
                                                         <li>
-                                                            <a href="/admin" class="btn btn-ghost">
+                                                            <A href="/admin" attr:class="btn btn-ghost">
                                                                 "Admin"
-                                                            </a>
+                                                            </A>
                                                         </li>
                                                     }
                                                         .into_any()
@@ -108,9 +112,9 @@ pub fn UserMenu() -> impl IntoView {
                                                 }}
 
                                                 <li>
-                                                    <a href="/logout" class="btn btn-ghost">
+                                                    <A href="/logout" attr:class="btn btn-ghost">
                                                         "Log out"
-                                                    </a>
+                                                    </A>
                                                 </li>
                                             </ul>
                                         </details>
@@ -120,15 +124,14 @@ pub fn UserMenu() -> impl IntoView {
                         }
                             .into_any()
                     } else {
-
                         view! {
                             <span>
-                                <a href="/register" class="btn btn-ghost">
+                                <A href="/register" attr:class="btn btn-ghost">
                                     "Register"
-                                </a>
-                                <a href="/login" class="btn btn-ghost">
+                                </A>
+                                <A href="/login" attr:class="btn btn-ghost">
                                     "Login"
-                                </a>
+                                </A>
                             </span>
                         }
                             .into_any()

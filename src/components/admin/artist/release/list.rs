@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use leptos_router::hooks::use_params_map;
+use leptos_router::{components::A, hooks::use_params_map};
 
 use crate::components::utils::{
     error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
@@ -92,12 +92,12 @@ pub fn Releases() -> impl IntoView {
                                     }} <tr>
                                         <td colspan="4"></td>
                                         <td>
-                                            <a
+                                            <A
                                                 href=format!("/admin/artist/{}/releases/new", slug.get())
-                                                class="btn btn-primary"
+                                                attr:class="btn btn-primary"
                                             >
                                                 Add
-                                            </a>
+                                            </A>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -144,11 +144,11 @@ fn ReleaseRow(#[prop(into)] release: Release, artist_slug: String) -> impl IntoV
                     </div>
                     <div>
                         <div class="font-bold">
-                            <a href=format!(
+                            <A href=format!(
                                 "/admin/artist/{}/release/{}",
                                 artist_slug,
                                 release.slug,
-                            )>{release.name.clone()}</a>
+                            )>{release.name.clone()}</A>
                         </div>
                         <div class="text-sm opacity-50">
                             {release.catalogue_number.clone()} <br /> {release.slug.clone()}
@@ -159,12 +159,12 @@ fn ReleaseRow(#[prop(into)] release: Release, artist_slug: String) -> impl IntoV
             <td>0</td>
             <td>{release_date}</td>
             <td>
-                <a
+                <A
                     href=format!("/admin/artist/{}/release/{}", artist_slug, release.slug)
-                    class="btn btn-primary"
+                    attr:class="btn btn-primary"
                 >
                     Edit
-                </a>
+                </A>
             </td>
         </tr>
     }

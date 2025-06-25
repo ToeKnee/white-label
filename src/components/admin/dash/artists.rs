@@ -1,5 +1,6 @@
 //! Artists table component.
 use leptos::prelude::*;
+use leptos_router::components::A;
 use reactive_stores::Store;
 
 use crate::app::UserContext;
@@ -74,9 +75,9 @@ pub fn ArtistsTable() -> impl IntoView {
                                             <td>
                                                 {if user.get().permissions.contains("label_owner") {
                                                     view! {
-                                                        <a href="/admin/artist" class="btn btn-primary">
+                                                        <A href="/admin/artist" attr:class="btn btn-primary">
                                                             Add
-                                                        </a>
+                                                        </A>
                                                     }
                                                         .into_any()
                                                 } else {
@@ -104,9 +105,9 @@ fn ArtistRow(#[prop(into)] artist: Artist) -> impl IntoView {
                 <StatusBadge deleted_at=artist.deleted_at published_at=artist.published_at />
             </td>
             <td>
-                <a href=format!("/admin/artist/{}", artist.slug) class="btn btn-primary">
+                <A href=format!("/admin/artist/{}", artist.slug) attr:class="btn btn-primary">
                     Edit
-                </a>
+                </A>
             </td>
         </tr>
     }

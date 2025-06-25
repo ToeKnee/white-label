@@ -40,9 +40,6 @@ pub fn ReleaseSelect(
     );
     let release_ids = RwSignal::new(initial_release_ids);
 
-    Effect::new_isomorphic(move || {
-        tracing::info!("ReleaseSelect: release_ids: {:?}", release_ids.get());
-    });
     view! {
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {

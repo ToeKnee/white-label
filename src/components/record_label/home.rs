@@ -1,6 +1,7 @@
 //! This module contains the record label home page and its components.
 use leptos::prelude::*;
 use leptos_meta::Title;
+use leptos_router::components::A;
 use markdown;
 use reactive_stores::Store;
 
@@ -98,7 +99,7 @@ fn ArtistBox(
     artist: Artist,
 ) -> impl IntoView {
     view! {
-        <a href=format!("/artists/{}", artist.slug) class="no-underline">
+        <A href=format!("/artists/{}", artist.slug) attr:class="no-underline">
             <div class="w-96 shadow-xl not-prose card card-compact bg-base-100 bg-neutral text-neutral-content indicator">
                 <StatusBadge deleted_at=artist.deleted_at published_at=artist.published_at />
                 <figure>
@@ -110,6 +111,6 @@ fn ArtistBox(
                     <p>{shorten_string(artist.description)}</p>
                 </div>
             </div>
-        </a>
+        </A>
     }
 }

@@ -1,5 +1,6 @@
 //! This module defines the `PagesTable` component, which displays a table of pages
 use leptos::prelude::*;
+use leptos_router::components::A;
 use reactive_stores::Store;
 
 use crate::app::UserContext;
@@ -72,9 +73,9 @@ pub fn PagesTable() -> impl IntoView {
                                             <td>
                                                 {if user.get().permissions.contains("label_owner") {
                                                     view! {
-                                                        <a href="/admin/page" class="btn btn-primary">
+                                                        <A href="/admin/page" attr:class="btn btn-primary">
                                                             Add
-                                                        </a>
+                                                        </A>
                                                     }
                                                         .into_any()
                                                 } else {
@@ -102,9 +103,9 @@ fn PageRow(#[prop(into)] page: Page) -> impl IntoView {
                 <StatusBadge deleted_at=page.deleted_at published_at=page.published_at />
             </td>
             <td>
-                <a href=format!("/admin/page/{}", page.slug) class="btn btn-primary">
+                <A href=format!("/admin/page/{}", page.slug) attr:class="btn btn-primary">
                     Edit
-                </a>
+                </A>
             </td>
         </tr>
     }

@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use leptos_router::hooks::use_params_map;
+use leptos_router::{components::A, hooks::use_params_map};
 use markdown;
 
 use crate::components::utils::{error::ErrorPage, loading::Loading, status_badge::StatusBadge};
@@ -126,9 +126,9 @@ pub fn Release(
     };
 
     view! {
-        <a
+        <A
             href=move || format!("/artists/{}/{}", artist_slug.get(), release.get().slug)
-            class="w-1/4 link link-hover min-w-96"
+            attr:class="w-1/4 link link-hover min-w-96"
         >
             <div class="shadow-sm not-prose card bg-base-100 bg-neutral text-neutral-content">
                 <figure class="not-prose">
@@ -154,6 +154,6 @@ pub fn Release(
                     </p>
                 </div>
             </div>
-        </a>
+        </A>
     }
 }
