@@ -70,30 +70,27 @@ pub fn ArtistSelect(
                                         {artist.name}
                                     </option>
                                 </For>
-
                             </select>
-                            {move || {
-                                let artist_rows = artists
-                                    .get()
-                                    .into_iter()
-                                    .map(|artist| {
-                                        view! { <ArtistCheckbox artist artist_ids /> }
-                                    })
-                                    .collect::<Vec<_>>();
-                                if artist_rows.is_empty() {
-                                    view! { <p>"No artists found…"</p> }.into_any()
-                                } else {
-                                    view! {
-                                        <fieldset class="flex flex-row flex-wrap gap-6 justify-center p-4 fieldset">
-                                            <legend class="label">
-                                                <span class="label-text">"All Artists"</span>
-                                            </legend>
-                                            {artist_rows}
-                                        </fieldset>
+
+                            <fieldset class="flex flex-row flex-wrap gap-6 justify-center p-4 fieldset">
+                                <legend class="label">
+                                    <span class="label-text">"All Artists"</span>
+                                </legend>
+                                <Show
+                                    when=move || { !artists.get().is_empty() }
+                                    fallback=|| {
+                                        view! { <p>"No artists found…"</p> }
                                     }
-                                        .into_any()
-                                }
-                            }}
+                                >
+                                    <For
+                                        each=move || artists.get()
+                                        key=|artist| (artist.slug.clone(), artist.name.clone())
+                                        let(artist)
+                                    >
+                                        <ArtistCheckbox artist artist_ids />
+                                    </For>
+                                </Show>
+                            </fieldset>
                         </div>
                     }
                 })}

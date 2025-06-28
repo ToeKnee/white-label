@@ -51,19 +51,15 @@ pub fn Releases() -> impl IntoView {
                             redirect("/admin/artists");
                         }
                     }
-                    if let Ok(releases) = releases_resource.await {
-                        set_releases.set(releases.releases);
-                    } else {
-                        tracing::error!("Error while getting releases");
-                        redirect("/admin/artists");
+                    if !slug.get().is_empty() {
+                        if let Ok(releases) = releases_resource.await {
+                            set_releases.set(releases.releases);
+                        } else {
+                            tracing::error!("Error while getting releases");
+                            redirect("/admin/artists");
+                        }
                     }
-                    let release_rows = releases
-                        .get()
-                        .into_iter()
-                        .map(|release| {
-                            view! { <ReleaseRow release=release artist_slug=slug.get() /> }
-                        })
-                        .collect::<Vec<_>>();
+
                     view! {
                         <Title text=title.get() />
                         <h1>{move || title.get()}</h1>
@@ -80,16 +76,25 @@ pub fn Releases() -> impl IntoView {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {if releases.get().is_empty() {
-                                        view! {
-                                            <tr>
-                                                <td colspan="5">No releases found.</td>
-                                            </tr>
+                                    <Show
+                                        when=move || { !releases.get().is_empty() }
+                                        fallback=|| {
+                                            view! {
+                                                <tr>
+                                                    <td colspan="5">No releases found.</td>
+                                                </tr>
+                                            }
                                         }
-                                            .into_any()
-                                    } else {
-                                        view! { {release_rows} }.into_any()
-                                    }} <tr>
+                                    >
+                                        <For
+                                            each=move || releases.get()
+                                            key=|release| (release.slug.clone(), release.name.clone())
+                                            let(release)
+                                        >
+                                            <ReleaseRow release=release artist_slug=slug.get() />
+                                        </For>
+                                    </Show>
+                                    <tr>
                                         <td colspan="4"></td>
                                         <td>
                                             <A

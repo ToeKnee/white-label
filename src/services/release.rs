@@ -80,7 +80,7 @@ pub async fn get_releases_service(
         Ok(artist) => artist,
         Err(e) => {
             let err = format!("Error while getting artist: {e:?}");
-            tracing::error!("{err}");
+            tracing::error!("get_releases_service {err}");
             return Err(ServerFnError::new(e));
         }
     };
@@ -132,9 +132,9 @@ pub async fn get_release_service(
     let artist = match Artist::get_by_slug(pool, artist_slug).await {
         Ok(artist) => artist,
         Err(e) => {
-            let err = format!("Error while getting artist: {e:?}");
+            let err = format!("get_release_service Error while getting artist: {e:?}");
             tracing::error!("{err}");
-            return Err(ServerFnError::new(e));
+            Artist::default()
         }
     };
 
@@ -152,7 +152,7 @@ pub async fn get_release_service(
     )
     .await
     .map_err(|e| {
-        let err = format!("Error while getting artists: {e:?}");
+        let err = format!("Error while getting releases: {e:?}");
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;

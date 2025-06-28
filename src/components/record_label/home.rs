@@ -16,7 +16,11 @@ use crate::utils::shorten_string::shorten_string;
 #[component]
 pub fn RecordLabelHome() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
-    let record_label_resource = Resource::new(move || {}, |()| get_record_label());
+    let record_label_resource = Resource::new_blocking(move || {}, |()| get_record_label());
+
+    let artists = RwSignal::new(vec![]);
+    let artists_resource =
+        Resource::new_blocking(move || store.record_label().get().id, get_label_artists);
 
     view! {
         <Transition fallback=move || view! { <Loading /> }>
@@ -24,29 +28,37 @@ pub fn RecordLabelHome() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if store.record_label().get().id == 0 {
-                        match record_label_resource.await {
-                            Ok(label) => {
-                                let record_label = store.record_label();
-                                *record_label.write() = label.record_label.clone();
-                                label.record_label
+                    match record_label_resource.await {
+                        Ok(label) => {
+                            let record_label = store.record_label();
+                            *record_label.write() = label.record_label.clone();
+                            label.record_label
+                        }
+                        Err(_) => RecordLabel::default(),
+                    };
+                    if store.record_label().get().id > 0 {
+                        match artists_resource.await {
+                            Ok(these_artists) => {
+                                artists.set(these_artists.artists);
                             }
-                            Err(_) => RecordLabel::default(),
-                        };
+                            Err(x) => {
+                                tracing::error!("Error while getting artists: {x:?}");
+                            }
+                        }
                     }
-                    let record_label = store.record_label().get();
+
                     view! {
-                        <Title text=record_label.name.clone() />
+                        <Title text=store.record_label().get().name />
                         <article class="my-6 md:container md:mx-auto prose">
-                            <h1>{record_label.name.clone()}</h1>
+                            <h1>{store.record_label().get().name}</h1>
                             <div inner_html=markdown::to_html_with_options(
-                                    &record_label.description,
+                                    &store.record_label().get().description,
                                     &markdown::Options::gfm(),
                                 )
                                 .unwrap_or_default() />
 
                             <h2>"Artists"</h2>
-                            <ArtistList record_label_id=store.record_label().get().id />
+                            <ArtistList artists=artists />
                         </article>
                     }
                 })}
@@ -58,37 +70,21 @@ pub fn RecordLabelHome() -> impl IntoView {
 /// Render a list of artists for a record label.
 #[component]
 pub fn ArtistList(
-    /// The ID of the record label to fetch artists for
-    record_label_id: i64,
+    /// The artists to display
+    artists: RwSignal<Vec<Artist>>,
 ) -> impl IntoView {
-    let (artists, set_artists) = signal(vec![]);
-    let artists_resource = Resource::new(move || record_label_id, get_label_artists);
-
     view! {
-        <Transition fallback=move || view! { <Loading /> }>
-            <ErrorBoundary fallback=|_| {
-                ErrorPage
-            }>
-                {move || Suspend::new(async move {
-                    match artists_resource.await {
-                        Ok(these_artists) => {
-                            (*set_artists.write()).clone_from(&these_artists.artists);
-                            these_artists.artists
-                        }
-                        Err(_) => vec![Artist::default()],
-                    };
-                    let artists = artists.get();
-                    let artist_rows = artists
-                        .into_iter()
-                        .map(|artist| {
-
-                            view! { <ArtistBox artist /> }
-                        })
-                        .collect::<Vec<_>>();
-                    view! { <div class="flex flex-wrap gap-4 justify-between">{artist_rows}</div> }
-                })}
-            </ErrorBoundary>
-        </Transition>
+        <div class="flex flex-wrap gap-4 justify-between">
+            <Show when=move || { !artists.get().is_empty() }>
+                <For
+                    each=move || artists.get()
+                    key=|artist| (artist.slug.clone(), artist.name.clone())
+                    let(artist)
+                >
+                    <ArtistBox artist />
+                </For>
+            </Show>
+        </div>
     }
 }
 

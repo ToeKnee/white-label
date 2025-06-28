@@ -13,38 +13,39 @@ use crate::routes::{artist::get_artist, release::get_releases};
 #[component]
 pub fn ArtistPage() -> impl IntoView {
     let params = use_params_map();
-    let slug = move || params.read().get("slug");
-
-    let (artist, set_artist) = signal(Artist::default());
-    let artist_resource = Resource::new(
-        move || artist.get(),
-        move |_| slug().map_or_else(|| get_artist(String::new()), get_artist),
-    );
+    let slug = RwSignal::new(String::new());
+    Effect::new_isomorphic(move || {
+        slug.set(params.read().get("slug").unwrap_or_default());
+    });
+    let artist = RwSignal::new(Artist::default());
+    let artist_resource = Resource::new_blocking(move || slug.get(), get_artist);
 
     let releases = RwSignal::new(vec![Release::default()]);
-    let releases_resource = Resource::new(move || artist.get().slug, get_releases);
+    let releases_resource = Resource::new_blocking(move || slug.get(), get_releases);
     view! {
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            *set_artist.write() = this_artist.artist.clone();
-                            if let Ok(this_releases) = releases_resource.await {
-                                releases.set(this_releases.releases);
-                            }
-                            this_artist.artist
+                    if !slug.get().is_empty() {
+                        if let Ok(this_artist) = artist_resource.await {
+                            artist.set(this_artist.artist);
+                        } else {
+                            tracing::error!("Error while getting artist");
                         }
-                        Err(_) => Artist::default(),
-                    };
-
-                    view! {
-                        <Title text=artist.get().name />
-                        <article class="my-6 md:container md:mx-auto prose">
-                            <h1>{artist.get().name}</h1>
-                            <div class="flex flex-wrap justify-between">
+                        if let Ok(release_list) = releases_resource.await {
+                            releases.set(release_list.releases);
+                        } else {
+                            tracing::error!("Error while getting releases for artist");
+                        }
+                    }
+                })} <Title text=move || artist.get().name />
+                <article class="my-6 md:container md:mx-auto prose">
+                    <h1>{move || artist.get().name}</h1>
+                    <div class="flex flex-wrap justify-between">
+                        {move || {
+                            view! {
                                 <div
                                     inner_html=markdown::to_html_with_options(
                                             &artist.get().description,
@@ -53,21 +54,19 @@ pub fn ArtistPage() -> impl IntoView {
                                         .unwrap_or_default()
                                     class="w-1/2"
                                 />
-                                <img
-                                    src=move || artist.get().primary_image_url()
-                                    alt=move || artist.get().name
-                                    class="pl-6 w-1/2 h-auto"
-                                />
-                            </div>
+                            }
+                        }}
+                        <img
+                            src=move || artist.get().primary_image_url()
+                            alt=move || artist.get().name
+                            class="pl-6 w-1/2 h-auto"
+                        />
+                    </div>
 
-                            {move || {
-                                view! {
-                                    <ReleaseList artist_slug=artist.get().slug releases=releases />
-                                }
-                            }}
-                        </article>
-                    }
-                })}
+                    <Show when=move || { !releases.get().is_empty() }>
+                        <ReleaseList releases=releases artist=artist />
+                    </Show>
+                </article>
             </ErrorBoundary>
         </Transition>
     }
@@ -76,29 +75,20 @@ pub fn ArtistPage() -> impl IntoView {
 #[component]
 /// Fetch and display the list of releases for the artist
 pub fn ReleaseList(
-    /// The slug of the artist
-    artist_slug: String,
     /// The releases to display
     releases: RwSignal<Vec<Release>>,
+    /// The artist
+    artist: RwSignal<Artist>,
 ) -> impl IntoView {
-    let artist_slug = RwSignal::new(artist_slug);
-
     view! {
         <div class="flex flex-wrap gap-4 justify-between">
-            {move || {
-                let release_rows = releases
-                    .get()
-                    .into_iter()
-                    .map(|release| {
-                        view! { <Release release artist_slug /> }
-                    })
-                    .collect::<Vec<_>>();
-                if release_rows.is_empty() {
-                    view! { <p>"Coming Soon…"</p> }.into_any()
-                } else {
-                    view! { {release_rows} }.into_any()
-                }
-            }}
+            <For
+                each=move || releases.get()
+                key=|release| (release.slug.clone(), release.name.clone())
+                let(release)
+            >
+                <Release release=release artist=artist />
+            </For>
         </div>
     }
 }
@@ -112,10 +102,9 @@ pub fn ReleaseList(
 #[component]
 pub fn Release(
     /// The release to display
-    #[prop(into)]
     release: Release,
-    /// The slug of the artist
-    artist_slug: RwSignal<String>,
+    /// The artist
+    artist: RwSignal<Artist>,
 ) -> impl IntoView {
     let release = RwSignal::new(release);
     let release_date = move || {
@@ -127,7 +116,7 @@ pub fn Release(
 
     view! {
         <A
-            href=move || format!("/artists/{}/{}", artist_slug.get(), release.get().slug)
+            href=move || format!("/artists/{}/{}", artist.get().slug, release.get().slug)
             attr:class="w-1/4 link link-hover min-w-96"
         >
             <div class="shadow-sm not-prose card bg-base-100 bg-neutral text-neutral-content">

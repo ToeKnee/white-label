@@ -49,25 +49,26 @@ pub fn PagesTable() -> impl IntoView {
                                         }
                                         Err(_) => vec![Page::default()],
                                     };
-                                    let page_rows = pages
-                                        .get()
-                                        .into_iter()
-                                        .map(|page| {
 
-                                            view! { <PageRow page /> }
-                                        })
-                                        .collect::<Vec<_>>();
                                     view! {
-                                        {if pages.get().is_empty() {
-                                            view! {
-                                                <tr>
-                                                    <td colspan="3">No pages found.</td>
-                                                </tr>
+                                        <Show
+                                            when=move || { !pages.get().is_empty() }
+                                            fallback=|| {
+                                                view! {
+                                                    <tr>
+                                                        <td colspan="3">No pages found.</td>
+                                                    </tr>
+                                                }
                                             }
-                                                .into_any()
-                                        } else {
-                                            view! { {page_rows} }.into_any()
-                                        }}
+                                        >
+                                            <For
+                                                each=move || pages.get()
+                                                key=|page| (page.slug.clone(), page.name.clone())
+                                                let(page)
+                                            >
+                                                <PageRow page />
+                                            </For>
+                                        </Show>
                                         <tr>
                                             <td colspan="2"></td>
                                             <td>

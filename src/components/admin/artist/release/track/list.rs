@@ -80,19 +80,7 @@ pub fn Tracks() -> impl IntoView {
                             );
                         }
                     }
-                    let tracks_rows = tracks
-                        .get()
-                        .into_iter()
-                        .map(|track| {
-                            view! {
-                                <TrackRow
-                                    track=track
-                                    artist_slug=artist_slug.get()
-                                    release_slug=release_slug.get()
-                                />
-                            }
-                        })
-                        .collect::<Vec<_>>();
+
                     view! {
                         <h1>"Tracks"</h1>
 
@@ -107,16 +95,29 @@ pub fn Tracks() -> impl IntoView {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {if tracks.get().is_empty() {
-                                        view! {
-                                            <tr>
-                                                <td colspan="2">No tracks found.</td>
-                                            </tr>
+                                    <Show
+                                        when=move || { !tracks.get().is_empty() }
+                                        fallback=|| {
+                                            view! {
+                                                <tr>
+                                                    <td colspan="2">No tracks found.</td>
+                                                </tr>
+                                            }
                                         }
-                                            .into_any()
-                                    } else {
-                                        view! { {tracks_rows} }.into_any()
-                                    }} <tr>
+                                    >
+                                        <For
+                                            each=move || tracks.get()
+                                            key=|track| (track.slug.clone(), track.name.clone())
+                                            let(track)
+                                        >
+                                            <TrackRow
+                                                track=track
+                                                artist_slug=artist_slug.get()
+                                                release_slug=release_slug.get()
+                                            />
+                                        </For>
+                                    </Show>
+                                    <tr>
                                         <td></td>
                                         <td>
                                             <A

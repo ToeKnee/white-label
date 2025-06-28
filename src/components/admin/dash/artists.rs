@@ -52,24 +52,25 @@ pub fn ArtistsTable() -> impl IntoView {
                                         }
                                         Err(_) => vec![Artist::default()],
                                     };
-                                    let artist_rows = artists
-                                        .get()
-                                        .into_iter()
-                                        .map(|artist| {
-                                            view! { <ArtistRow artist /> }
-                                        })
-                                        .collect::<Vec<_>>();
                                     view! {
-                                        {if artists.get().is_empty() {
-                                            view! {
-                                                <tr>
-                                                    <td colspan="3">No artists found.</td>
-                                                </tr>
+                                        <Show
+                                            when=move || { !artists.get().is_empty() }
+                                            fallback=|| {
+                                                view! {
+                                                    <tr>
+                                                        <td colspan="3">No artists found.</td>
+                                                    </tr>
+                                                }
                                             }
-                                                .into_any()
-                                        } else {
-                                            view! { {artist_rows} }.into_any()
-                                        }}
+                                        >
+                                            <For
+                                                each=move || artists.get()
+                                                key=|artist| (artist.slug.clone(), artist.name.clone())
+                                                let(artist)
+                                            >
+                                                <ArtistRow artist />
+                                            </For>
+                                        </Show>
                                         <tr>
                                             <td colspan="2"></td>
                                             <td>

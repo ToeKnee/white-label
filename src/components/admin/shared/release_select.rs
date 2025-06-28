@@ -58,67 +58,59 @@ pub fn ReleaseSelect(
                                 <span class="label-text">"Main Release"</span>
                             </legend>
                             <select class="select" name="form[primary_release_id]">
-                                {move || {
-                                    let release_rows = releases
-                                        .get()
-                                        .into_iter()
-                                        .map(|release| {
-                                            let checked = release.id == primary_release.id;
-                                            view! {
-                                                <option class="option" value=release.id selected=checked>
-                                                    {release.name}
-                                                </option>
-                                            }
-                                        })
-                                        .collect::<Vec<_>>();
-                                    view! { {release_rows} }
-                                }}
+                                <For
+                                    each=move || releases.get()
+                                    key=|release| (release.slug.clone(), release.name.clone())
+                                    let(release)
+                                >
+                                    <option
+                                        class="option"
+                                        value=release.id
+                                        selected=move || { release.id == primary_release.id }
+                                    >
+                                        {release.name}
+                                    </option>
+                                </For>
                             </select>
-                            {move || {
-                                let release_rows = releases
-                                    .get()
-                                    .into_iter()
-                                    .map(|release| {
-                                        let checked = release_ids.get().contains(&release.id);
-                                        view! {
-                                            <label class="flex flex-row gap-4 label bg-base-100 border-base-300 rounded-box">
 
-                                                <input
-                                                    class="checkbox"
-                                                    type="checkbox"
-                                                    checked=checked
-                                                    value=release.id
-                                                    on:input:target=move |_ev| {
-                                                        toggle_release_id(release_ids, release.id);
-                                                    }
-                                                />
-                                                <div class="avatar not-prose">
-                                                    <div class="w-8 rounded-full">
-                                                        <img
-                                                            src=release.primary_image_url()
-                                                            alt=release.name.clone()
-                                                        />
-                                                    </div>
-                                                </div>
-                                                {release.name}
-                                            </label>
-                                        }
-                                    })
-                                    .collect::<Vec<_>>();
-                                if release_rows.is_empty() {
-                                    view! { <p>"No releases found…"</p> }.into_any()
-                                } else {
-                                    view! {
-                                        <fieldset class="flex flex-row flex-wrap gap-6 justify-center p-4 fieldset">
-                                            <legend class="label">
-                                                <span class="label-text">"All Releases"</span>
-                                            </legend>
-                                            {release_rows}
-                                        </fieldset>
+                            <fieldset class="flex flex-row flex-wrap gap-6 justify-center p-4 fieldset">
+                                <legend class="label">
+                                    <span class="label-text">"All Releases"</span>
+                                </legend>
+                                <Show
+                                    when=move || { !releases.get().is_empty() }
+                                    fallback=|| {
+                                        view! { <p>"No releases found…"</p> }
                                     }
-                                        .into_any()
-                                }
-                            }}
+                                >
+                                    <For
+                                        each=move || releases.get()
+                                        key=|release| (release.slug.clone(), release.name.clone())
+                                        let(release)
+                                    >
+                                        <label class="flex flex-row gap-4 label bg-base-100 border-base-300 rounded-box">
+                                            <input
+                                                class="checkbox"
+                                                type="checkbox"
+                                                checked=move || { release_ids.get().contains(&release.id) }
+                                                value=release.id
+                                                on:input:target=move |_ev| {
+                                                    toggle_release_id(release_ids, release.id);
+                                                }
+                                            />
+                                            <div class="avatar not-prose">
+                                                <div class="w-8 rounded-full">
+                                                    <img
+                                                        src=release.primary_image_url()
+                                                        alt=release.name.clone()
+                                                    />
+                                                </div>
+                                            </div>
+                                            {release.name}
+                                        </label>
+                                    </For>
+                                </Show>
+                            </fieldset>
                         </div>
                     }
                 })}
