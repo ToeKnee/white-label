@@ -157,6 +157,45 @@ pub async fn delete_artist_service(
     })
 }
 
+/// Restore a soft deleted artist
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// user: Option<&User> - The user deleting the artist
+/// slug: String - The slug of the artist
+///
+/// # Returns
+/// Result<`ArtistResult`, `ServerFnError`> - The restored artist
+///
+/// # Errors
+/// If the artist cannot be found, return an error
+/// If the user does not have the required permissions, return an error
+#[cfg(feature = "ssr")]
+pub async fn restore_artist_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    slug: String,
+) -> Result<ArtistResult, ServerFnError> {
+    match user_with_permissions(user, vec!["admin", "label_owner"]) {
+        Ok(_) => (),
+        Err(e) => return Err(e),
+    }
+
+    let mut artist = Artist::get_by_slug(pool, slug).await.map_err(|e| {
+        let err = format!("Error while getting artist: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
+    artist.deleted_at = None;
+    artist.clone().update(pool).await.map_err(|e| {
+        let err = format!("Error while restoring artist: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
+
+    Ok(ArtistResult { artist })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,6 +526,66 @@ mod tests {
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),
+            "error running server function: You do not have permission.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_artist_service(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let artist = artist.delete(&pool).await.unwrap();
+        let restored_artist = restore_artist_service(&pool, Some(&user), artist.slug.clone())
+            .await
+            .unwrap();
+
+        assert!(restored_artist.artist.deleted_at.is_none());
+    }
+
+    #[sqlx::test]
+    async fn test_restore_artist_service_no_artist(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let restored_artist =
+            restore_artist_service(&pool, Some(&user), "missing".to_string()).await;
+        assert!(restored_artist.is_err());
+        assert_eq!(
+            restored_artist.unwrap_err().to_string(),
+            "error running server function: Could not find artist with slug missing.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_artist_service_no_user(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let artist = artist.delete(&pool).await.unwrap();
+        let restored_artist =
+            restore_artist_service(&pool, Some(&User::default()), artist.slug.clone()).await;
+        assert!(restored_artist.is_err());
+        assert_eq!(
+            restored_artist.unwrap_err().to_string(),
+            "error running server function: You must be logged in to view this page.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_artist_service_no_permissions(pool: PgPool) {
+        let user = create_test_user_with_permissions(&pool, 1, vec![])
+            .await
+            .unwrap();
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let artist = artist.delete(&pool).await.unwrap();
+        let restored_artist = restore_artist_service(&pool, Some(&user), artist.slug.clone()).await;
+        assert!(restored_artist.is_err());
+        assert_eq!(
+            restored_artist.unwrap_err().to_string(),
             "error running server function: You do not have permission.".to_string()
         );
     }

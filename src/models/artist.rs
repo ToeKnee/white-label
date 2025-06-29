@@ -194,31 +194,18 @@ impl Artist {
     /// If the artist cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
-        let row = sqlx::query("SELECT * FROM artists WHERE slug = $1")
+        let artist = sqlx::query_as::<_, Self>("SELECT * FROM artists WHERE slug = $1")
             .bind(slug.clone())
             .fetch_one(pool)
             .await;
 
-        let row = match row {
-            Ok(row) => row,
+        match artist {
+            Ok(row) => Ok(row),
             Err(e) => {
                 tracing::error!("{e}");
-                return Err(anyhow::anyhow!("Could not find artist with slug {}.", slug));
+                Err(anyhow::anyhow!("Could not find artist with slug {}.", slug))
             }
-        };
-
-        Ok(Self {
-            id: row.get("id"),
-            name: row.get("name"),
-            slug: row.get("slug"),
-            description: row.get("description"),
-            primary_image: row.get("primary_image"),
-            label_id: row.get("label_id"),
-            published_at: row.get("published_at"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-            deleted_at: row.get("deleted_at"),
-        })
+        }
     }
 
     /// List artist by record label

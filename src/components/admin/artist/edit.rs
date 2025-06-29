@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
-use super::delete::DeleteArtist;
+use super::{delete::DeleteArtist, restore::RestoreArtist};
 use crate::components::{
     admin::shared::{date_field::DateField, markdown_field::MarkdownField},
     files::upload::FileUploadWithProgress,
@@ -32,7 +32,7 @@ pub fn EditArtist() -> impl IntoView {
         slug.set(s);
     });
 
-    let (artist, set_artist) = signal(Artist::default());
+    let artist = RwSignal::new(Artist::default());
     let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
     let update_artist = ServerAction::<UpdateArtist>::new();
     let value = Signal::derive(move || {
@@ -41,7 +41,7 @@ pub fn EditArtist() -> impl IntoView {
             .get()
             .unwrap_or_else(|| Ok(ArtistResult::default()))
     });
-    let (success, set_success) = signal(false);
+    let success = RwSignal::new(false);
 
     view! {
         <Transition fallback=Loading>
@@ -49,14 +49,21 @@ pub fn EditArtist() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            set_artist.set(this_artist.artist);
-                        }
-                        _ => {
-                            redirect("/admin/artists");
+                    if !slug.get().is_empty() {
+                        match artist_resource.await {
+                            Ok(this_artist) => {
+                                if this_artist.artist.id > 0 {
+                                    artist.set(this_artist.artist);
+                                } else {
+                                    tracing::error!("Artist not found: {:?}", this_artist);
+                                }
+                            }
+                            _ => {
+                                redirect("/admin/artists");
+                            }
                         }
                     }
+
                     view! {
                         <Title text=move || format!("{} Profile", artist.get().name) />
                         <h1>{move || view! { {artist.get().name} }}" Profile"</h1>
@@ -69,23 +76,21 @@ pub fn EditArtist() -> impl IntoView {
                                             let fresh_artist = artist_result.artist;
                                             if fresh_artist.id > 0 {
                                                 if fresh_artist.slug != artist.get().slug {
-                                                    set_artist.set(fresh_artist.clone());
                                                     slug.set(fresh_artist.clone().slug);
                                                     redirect(&format!("/admin/artist/{}", fresh_artist.slug));
                                                 }
                                                 if !success.get() {
-                                                    set_artist.set(fresh_artist);
-                                                    set_success.set(true);
+                                                    success.set(true);
                                                 }
                                             } else {
-                                                set_success.set(false);
+                                                success.set(false);
                                             }
 
                                             view! { "" }
                                                 .into_any()
                                         }
                                         Err(errors) => {
-                                            set_success.set(false);
+                                            success.set(false);
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
@@ -98,8 +103,7 @@ pub fn EditArtist() -> impl IntoView {
                                             show=success.get()
                                         />
                                     }
-                                }} <Form artist=artist slug=slug />
-
+                                }} {move || artist.get().name} <Form artist=artist slug=slug />
                             </div>
                         </ActionForm>
                     }
@@ -110,7 +114,7 @@ pub fn EditArtist() -> impl IntoView {
 }
 
 #[component]
-fn Form(artist: ReadSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
+fn Form(artist: RwSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
     view! {
         <input type="text" class="hidden" name="artist_form[slug]" bind:value=slug />
         <div class="divider">Public</div>
@@ -154,7 +158,11 @@ fn Form(artist: ReadSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
         <div class="flex flex-auto gap-6">
             <button class="flex-1 btn btn-primary">Update</button>
             {move || {
-                view! { <DeleteArtist artist=artist.get() /> }
+                if artist.get().deleted_at.is_some() {
+                    view! { <RestoreArtist artist=artist /> }.into_any()
+                } else {
+                    view! { <DeleteArtist artist=artist /> }.into_any()
+                }
             }}
         </div>
     }

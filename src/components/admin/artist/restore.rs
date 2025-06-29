@@ -1,7 +1,7 @@
-//! Simple delete artist component for the admin panel
+//! Simple restore artist component for the admin panel
 //!
-//! This component is used to delete an artist from the admin panel.
-//! It will show a confirmation dialog before deleting the item.
+//! This component is used to restore an artist from the admin panel.
+//! It will show a confirmation restore before deleting the item.
 
 use leptos::ev::MouseEvent;
 use leptos::html;
@@ -9,12 +9,12 @@ use leptos::prelude::*;
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::artist::Artist;
-use crate::routes::artist::{ArtistResult, DeleteArtist};
+use crate::routes::artist::{ArtistResult, RestoreArtist};
 
-/// Renders the delete artist component.
+/// Renders the restore artist component.
 #[component]
-pub fn DeleteArtist(
-    /// The artist to delete
+pub fn RestoreArtist(
+    /// The artist to restore
     artist: RwSignal<Artist>,
 ) -> impl IntoView {
     let dialog_element: NodeRef<html::Dialog> = NodeRef::new();
@@ -26,7 +26,7 @@ pub fn DeleteArtist(
         }
     };
 
-    let update_artist = ServerAction::<DeleteArtist>::new();
+    let update_artist = ServerAction::<RestoreArtist>::new();
     let value = Signal::derive(move || {
         update_artist.value().get().unwrap_or_else(|| {
             Ok(ArtistResult {
@@ -36,25 +36,25 @@ pub fn DeleteArtist(
     });
 
     view! {
-        <button class="btn btn-error" on:click=on_click_show>
-            "Delete"
+        <button class="btn btn-secondary" on:click=on_click_show>
+            "Restore"
         </button>
 
         <dialog class="modal" node_ref=dialog_element>
             <div class="modal-box">
-                <h3 class="text-lg font-bold">"Delete "{move || artist.get().name}</h3>
-                <p>"Are you sure you want to delete " {move || artist.get().name} "?"</p>
+                <h3 class="text-lg font-bold">"Restore "{move || artist.get().name}</h3>
+                <p>"Are you sure you want to restore " {move || artist.get().name} "?"</p>
                 <p>"This action will be performed immediately."</p>
                 <p>
-                    "This will perform a soft delete. "{move || artist.get().name}
-                    " will be unavailable to non-admin users."
+                    "This will restore. " {move || artist.get().name}
+                    " will be available to non-admin users."
                 </p>
                 <div class="modal-action">
                     <ActionForm action=update_artist>
                         {move || {
                             match value.get() {
                                 Ok(artist_result) => {
-                                    if artist_result.artist.deleted_at.is_some() {
+                                    if artist_result.artist.deleted_at.is_none() {
                                         artist.set(artist_result.artist);
                                         if let Some(dialog) = dialog_element.get() {
                                             dialog.close();
@@ -69,7 +69,7 @@ pub fn DeleteArtist(
                                 }
                             }
                         }} <input name="slug" type="hidden" value=move || artist.get().slug />
-                        <button class="btn btn-error">Delete</button>
+                        <button class="btn btn-secondary">Restore</button>
                     </ActionForm>
                 </div>
             </div>

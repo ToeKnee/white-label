@@ -8,7 +8,8 @@ use crate::models::artist::Artist;
 
 #[cfg(feature = "ssr")]
 use crate::services::artist::{
-    create_artist_service, delete_artist_service, get_artist_service, update_artist_service,
+    create_artist_service, delete_artist_service, get_artist_service, restore_artist_service,
+    update_artist_service,
 };
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
@@ -100,4 +101,25 @@ pub async fn delete_artist(
     let auth = auth()?;
     let user = auth.current_user.as_ref();
     delete_artist_service(&pool, user, slug).await
+}
+
+/// Restore a deleted artist.
+///
+/// # Arguments:
+/// * `slug`: The slug of the artist to be restored.
+///
+/// # Returns:
+/// * A `ArtistResult` containing the restored artist.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if there is an issue with deleting the artist, such as database connection issues or unauthorized access.
+#[server(RestoreArtist, "/api", endpoint="restore_artist", output = Cbor)]
+pub async fn restore_artist(
+    /// The slug of the artist to be restored.
+    slug: String,
+) -> Result<ArtistResult, ServerFnError> {
+    let pool = pool()?;
+    let auth = auth()?;
+    let user = auth.current_user.as_ref();
+    restore_artist_service(&pool, user, slug).await
 }
