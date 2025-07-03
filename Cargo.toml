@@ -109,6 +109,11 @@ opt-level = 'z'
 lto = true
 codegen-units = 1
 panic = "abort"
+debug = "line-tables-only"
+
+[profile.dev]
+debug = "line-tables-only"
+
 
 [dev-dependencies]
 axum-test = "17.0.1"
