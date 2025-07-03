@@ -37,7 +37,9 @@ pub async fn get_page(
     slug: String,
 ) -> Result<PageResult, ServerFnError> {
     let pool = pool()?;
-    get_page_service(&pool, slug).await
+    let auth = auth()?;
+    let user = auth.current_user.as_ref();
+    get_page_service(&pool, user, slug).await
 }
 
 /// Create a new page.

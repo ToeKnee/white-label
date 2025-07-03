@@ -11,6 +11,7 @@ use crate::routes::page::PageResult;
 ///
 /// # Arguments
 /// pool: `PgPool` - The database connection pool
+/// user: Option<&User> - The user creating the artist
 /// slug: String - The slug of the page
 ///
 /// # Returns
@@ -18,13 +19,20 @@ use crate::routes::page::PageResult;
 ///
 /// # Errors
 /// If the page cannot be found, return an error
-pub async fn get_page_service(pool: &PgPool, slug: String) -> Result<PageResult, ServerFnError> {
+pub async fn get_page_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    slug: String,
+) -> Result<PageResult, ServerFnError> {
+    let include_hidden = user.is_some_and(|user| user.permissions.contains("label_owner"));
     Ok(PageResult {
-        page: Page::get_by_slug(pool, slug).await.map_err(|e| {
-            let err = format!("Error while getting page: {e:?}");
-            tracing::error!("{err}");
-            ServerFnError::new(e)
-        })?,
+        page: Page::get_by_slug(pool, slug, include_hidden)
+            .await
+            .map_err(|e| {
+                let err = format!("Error while getting page: {e:?}");
+                tracing::error!("{err}");
+                ServerFnError::new(e)
+            })?,
     })
 }
 
@@ -51,12 +59,15 @@ pub async fn restore_page_service(
         Ok(_) => (),
         Err(e) => return Err(e),
     }
+    let include_hidden = true; // We have already checked permissions, so we can include hidden pages
 
-    let mut page = Page::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting page: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let mut page = Page::get_by_slug(pool, slug, include_hidden)
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting page: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?;
     page.deleted_at = None;
     page.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring page: {e:?}");
@@ -134,12 +145,15 @@ pub async fn update_page_service(
         Ok(_) => (),
         Err(e) => return Err(e),
     }
+    let include_hidden = true; // We have already checked permissions, so we can include hidden pages
 
-    let mut page = Page::get_by_slug(pool, page_form.slug).await.map_err(|e| {
-        let err = format!("Error while getting page: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let mut page = Page::get_by_slug(pool, page_form.slug, include_hidden)
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting page: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?;
     page.name = page_form.name;
     page.description = page_form.description;
     page.body = page_form.body;
@@ -177,12 +191,15 @@ pub async fn delete_page_service(
         Ok(_) => (),
         Err(e) => return Err(e),
     }
+    let include_hidden = true; // We have already checked permissions, so we can include hidden pages
 
-    let page = Page::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting page: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let page = Page::get_by_slug(pool, slug, include_hidden)
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting page: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?;
 
     Ok(PageResult {
         page: page.delete(pool).await.map_err(|e| {
@@ -204,13 +221,54 @@ mod tests {
     #[sqlx::test]
     async fn test_get_page_service(pool: PgPool) {
         let page = create_test_page(&pool, 1, None).await.unwrap();
-        let page_by_slug = get_page_service(&pool, page.slug.clone()).await.unwrap();
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+        let page_by_slug = get_page_service(&pool, Some(&user), page.slug.clone())
+            .await
+            .unwrap();
         assert_eq!(page, page_by_slug.page);
     }
 
     #[sqlx::test]
+    async fn test_get_page_service_hidden_page_admin(pool: PgPool) {
+        let mut page = create_test_page(&pool, 1, None).await.unwrap();
+        page.deleted_at = Some(chrono::Utc::now());
+        page = page.clone().update(&pool).await.unwrap();
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+        let page_by_slug = get_page_service(&pool, Some(&user), page.slug.clone())
+            .await
+            .unwrap();
+        assert_eq!(page, page_by_slug.page);
+    }
+    #[sqlx::test]
+    async fn test_get_page_service_hidden_page_not_admin(pool: PgPool) {
+        let mut page = create_test_page(&pool, 1, None).await.unwrap();
+        page.deleted_at = Some(chrono::Utc::now());
+        page.clone().update(&pool).await.unwrap();
+        let permissions = vec![];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+        let result = get_page_service(&pool, Some(&user), "missing".to_string()).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "error running server function: Could not find page with slug missing.".to_string()
+        );
+    }
+
+    #[sqlx::test]
     async fn test_get_page_service_no_page(pool: PgPool) {
-        let result = get_page_service(&pool, "missing".to_string()).await;
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+        let result = get_page_service(&pool, Some(&user), "missing".to_string()).await;
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),

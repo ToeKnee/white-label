@@ -60,7 +60,8 @@ impl Validate for Page {
             ));
         }
         // Check that the slug is unique
-        if let Ok(page) = Self::get_by_slug(pool, self.slug.clone()).await {
+        let include_hidden = true; // We want to check for uniqueness even if the page is hidden
+        if let Ok(page) = Self::get_by_slug(pool, self.slug.clone(), include_hidden).await {
             if page.id != self.id {
                 return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
             }
@@ -153,32 +154,28 @@ impl Page {
     /// # Errors
     /// If the page cannot be found, return an error
     #[cfg(feature = "ssr")]
-    pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
-        let row = sqlx::query("SELECT * FROM pages WHERE slug = $1")
-            .bind(slug.clone())
-            .fetch_one(pool)
-            .await;
-
-        let row = match row {
-            Ok(row) => row,
-            Err(e) => {
-                tracing::error!("{e}");
-                return Err(anyhow::anyhow!("Could not find page with slug {}.", slug));
-            }
+    pub async fn get_by_slug(
+        pool: &PgPool,
+        slug: String,
+        include_hidden: bool,
+    ) -> anyhow::Result<Self> {
+        let query = if include_hidden {
+            "SELECT * FROM pages WHERE slug = $1"
+        } else {
+            "SELECT * FROM pages WHERE slug = $1 AND deleted_at IS NULL AND published_at < NOW() AND published_at IS NOT NULL"
         };
 
-        Ok(Self {
-            id: row.get("id"),
-            name: row.get("name"),
-            slug: row.get("slug"),
-            description: row.get("description"),
-            body: row.get("body"),
-            label_id: row.get("label_id"),
-            published_at: row.get("published_at"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-            deleted_at: row.get("deleted_at"),
-        })
+        match sqlx::query_as::<_, Self>(query)
+            .bind(&slug)
+            .fetch_one(pool)
+            .await
+        {
+            Ok(page) => Ok(page),
+            Err(e) => {
+                tracing::error!("{e}");
+                Err(anyhow::anyhow!("Could not find page with slug {slug}."))
+            }
+        }
     }
 
     /// List all pages
@@ -252,7 +249,7 @@ impl Page {
         self.validate(pool).await?;
 
         let page = match sqlx::query_as::<_, Self>(
-            "UPDATE pages SET name = $1, slug = $2, description = $3, body = $4, published_at = $5, updated_at = $6 WHERE id = $7 RETURNING *",
+            "UPDATE pages SET name = $1, slug = $2, description = $3, body = $4, published_at = $5, updated_at = $6, deleted_at = $7 WHERE id = $8 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
@@ -260,6 +257,7 @@ impl Page {
         .bind(self.body)
         .bind(self.published_at)
         .bind(chrono::Utc::now())
+        .bind(self.deleted_at)
         .bind(self.id)
         .fetch_one(pool)
         .await
@@ -538,20 +536,39 @@ mod tests {
     #[sqlx::test]
     async fn test_get_by_slug(pool: PgPool) {
         let page = create_test_page(&pool, 1, None).await.unwrap();
-        let page_by_slug = Page::get_by_slug(&pool, page.slug.clone()).await.unwrap();
+        let page_by_slug = Page::get_by_slug(&pool, page.slug.clone(), false)
+            .await
+            .unwrap();
 
         assert_eq!(page, page_by_slug);
     }
 
     #[sqlx::test]
     async fn test_get_by_slug_not_found(pool: PgPool) {
-        let page = Page::get_by_slug(&pool, "missing".to_string()).await;
+        let page = Page::get_by_slug(&pool, "missing".to_string(), true).await;
 
         assert!(page.is_err());
         assert_eq!(
             page.unwrap_err().to_string(),
             "Could not find page with slug missing.".to_string()
         );
+    }
+
+    #[sqlx::test]
+    async fn test_get_by_slug_with_hidden(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let mut page = create_test_page(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        page.deleted_at = Some(chrono::Utc::now());
+        page.clone().update(&pool).await.unwrap();
+        let page_by_slug = Page::get_by_slug(&pool, page.slug.clone(), true)
+            .await
+            .unwrap();
+        assert_eq!(page.id, page_by_slug.id);
+
+        let page_by_slug = Page::get_by_slug(&pool, page.slug.clone(), false).await;
+        assert!(page_by_slug.is_err());
     }
 
     #[sqlx::test]

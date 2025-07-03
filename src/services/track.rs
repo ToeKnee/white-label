@@ -730,7 +730,6 @@ mod tests {
         };
 
         let track_result = create_track_service(&pool, Some(&user), form).await;
-        println!("Update Result: {track_result:?}");
 
         assert!(track_result.is_ok());
         let track = track_result.unwrap();
