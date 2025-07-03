@@ -362,6 +362,57 @@ pub async fn delete_track_service(
     })
 }
 
+/// Restore a soft deleted track
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// user: Option<&User> - The user deleting the track
+/// slug: String - The slug of the track
+///
+/// # Returns
+/// Result<`TrackResult`, `ServerFnError`> - The restored track
+///
+/// # Errors
+/// If the track cannot be found, return an error
+/// If the user does not have the required permissions, return an error
+#[cfg(feature = "ssr")]
+pub async fn restore_track_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    slug: String,
+) -> Result<TrackResult, ServerFnError> {
+    match user_with_permissions(user, vec!["admin", "label_owner"]) {
+        Ok(_) => (),
+        Err(e) => return Err(e),
+    }
+
+    let mut track = Track::get_by_slug(pool, slug).await.map_err(|e| {
+        let err = format!("Error while getting track: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
+    track.deleted_at = None;
+    track.clone().update(pool).await.map_err(|e| {
+        let err = format!("Error while restoring track: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
+
+    Ok(TrackResult {
+        track: track.clone(),
+        artists: track.get_artists(pool).await.map_err(|e| {
+            let err = format!("Error while getting artists: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?,
+        releases: track.get_releases(pool).await.map_err(|e| {
+            let err = format!("Error while getting releases: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -802,5 +853,64 @@ mod tests {
         let get_result =
             get_track_service(&pool, Some(&user), artist.slug, release.slug, track.slug).await;
         assert!(get_result.is_ok());
+    }
+
+    #[sqlx::test]
+    async fn test_restore_track_service(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let track = create_test_track(&pool, 1, None, None).await.unwrap();
+        let track = track.delete(&pool).await.unwrap();
+        let restored_track = restore_track_service(&pool, Some(&user), track.slug.clone())
+            .await
+            .unwrap();
+
+        assert!(restored_track.track.deleted_at.is_none());
+    }
+
+    #[sqlx::test]
+    async fn test_restore_track_service_no_track(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let restored_track = restore_track_service(&pool, Some(&user), "missing".to_string()).await;
+        assert!(restored_track.is_err());
+        assert_eq!(
+            restored_track.unwrap_err().to_string(),
+            "error running server function: Could not find track with slug missing.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_track_service_no_user(pool: PgPool) {
+        let track = create_test_track(&pool, 1, None, None).await.unwrap();
+        let track = track.delete(&pool).await.unwrap();
+        let restored_track =
+            restore_track_service(&pool, Some(&User::default()), track.slug.clone()).await;
+        assert!(restored_track.is_err());
+        assert_eq!(
+            restored_track.unwrap_err().to_string(),
+            "error running server function: You must be logged in to view this page.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_track_service_no_permissions(pool: PgPool) {
+        let user = create_test_user_with_permissions(&pool, 1, vec![])
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 1, None, None).await.unwrap();
+        let track = track.delete(&pool).await.unwrap();
+        let restored_track = restore_track_service(&pool, Some(&user), track.slug.clone()).await;
+        assert!(restored_track.is_err());
+        assert_eq!(
+            restored_track.unwrap_err().to_string(),
+            "error running server function: You do not have permission.".to_string()
+        );
     }
 }

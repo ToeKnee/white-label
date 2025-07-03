@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
-use super::delete::DeleteTrack;
+use super::{delete::DeleteTrack, restore::RestoreTrack};
 use crate::components::{
     admin::shared::{
         artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
@@ -262,7 +262,11 @@ fn Form(
         <div class="flex flex-auto gap-6">
             <button class="flex-1 btn btn-primary">Update</button>
             {move || {
-                view! { <DeleteTrack track=track.get() /> }
+                if track.get().deleted_at.is_some() {
+                    view! { <RestoreTrack track=track /> }.into_any()
+                } else {
+                    view! { <DeleteTrack track=track /> }.into_any()
+                }
             }}
         </div>
     }

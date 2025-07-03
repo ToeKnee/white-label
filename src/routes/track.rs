@@ -9,7 +9,7 @@ use crate::models::{artist::Artist, release::Release, track::Track};
 #[cfg(feature = "ssr")]
 use crate::services::track::{
     create_track_service, delete_track_service, get_track_service, get_tracks_service,
-    update_track_service,
+    restore_track_service, update_track_service,
 };
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
@@ -143,4 +143,25 @@ pub async fn delete_track(
     let auth = auth()?;
     let user = auth.current_user.as_ref();
     delete_track_service(&pool, user, slug).await
+}
+
+/// Restore a deleted track.
+///
+/// # Arguments:
+/// * `slug`: The slug of the track to be restored.
+///
+/// # Returns:
+/// * A `TrackResult` containing the restored track.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if there is an issue with deleting the track, such as database connection issues or unauthorized access.
+#[server(RestoreTrack, "/api", endpoint="restore_track", output = Cbor)]
+pub async fn restore_track(
+    /// The slug of the track to be restored.
+    slug: String,
+) -> Result<TrackResult, ServerFnError> {
+    let pool = pool()?;
+    let auth = auth()?;
+    let user = auth.current_user.as_ref();
+    restore_track_service(&pool, user, slug).await
 }
