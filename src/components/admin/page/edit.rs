@@ -3,7 +3,7 @@ use leptos::prelude::*;
 use leptos_meta::{Meta, Title, provide_meta_context};
 use leptos_router::hooks::use_params_map;
 
-use super::delete::DeletePage;
+use super::{delete::DeletePage, restore::RestorePage};
 use crate::components::{
     admin::shared::{date_field::DateField, markdown_field::MarkdownField},
     utils::{
@@ -27,7 +27,7 @@ pub fn EditPage() -> impl IntoView {
     let params = use_params_map();
     let slug = move || params.read().get("slug");
 
-    let (page, set_page) = signal(Page::default());
+    let page = RwSignal::new(Page::default());
     let page_resource = Resource::new(move || slug().unwrap_or_default(), get_page);
     let update_page = ServerAction::<UpdatePage>::new();
     let value = Signal::derive(move || {
@@ -51,7 +51,7 @@ pub fn EditPage() -> impl IntoView {
                 {move || Suspend::new(async move {
                     match page_resource.await {
                         Ok(this_page) => {
-                            set_page.set(this_page.page);
+                            page.set(this_page.page);
                         }
                         _ => {
                             redirect("/admin/pages");
@@ -66,11 +66,10 @@ pub fn EditPage() -> impl IntoView {
                                             let fresh_page = page_result.page;
                                             if fresh_page.id > 0 {
                                                 if fresh_page.slug != page.get().slug {
-                                                    set_page.set(fresh_page.clone());
                                                     redirect(&format!("/admin/page/{}", fresh_page.slug));
                                                 }
                                                 if !success.get() {
-                                                    set_page.set(fresh_page);
+                                                    page.set(fresh_page);
                                                     set_success.set(true);
                                                 }
                                             } else {
@@ -106,7 +105,7 @@ pub fn EditPage() -> impl IntoView {
 }
 
 #[component]
-fn Form(page: ReadSignal<Page>, slug: String) -> impl IntoView {
+fn Form(page: RwSignal<Page>, slug: String) -> impl IntoView {
     view! {
         <input type="text" class="hidden" name="page_form[slug]" value=slug />
         <div class="divider">Public</div>
@@ -150,7 +149,11 @@ fn Form(page: ReadSignal<Page>, slug: String) -> impl IntoView {
         <div class="flex flex-auto gap-6">
             <button class="flex-1 btn btn-primary">Update</button>
             {move || {
-                view! { <DeletePage page=page.get() /> }
+                if page.get().deleted_at.is_some() {
+                    view! { <RestorePage page=page /> }.into_any()
+                } else {
+                    view! { <DeletePage page=page /> }.into_any()
+                }
             }}
         </div>
     }

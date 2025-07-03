@@ -28,6 +28,45 @@ pub async fn get_page_service(pool: &PgPool, slug: String) -> Result<PageResult,
     })
 }
 
+/// Restore a soft deleted page
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// user: Option<&User> - The user deleting the page
+/// slug: String - The slug of the page
+///
+/// # Returns
+/// Result<`PageResult`, `ServerFnError`> - The restored page
+///
+/// # Errors
+/// If the page cannot be found, return an error
+/// If the user does not have the required permissions, return an error
+#[cfg(feature = "ssr")]
+pub async fn restore_page_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    slug: String,
+) -> Result<PageResult, ServerFnError> {
+    match user_with_permissions(user, vec!["admin", "label_owner"]) {
+        Ok(_) => (),
+        Err(e) => return Err(e),
+    }
+
+    let mut page = Page::get_by_slug(pool, slug).await.map_err(|e| {
+        let err = format!("Error while getting page: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
+    page.deleted_at = None;
+    page.clone().update(pool).await.map_err(|e| {
+        let err = format!("Error while restoring page: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
+
+    Ok(PageResult { page })
+}
+
 /// Create a new page
 ///
 /// # Arguments
@@ -489,6 +528,65 @@ mod tests {
         assert!(deleted_page.is_err());
         assert_eq!(
             deleted_page.unwrap_err().to_string(),
+            "error running server function: You do not have permission.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_page_service(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let page = create_test_page(&pool, 1, None).await.unwrap();
+        let page = page.delete(&pool).await.unwrap();
+        let restored_page = restore_page_service(&pool, Some(&user), page.slug.clone())
+            .await
+            .unwrap();
+
+        assert!(restored_page.page.deleted_at.is_none());
+    }
+
+    #[sqlx::test]
+    async fn test_restore_page_service_no_page(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let restored_page = restore_page_service(&pool, Some(&user), "missing".to_string()).await;
+        assert!(restored_page.is_err());
+        assert_eq!(
+            restored_page.unwrap_err().to_string(),
+            "error running server function: Could not find page with slug missing.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_page_service_no_user(pool: PgPool) {
+        let page = create_test_page(&pool, 1, None).await.unwrap();
+        let page = page.delete(&pool).await.unwrap();
+        let restored_page =
+            restore_page_service(&pool, Some(&User::default()), page.slug.clone()).await;
+        assert!(restored_page.is_err());
+        assert_eq!(
+            restored_page.unwrap_err().to_string(),
+            "error running server function: You must be logged in to view this page.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_page_service_no_permissions(pool: PgPool) {
+        let user = create_test_user_with_permissions(&pool, 1, vec![])
+            .await
+            .unwrap();
+        let page = create_test_page(&pool, 1, None).await.unwrap();
+        let page = page.delete(&pool).await.unwrap();
+        let restored_page = restore_page_service(&pool, Some(&user), page.slug.clone()).await;
+        assert!(restored_page.is_err());
+        assert_eq!(
+            restored_page.unwrap_err().to_string(),
             "error running server function: You do not have permission.".to_string()
         );
     }

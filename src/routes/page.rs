@@ -8,7 +8,8 @@ use crate::models::page::Page;
 
 #[cfg(feature = "ssr")]
 use crate::services::page::{
-    create_page_service, delete_page_service, get_page_service, update_page_service,
+    create_page_service, delete_page_service, get_page_service, restore_page_service,
+    update_page_service,
 };
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
@@ -100,4 +101,25 @@ pub async fn delete_page(
     let auth = auth()?;
     let user = auth.current_user.as_ref();
     delete_page_service(&pool, user, slug).await
+}
+
+/// Restore a deleted page.
+///
+/// # Arguments:
+/// * `slug`: The slug of the page to be restored.
+///
+/// # Returns:
+/// * A `PageResult` containing the restored page.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if there is an issue with deleting the page, such as database connection issues or unauthorized access.
+#[server(RestorePage, "/api", endpoint="restore_page", output = Cbor)]
+pub async fn restore_page(
+    /// The slug of the page to be restored.
+    slug: String,
+) -> Result<PageResult, ServerFnError> {
+    let pool = pool()?;
+    let auth = auth()?;
+    let user = auth.current_user.as_ref();
+    restore_page_service(&pool, user, slug).await
 }

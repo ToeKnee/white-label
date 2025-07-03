@@ -1,7 +1,7 @@
-//! Simple delete page component for the admin panel
+//! Simple restore page component for the admin panel
 //!
-//! This component is used to delete an page from the admin panel.
-//! It will show a confirmation dialog before deleting the item.
+//! This component is used to restore an page from the admin panel.
+//! It will show a confirmation restore before deleting the item.
 
 use leptos::ev::MouseEvent;
 use leptos::html;
@@ -9,12 +9,12 @@ use leptos::prelude::*;
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::page::Page;
-use crate::routes::page::{DeletePage, PageResult};
+use crate::routes::page::{PageResult, RestorePage};
 
-/// Renders the delete page component.
+/// Renders the restore page component.
 #[component]
-pub fn DeletePage(
-    /// The page to delete
+pub fn RestorePage(
+    /// The page to restore
     page: RwSignal<Page>,
 ) -> impl IntoView {
     let dialog_element: NodeRef<html::Dialog> = NodeRef::new();
@@ -26,34 +26,34 @@ pub fn DeletePage(
         }
     };
 
-    let update_page = ServerAction::<DeletePage>::new();
+    let update_page = ServerAction::<RestorePage>::new();
     let value = Signal::derive(move || {
         update_page
             .value()
             .get()
-            .unwrap_or_else(|| Ok(PageResult::default()))
+            .unwrap_or_else(|| Ok(PageResult { page: page.get() }))
     });
 
     view! {
-        <button class="btn btn-error" on:click=on_click_show>
-            Delete
+        <button class="btn btn-secondary" on:click=on_click_show>
+            "Restore"
         </button>
 
         <dialog class="modal" node_ref=dialog_element>
             <div class="modal-box">
-                <h3 class="text-lg font-bold">"Delete "{page.get().name}</h3>
-                <p>"Are you sure you want to delete " {page.get().name} "?"</p>
+                <h3 class="text-lg font-bold">"Restore "{move || page.get().name}</h3>
+                <p>"Are you sure you want to restore " {move || page.get().name} "?"</p>
                 <p>"This action will be performed immediately."</p>
                 <p>
-                    "This will perform a soft delete. "{page.get().name}
-                    " will be unavailable to non-admin users."
+                    "This will restore. " {move || page.get().name}
+                    " will be available to non-admin users."
                 </p>
                 <div class="modal-action">
                     <ActionForm action=update_page>
                         {move || {
                             match value.get() {
                                 Ok(page_result) => {
-                                    if page_result.page.deleted_at.is_some() {
+                                    if page_result.page.deleted_at.is_none() {
                                         page.set(page_result.page);
                                         if let Some(dialog) = dialog_element.get() {
                                             dialog.close();
@@ -67,8 +67,8 @@ pub fn DeletePage(
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
                             }
-                        }} <input name="slug" type="hidden" value=page.get().slug />
-                        <button class="btn btn-error">Delete</button>
+                        }} <input name="slug" type="hidden" value=move || page.get().slug />
+                        <button class="btn btn-secondary">Restore</button>
                     </ActionForm>
                 </div>
             </div>
