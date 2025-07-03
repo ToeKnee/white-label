@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
-use super::delete::DeleteRelease;
+use super::{delete::DeleteRelease, restore::RestoreRelease};
 use crate::components::{
     admin::{
         artist::release::track::list::Tracks,
@@ -256,7 +256,11 @@ fn Form(
         <div class="flex flex-auto gap-6">
             <button class="flex-1 btn btn-primary">Update</button>
             {move || {
-                view! { <DeleteRelease release=release.get() /> }
+                if release.get().deleted_at.is_some() {
+                    view! { <RestoreRelease release=release /> }.into_any()
+                } else {
+                    view! { <DeleteRelease release=release /> }.into_any()
+                }
             }}
         </div>
     }

@@ -366,6 +366,57 @@ pub async fn delete_release_service(
     })
 }
 
+/// Restore a soft deleted release
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// user: Option<&User> - The user deleting the release
+/// slug: String - The slug of the release
+///
+/// # Returns
+/// Result<`ReleaseResult`, `ServerFnError`> - The restored release
+///
+/// # Errors
+/// If the release cannot be found, return an error
+/// If the user does not have the required permissions, return an error
+#[cfg(feature = "ssr")]
+pub async fn restore_release_service(
+    pool: &PgPool,
+    user: Option<&User>,
+    slug: String,
+) -> Result<ReleaseResult, ServerFnError> {
+    match user_with_permissions(user, vec!["admin", "label_owner"]) {
+        Ok(_) => (),
+        Err(e) => return Err(e),
+    }
+
+    let mut release = Release::get_by_slug(pool, slug).await.map_err(|e| {
+        let err = format!("Error while getting release: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
+    release.deleted_at = None;
+    release.clone().update(pool).await.map_err(|e| {
+        let err = format!("Error while restoring release: {e:?}");
+        tracing::error!("{err}");
+        ServerFnError::new(e)
+    })?;
+
+    Ok(ReleaseResult {
+        release: release.clone(),
+        artists: release.get_artists(pool).await.map_err(|e| {
+            let err = format!("Error while getting artists: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?,
+        tracks: release.get_tracks(pool).await.map_err(|e| {
+            let err = format!("Error while getting tracks: {e:?}");
+            tracing::error!("{err}");
+            ServerFnError::new(e)
+        })?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -790,5 +841,66 @@ mod tests {
 
         let get_result = get_release_service(&pool, Some(&user), artist.slug, release.slug).await;
         assert!(get_result.is_ok());
+    }
+
+    #[sqlx::test]
+    async fn test_restore_release_service(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let release = release.delete(&pool).await.unwrap();
+        let restored_release = restore_release_service(&pool, Some(&user), release.slug.clone())
+            .await
+            .unwrap();
+
+        assert!(restored_release.release.deleted_at.is_none());
+    }
+
+    #[sqlx::test]
+    async fn test_restore_release_service_no_release(pool: PgPool) {
+        let permissions = vec!["admin", "label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let restored_release =
+            restore_release_service(&pool, Some(&user), "missing".to_string()).await;
+        assert!(restored_release.is_err());
+        assert_eq!(
+            restored_release.unwrap_err().to_string(),
+            "error running server function: Could not find release with slug missing.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_release_service_no_user(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let release = release.delete(&pool).await.unwrap();
+        let restored_release =
+            restore_release_service(&pool, Some(&User::default()), release.slug.clone()).await;
+        assert!(restored_release.is_err());
+        assert_eq!(
+            restored_release.unwrap_err().to_string(),
+            "error running server function: You must be logged in to view this page.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_restore_release_service_no_permissions(pool: PgPool) {
+        let user = create_test_user_with_permissions(&pool, 1, vec![])
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, None).await.unwrap();
+        let release = release.delete(&pool).await.unwrap();
+        let restored_release =
+            restore_release_service(&pool, Some(&user), release.slug.clone()).await;
+        assert!(restored_release.is_err());
+        assert_eq!(
+            restored_release.unwrap_err().to_string(),
+            "error running server function: You do not have permission.".to_string()
+        );
     }
 }

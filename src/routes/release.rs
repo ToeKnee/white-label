@@ -11,7 +11,7 @@ use crate::models::{artist::Artist, release::Release, track_with_artists::TrackW
 #[cfg(feature = "ssr")]
 use crate::services::release::{
     create_release_service, delete_release_service, get_next_scheduled_release_service,
-    get_release_service, get_releases_service, update_release_service,
+    get_release_service, get_releases_service, restore_release_service, update_release_service,
 };
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
@@ -169,4 +169,25 @@ pub async fn delete_release(
     let auth = auth()?;
     let user = auth.current_user.as_ref();
     delete_release_service(&pool, user, slug).await
+}
+
+/// Restore a deleted release.
+///
+/// # Arguments:
+/// * `slug`: The slug of the release to be restored.
+///
+/// # Returns:
+/// * A `ReleaseResult` containing the restored release.
+///
+/// # Errors:
+/// Will return a `ServerFnError` if there is an issue with deleting the release, such as database connection issues or unauthorized access.
+#[server(RestoreRelease, "/api", endpoint="restore_release", output = Cbor)]
+pub async fn restore_release(
+    /// The slug of the release to be restored.
+    slug: String,
+) -> Result<ReleaseResult, ServerFnError> {
+    let pool = pool()?;
+    let auth = auth()?;
+    let user = auth.current_user.as_ref();
+    restore_release_service(&pool, user, slug).await
 }
