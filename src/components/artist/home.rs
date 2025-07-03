@@ -119,7 +119,7 @@ pub fn Release(
             href=move || format!("/artists/{}/{}", artist.get().slug, release.get().slug)
             attr:class="w-1/4 link link-hover min-w-96"
         >
-            <div class="shadow-sm not-prose card bg-base-100 bg-neutral text-neutral-content">
+            <div class="shadow-sm not-prose card bg-neutral text-neutral-content">
                 <figure class="not-prose">
                     <img
                         src=move || release.get().primary_image_url()

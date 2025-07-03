@@ -96,7 +96,7 @@ fn ArtistBox(
 ) -> impl IntoView {
     view! {
         <A href=format!("/artists/{}", artist.slug) attr:class="no-underline">
-            <div class="w-96 shadow-xl not-prose card card-compact bg-base-100 bg-neutral text-neutral-content indicator">
+            <div class="w-96 shadow-xl not-prose card card-compact bg-neutral text-neutral-content indicator">
                 <StatusBadge deleted_at=artist.deleted_at published_at=artist.published_at />
                 <figure>
                     <img src=artist.primary_image_url() alt=artist.name.clone() />
