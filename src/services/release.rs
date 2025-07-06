@@ -138,10 +138,8 @@ pub async fn get_release_service(
         }
     };
 
-    let Some(current_user) = user else {
-        return Err(ServerFnError::new("User not found"));
-    };
-    let include_hidden = current_user.permissions.contains("label_owner");
+    let include_hidden =
+        user.is_some_and(|current_user| current_user.permissions.contains("label_owner"));
 
     let release = Release::get_by_artist_and_record_label_and_slug(
         pool,
@@ -593,6 +591,32 @@ mod tests {
         let release_result = get_release_service(
             &pool,
             Some(&user),
+            artist.slug.clone(),
+            unpublished_release.slug.clone(),
+        )
+        .await;
+        assert!(release_result.is_err());
+        assert_eq!(
+            release_result.unwrap_err().to_string(),
+            "error running server function: Could not find release test-release-1 for artist with id 1 and record label with id 1.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_get_release_service_no_iser(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let mut unpublished_release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        unpublished_release.published_at = None;
+        unpublished_release.clone().update(&pool).await.unwrap();
+
+        let release_result = get_release_service(
+            &pool,
+            None,
             artist.slug.clone(),
             unpublished_release.slug.clone(),
         )
