@@ -34,7 +34,7 @@ pub async fn create_pool() -> sqlx::PgPool {
     };
 
     let pool = match PgPoolOptions::new()
-        .max_connections(20)
+        .max_connections(200)
         .connect(database_url.as_str())
         .await
     {
