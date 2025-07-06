@@ -32,7 +32,7 @@ use crate::components::{
         page::edit::EditPage,
         root::AdminRoot,
     },
-    artist::{home::ArtistPage, release::ReleasePage},
+    artist::{home::ArtistPage, list::ArtistsPage, release::ReleasePage},
     auth::{
         change_password::ChangePassword, login::Login, logout::Logout, profile::EditProfile,
         register::Register,
@@ -122,8 +122,10 @@ pub fn WhiteLabel() -> impl IntoView {
             <main>
                 <Routes fallback=NotFound>
                     <Route path=StaticSegment("") view=RecordLabelHome />
-                    <Route path=path!("artists") view=RecordLabelHome />
+                    <Route path=path!("artists") view=ArtistsPage />
+                    <Route path=path!("artists/") view=ArtistsPage />
                     <Route path=path!("artists/:slug") view=ArtistPage />
+                    <Route path=path!("artists/:slug/") view=ArtistPage />
                     <Route path=path!("artists/:artist_slug/:release_slug") view=ReleasePage />
                     <Route path=path!("pages/:slug") view=PageDetails />
 
@@ -137,12 +139,20 @@ pub fn WhiteLabel() -> impl IntoView {
                         <Route path=path!("") view=Dashboard />
                         <Route path=path!("label") view=EditLabel />
                         <Route path=path!("artist") view=CreateArtist />
+                        <Route path=path!("artist/") view=CreateArtist />
                         <Route path=path!("artist/:slug") view=EditArtist />
+                        <Route path=path!("artist/:slug/") view=EditArtist />
                         <Route path=path!("artist/:slug/releases") view=Releases />
+                        <Route path=path!("artist/:slug/releases/") view=Releases />
                         <Route path=path!("artist/:slug/releases/new") view=CreateRelease />
                         <Route path=path!("artist/:slug/release/:release_slug") view=EditRelease />
+                        <Route path=path!("artist/:slug/release/:release_slug/") view=EditRelease />
                         <Route
                             path=path!("artist/:slug/release/:release_slug/tracks")
+                            view=Tracks
+                        />
+                        <Route
+                            path=path!("artist/:slug/release/:release_slug/tracks/")
                             view=Tracks
                         />
                         <Route
@@ -154,6 +164,7 @@ pub fn WhiteLabel() -> impl IntoView {
                             view=EditTrack
                         />
                         <Route path=path!("page") view=CreatePage />
+                        <Route path=path!("page/") view=CreatePage />
                         <Route path=path!("page/:slug") view=EditPage />
                     </ParentRoute>
                 </Routes>
