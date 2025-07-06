@@ -61,6 +61,7 @@ pub async fn create_artist_service(
             pool,
             artist_form.name,
             artist_form.description,
+            artist_form.website,
             artist_form.label_id,
             artist_form.published_at,
         )
@@ -107,6 +108,7 @@ pub async fn update_artist_service(
         })?;
     artist.name = artist_form.name;
     artist.description = artist_form.description;
+    artist.website = artist_form.website;
     artist.published_at = artist_form.published_at;
 
     Ok(ArtistResult {
@@ -234,6 +236,7 @@ mod tests {
         let artist_form = CreateArtistForm {
             name: "Test Artist".to_string(),
             description: "This is a test artist".to_string(),
+            website: "https://example.com".to_string(),
             label_id: record_label.id,
             published_at: None,
         };
@@ -258,6 +261,7 @@ mod tests {
         let artist_form = CreateArtistForm {
             name: "Test Artist".to_string(),
             description: "This is a test artist".to_string(),
+            website: "https://example.com".to_string(),
             label_id: record_label.id,
             published_at: None,
         };
@@ -282,6 +286,7 @@ mod tests {
         let artist_form = CreateArtistForm {
             name: String::new(),
             description: "This is a test artist".to_string(),
+            website: "https://example.com".to_string(),
             label_id: record_label.id,
             published_at: None,
         };
@@ -307,6 +312,7 @@ mod tests {
         let artist_form = CreateArtistForm {
             name,
             description: "This is a test artist".to_string(),
+            website: "https://example.com".to_string(),
             label_id: record_label.id,
             published_at: None,
         };
@@ -329,6 +335,7 @@ mod tests {
         let artist_form = CreateArtistForm {
             name: "Test Artist".to_string(),
             description: "This is a test artist".to_string(),
+            website: "https://example.com".to_string(),
             label_id: 0,
             published_at: None,
         };
@@ -354,6 +361,7 @@ mod tests {
             slug: artist.slug.clone(),
             name: "Updated Artist".to_string(),
             description: "This is an updated artist".to_string(),
+            website: "https://update.example.com".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
         let updated_artist = update_artist_service(&pool, Some(&user), artist_form)
@@ -363,6 +371,10 @@ mod tests {
         assert_eq!(
             updated_artist.artist.description,
             "This is an updated artist".to_string()
+        );
+        assert_eq!(
+            updated_artist.artist.website,
+            "https://update.example.com".to_string()
         );
     }
 
@@ -378,6 +390,7 @@ mod tests {
             slug: artist.slug.clone(),
             name: String::new(),
             description: "This is an updated artist".to_string(),
+            website: "https://example.com".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
         let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await;
@@ -402,6 +415,7 @@ mod tests {
             slug: artist.slug.clone(),
             name,
             description: "This is an updated artist".to_string(),
+            website: "https://example.com".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
         let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await;
@@ -424,6 +438,7 @@ mod tests {
             slug: "missing".to_string(),
             name: "Updated Artist".to_string(),
             description: "This is an updated artist".to_string(),
+            website: "https://example.com".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
         let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await;
@@ -442,6 +457,7 @@ mod tests {
             slug: artist.slug.clone(),
             name: "Updated Artist".to_string(),
             description: "This is an updated artist".to_string(),
+            website: "https://example.com".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
         let updated_artist =
@@ -464,6 +480,7 @@ mod tests {
             slug: artist.slug.clone(),
             name: "Updated Artist".to_string(),
             description: "This is an updated artist".to_string(),
+            website: "https://example.com".to_string(),
             published_at: Some(chrono::Utc::now()),
         };
         let updated_artist = update_artist_service(&pool, Some(&user), artist_form).await;

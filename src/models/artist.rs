@@ -26,6 +26,8 @@ pub struct Artist {
     pub description: String,
     /// The primary image of the artist
     pub primary_image: Option<String>,
+    /// Website link for the artist
+    pub website: String,
     /// The label id
     pub label_id: i64,
     /// The date the artist is published.
@@ -95,6 +97,7 @@ impl Artist {
     /// * `pool` - The database connection pool
     /// * `name` - The name of the artist
     /// * `description` - The description of the artist
+    /// * `website` - The website of the artist
     /// * `record_label_id` - The ID of the record label the artist is signed to
     ///
     /// # Returns
@@ -108,6 +111,7 @@ impl Artist {
         pool: &PgPool,
         name: String,
         description: String,
+        website: String,
         record_label_id: i64,
         published_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> anyhow::Result<Self> {
@@ -119,6 +123,7 @@ impl Artist {
             slug,
             description,
             primary_image: None,
+            website,
             label_id: record_label_id,
             published_at,
             created_at: chrono::Utc::now(),
@@ -128,11 +133,12 @@ impl Artist {
         artist.validate(pool).await?;
 
         let artist = sqlx::query_as::<_, Self>(
-            "INSERT INTO artists (name, slug, description, label_id, published_at) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+            "INSERT INTO artists (name, slug, description, website, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
         )
         .bind(artist.name)
         .bind(artist.slug)
         .bind(artist.description)
+        .bind(artist.website)
         .bind(artist.label_id)
         .bind(artist.published_at)
         .fetch_one(pool)
@@ -173,6 +179,7 @@ impl Artist {
             slug: row.get("slug"),
             description: row.get("description"),
             primary_image: row.get("primary_image"),
+            website: row.get("website"),
             label_id: row.get("label_id"),
             published_at: row.get("published_at"),
             created_at: row.get("created_at"),
@@ -275,11 +282,12 @@ impl Artist {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
 
-        let artist = match sqlx::query_as::<_, Self>("UPDATE artists SET name = $1, slug = $2, description = $3, primary_image = $4, published_at = $5, updated_at = $6 WHERE id = $7 RETURNING *")
+        let artist = match sqlx::query_as::<_, Self>("UPDATE artists SET name = $1, slug = $2, description = $3, primary_image = $4, website = $5, published_at = $6, updated_at = $7 WHERE id = $8 RETURNING *")
             .bind(self.name)
             .bind(self.slug)
             .bind(self.description)
             .bind(self.primary_image)
+            .bind(self.website)
             .bind(self.published_at)
             .bind(chrono::Utc::now())
             .bind(self.id)
@@ -344,6 +352,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             primary_image: None,
+            website: "https://example.com".to_string(),
             label_id: 1,
             published_at: None,
             created_at: chrono::Utc::now(),
@@ -367,6 +376,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             primary_image: None,
+            website: "https://example.com".to_string(),
             label_id: record_label.id,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -387,6 +397,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             primary_image: None,
+            website: "https://example.com".to_string(),
             label_id: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -412,6 +423,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             primary_image: None,
+            website: "https://example.com".to_string(),
             label_id: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -437,6 +449,7 @@ mod tests {
             slug,
             description: "This is a test artist".to_string(),
             primary_image: None,
+            website: "https://example.com".to_string(),
             label_id: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -477,6 +490,7 @@ mod tests {
             slug: "test-artist".to_string(),
             description: "This is a test artist".to_string(),
             primary_image: None,
+            website: "https://example.com".to_string(),
             label_id: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
@@ -500,6 +514,7 @@ mod tests {
             &pool,
             "Test Artist".to_string(),
             "This is a test artist".to_string(),
+            "https://example.com".to_string(),
             record_label.id,
             Some(chrono::Utc::now()),
         )
@@ -517,6 +532,7 @@ mod tests {
             &pool,
             String::new(),
             "This is a test artist".to_string(),
+            String::new(),
             record_label.id,
             Some(chrono::Utc::now()),
         )
@@ -618,6 +634,7 @@ mod tests {
         update_artist.name = "Updated Artist".to_string();
         update_artist.description = "This is an updated artist".to_string();
         update_artist.primary_image = Some("an-image.jpg".to_string());
+        update_artist.website = "https://updated.com".to_string();
 
         let updated_artist = update_artist.update(&pool).await.unwrap();
         assert_eq!(updated_artist.name, "Updated Artist".to_string());
@@ -630,6 +647,7 @@ mod tests {
             updated_artist.primary_image,
             Some("an-image.jpg".to_string())
         );
+        assert_eq!(updated_artist.website, "https://updated.com".to_string());
         assert_ne!(updated_artist.updated_at, artist.updated_at);
     }
 

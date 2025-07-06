@@ -37,10 +37,11 @@ pub async fn create_test_artist(
         None => create_test_record_label(pool, id).await.unwrap(),
     };
     let artist =
-        sqlx::query_as::<_, Artist>("INSERT INTO artists (name, slug, description, label_id, published_at) VALUES ($1, $2, $3, $4, $5) RETURNING *")
+        sqlx::query_as::<_, Artist>("INSERT INTO artists (name, slug, description, website, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *")
             .bind(format!("Test Artist {id}"))
             .bind(format!("test-artist-{id}"))
             .bind(format!("A artist for testing purposes with the id of {id}"))
+            .bind(format!("https://test-artist-{id}.example.com"))
             .bind(record_label.id)
             .bind(Some(chrono::Utc::now()))
             .fetch_one(pool)

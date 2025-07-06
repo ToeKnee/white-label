@@ -14,17 +14,22 @@ use crate::utils::{redirect::redirect, shorten_string::shorten_string};
 #[component]
 pub fn ReleasePage() -> impl IntoView {
     let params = use_params_map();
-    let artist_slug = RwSignal::new(params.read().get("artist_slug").unwrap_or_default());
-    let release_slug = RwSignal::new(params.read().get("release_slug").unwrap_or_default());
-
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || artist_slug.get(), get_artist);
+    let artist_resource = Resource::new(
+        move || params.read().get("artist_slug").unwrap_or_default(),
+        get_artist,
+    );
 
     let release = RwSignal::new(Release::default());
     let artists = RwSignal::new(Vec::new()); // Artists on the release
     let tracks = RwSignal::new(Vec::new()); // Tracks on the release
     let release_resource = Resource::new(
-        move || [artist_slug.get(), release_slug.get()],
+        move || {
+            [
+                params.read().get("artist_slug").unwrap_or_default(),
+                params.read().get("release_slug").unwrap_or_default(),
+            ]
+        },
         move |[artist_slug, release_slug]| get_release(artist_slug, release_slug),
     );
 

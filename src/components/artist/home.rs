@@ -13,19 +13,24 @@ use crate::routes::{artist::get_artist, release::get_releases};
 #[component]
 pub fn ArtistPage() -> impl IntoView {
     let params = use_params_map();
-    let slug = RwSignal::new(params.read().get("slug").unwrap_or_default());
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new_blocking(move || slug.get(), get_artist);
+    let artist_resource = Resource::new_blocking(
+        move || params.read().get("slug").unwrap_or_default(),
+        get_artist,
+    );
 
     let releases = RwSignal::new(vec![Release::default()]);
-    let releases_resource = Resource::new_blocking(move || slug.get(), get_releases);
+    let releases_resource = Resource::new_blocking(
+        move || params.read().get("slug").unwrap_or_default(),
+        get_releases,
+    );
     view! {
         <Transition fallback=Loading>
             <ErrorBoundary fallback=|_| {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if !slug.get().is_empty() {
+                    if !params.read().get("slug").unwrap_or_default().is_empty() {
                         if let Ok(this_artist) = artist_resource.await {
                             artist.set(this_artist.artist);
                         } else {
@@ -41,18 +46,27 @@ pub fn ArtistPage() -> impl IntoView {
                 <article class="my-6 md:container md:mx-auto prose">
                     <h1>{move || artist.get().name}</h1>
                     <div class="flex flex-wrap justify-between">
-                        {move || {
-                            view! {
-                                <div
-                                    inner_html=markdown::to_html_with_options(
+                        <div class="w-1/2">
+                            {move || {
+                                view! {
+                                    <div inner_html=markdown::to_html_with_options(
                                             &artist.get().description,
                                             &markdown::Options::gfm(),
                                         )
-                                        .unwrap_or_default()
-                                    class="w-1/2"
-                                />
-                            }
-                        }}
+                                        .unwrap_or_default() />
+                                }
+                            }} <div class="flex flex-wrap gap-4 justify-between">
+                                <Show when=move || !artist.get().website.is_empty()>
+                                    <A
+                                        href=move || artist.get().website
+                                        attr:class="link link-hover"
+                                    >
+                                        "🌐 "
+                                        {move || artist.get().website}
+                                    </A>
+                                </Show>
+                            </div>
+                        </div>
                         <img
                             src=move || artist.get().primary_image_url()
                             alt=move || artist.get().name

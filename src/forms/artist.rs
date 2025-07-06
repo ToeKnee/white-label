@@ -7,6 +7,8 @@ pub struct CreateArtistForm {
     pub name: String,
     /// The description of the artist.
     pub description: String,
+    /// The artists website URL.
+    pub website: String,
     /// The record label ID associated with the artist.
     pub label_id: i64,
     /// The date and time when the artist was published.
@@ -22,6 +24,8 @@ pub struct UpdateArtistForm {
     pub name: String,
     /// The description of the artist.
     pub description: String,
+    /// The artists website URL.
+    pub website: String,
     /// The record label ID associated with the artist.
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
 }

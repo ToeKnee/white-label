@@ -98,7 +98,15 @@ pub fn CreateArtist() -> impl IntoView {
                                             markdown_text=artist.get().description
                                         />
                                     }
-                                }} <div class="divider">Private</div>
+                                }} <label class="flex gap-2 items-center input">
+                                    <input
+                                        type="text"
+                                        class="grow"
+                                        placeholder="Website"
+                                        name="artist_form[website]"
+                                        value=move || artist.get().website
+                                    />
+                                </label> <div class="divider">Private</div>
                                 {move || {
                                     view! {
                                         <DateField
