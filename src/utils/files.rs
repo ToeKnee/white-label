@@ -7,6 +7,7 @@ use leptos::prelude::ServerFnError;
 ///
 /// # Example
 /// ```
+/// use white_label::utils::files::file_extension;
 /// let file_name = "file.txt";
 /// let extension = file_extension(file_name);
 /// assert_eq!(extension, Some("txt"));

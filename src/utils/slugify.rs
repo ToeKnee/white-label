@@ -6,7 +6,7 @@
 //! - Replace spaces with hyphens
 //! # Example
 //! ```
-//! use white_label::utils::slugify;
+//! use white_label::utils::slugify::slugify;
 //! let slug = slugify("The Quick Brown Fox");
 //! assert_eq!(slug, "the-quick-brown-fox");
 //! ```
