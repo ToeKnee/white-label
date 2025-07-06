@@ -13,10 +13,7 @@ use crate::routes::{artist::get_artist, release::get_releases};
 #[component]
 pub fn ArtistPage() -> impl IntoView {
     let params = use_params_map();
-    let slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        slug.set(params.read().get("slug").unwrap_or_default());
-    });
+    let slug = RwSignal::new(params.read().get("slug").unwrap_or_default());
     let artist = RwSignal::new(Artist::default());
     let artist_resource = Resource::new_blocking(move || slug.get(), get_artist);
 

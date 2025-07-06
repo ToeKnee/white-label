@@ -14,25 +14,18 @@ use crate::utils::{redirect::redirect, shorten_string::shorten_string};
 #[component]
 pub fn ReleasePage() -> impl IntoView {
     let params = use_params_map();
-    let artist_slug = RwSignal::new(String::new());
-    let release_slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        artist_slug.set(params.read().get("artist_slug").unwrap_or_default());
-        release_slug.set(params.read().get("release_slug").unwrap_or_default());
-    });
+    let artist_slug = RwSignal::new(params.read().get("artist_slug").unwrap_or_default());
+    let release_slug = RwSignal::new(params.read().get("release_slug").unwrap_or_default());
 
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(
-        move || artist_slug,
-        move |artist_slug| get_artist(artist_slug.get()),
-    );
+    let artist_resource = Resource::new(move || artist_slug.get(), get_artist);
 
     let release = RwSignal::new(Release::default());
     let artists = RwSignal::new(Vec::new()); // Artists on the release
     let tracks = RwSignal::new(Vec::new()); // Tracks on the release
     let release_resource = Resource::new(
-        move || [artist_slug, release_slug],
-        move |[artist_slug, release_slug]| get_release(artist_slug.get(), release_slug.get()),
+        move || [artist_slug.get(), release_slug.get()],
+        move |[artist_slug, release_slug]| get_release(artist_slug, release_slug),
     );
 
     view! {
@@ -49,15 +42,18 @@ pub fn ReleasePage() -> impl IntoView {
                         tracing::error!("Error while getting artist");
                         redirect("/artists");
                     }
-                    if let Ok(this_release) = release_resource.await {
-                        if !this_release.release.slug.is_empty() {
-                            release.set(this_release.release.clone());
-                            artists.set(this_release.artists);
-                            tracks.set(this_release.tracks);
+                    match release_resource.await {
+                        Ok(this_release) => {
+                            if !this_release.release.slug.is_empty() {
+                                release.set(this_release.release.clone());
+                                artists.set(this_release.artists);
+                                tracks.set(this_release.tracks);
+                            }
                         }
-                    } else {
-                        tracing::error!("Error while getting release");
-                        redirect(&format!("/artists/{}", artist.get().slug));
+                        Err(e) => {
+                            tracing::error!("Error while getting release {:?}", e);
+                            redirect(&format!("/artists/{}", artist.get().slug));
+                        }
                     }
 
                     view! {
