@@ -30,7 +30,13 @@ Tests are located in end2end/tests directory.
 ### Running the tests with coverage
 
 ```bash
-cargo watch -c -x llvm-cov
+cargo watch -c -x test
+```
+
+### Running the tests with coverage
+
+```bash
+cargo watch -c -x "llvm-cov --html"
 ```
 
 ## Executing a Server on a Remote Machine Without the Toolchain
