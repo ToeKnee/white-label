@@ -44,11 +44,11 @@ pub fn DeleteTrack(
 
         <dialog class="modal" node_ref=dialog_element>
             <div class="modal-box">
-                <h3 class="text-lg font-bold">"Delete "{track.get().name}</h3>
-                <p>"Are you sure you want to delete " {track.get().name} "?"</p>
+                <h3 class="text-lg font-bold">"Delete "{move || track.get().name}</h3>
+                <p>"Are you sure you want to delete " {move || track.get().name} "?"</p>
                 <p>"This action will be performed immediately."</p>
                 <p>
-                    "This will perform a soft delete. "{track.get().name}
+                    "This will perform a soft delete. "{move || track.get().name}
                     " will be unavailable to non-admin users."
                 </p>
                 <div class="modal-action">
@@ -70,7 +70,7 @@ pub fn DeleteTrack(
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
                             }
-                        }} <input name="slug" type="hidden" value=track.get().slug />
+                        }} <input name="slug" type="hidden" value=move || track.get().slug />
                         <button class="btn btn-error">Delete</button>
                     </ActionForm>
                 </div>

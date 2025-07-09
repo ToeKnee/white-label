@@ -44,11 +44,11 @@ pub fn DeleteRelease(
 
         <dialog class="modal" node_ref=dialog_element>
             <div class="modal-box">
-                <h3 class="text-lg font-bold">"Delete "{release.get().name}</h3>
-                <p>"Are you sure you want to delete " {release.get().name} "?"</p>
+                <h3 class="text-lg font-bold">"Delete "{move || release.get().name}</h3>
+                <p>"Are you sure you want to delete " {move || release.get().name} "?"</p>
                 <p>"This action will be performed immediately."</p>
                 <p>
-                    "This will perform a soft delete. "{release.get().name}
+                    "This will perform a soft delete. "{move || release.get().name}
                     " will be unavailable to non-admin users."
                 </p>
                 <div class="modal-action">
@@ -70,7 +70,7 @@ pub fn DeleteRelease(
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
                             }
-                        }} <input name="slug" type="hidden" value=release.get().slug />
+                        }} <input name="slug" type="hidden" value=move || release.get().slug />
                         <button class="btn btn-error">Delete</button>
                     </ActionForm>
                 </div>

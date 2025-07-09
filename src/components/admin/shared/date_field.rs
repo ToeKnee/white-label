@@ -29,47 +29,39 @@ pub fn DateField<'a>(
                 <span>{title}</span>
                 <span>"*Date & Time"</span>
             </label>
-            {move || {
-                view! {
-                    <input
-                        class="w-full max-w-xs input"
-                        type="datetime-local"
-                        id=move || { name.get() }
-                        name=move || { name.get() }
-                        value=date
-                            .get()
-                            .map(|x| { x.format("%Y-%m-%dT%H:%M").to_string() })
-                            .unwrap_or_default()
-                        on:input:target=move |ev| {
-                            let published_at_with_tz = format!(
-                                "{}:00 {}",
-                                ev.target().value(),
-                                chrono::Utc::now().format("%z"),
-                            );
-                            let value = chrono::DateTime::parse_from_str(
-                                    &published_at_with_tz,
-                                    "%Y-%m-%dT%H:%M:%S %z",
-                                )
-                                .map_or(None, |v| Some(v.into()));
-                            date.set(value);
-                        }
-                    />
+
+            <input
+                class="w-full max-w-xs input"
+                type="datetime-local"
+                id=move || name.get()
+                name=move || name.get()
+                value=move || {
+                    date.get()
+                        .map(|x| { x.format("%Y-%m-%dT%H:%M").to_string() })
+                        .unwrap_or_default()
                 }
-            }}
+                on:input:target=move |ev| {
+                    let published_at_with_tz = format!(
+                        "{}:00 {}",
+                        ev.target().value(),
+                        chrono::Utc::now().format("%z"),
+                    );
+                    let value = chrono::DateTime::parse_from_str(
+                            &published_at_with_tz,
+                            "%Y-%m-%dT%H:%M:%S %z",
+                        )
+                        .map_or(None, |v| Some(v.into()));
+                    date.set(value);
+                }
+            />
+
             {move || {
                 date.get()
                     .map_or_else(
-                        || {
-
-                            view! { "" }
-                                .into_any()
-                        },
+                        || { view! { "" }.into_any() },
                         |p| {
                             view! {
-                                <label
-                                    class="flex justify-between label"
-                                    for=move || { name.get() }
-                                >
+                                <label class="flex justify-between label" for=move || name.get()>
                                     <span></span>
                                     <span>
                                         "Timezone " {p.format("%z").to_string()} " ("

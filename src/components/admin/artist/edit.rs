@@ -26,14 +26,12 @@ pub fn EditArtist() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("slug").unwrap_or_default();
-        slug.set(s);
-    });
 
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
+    let artist_resource = Resource::new(
+        move || params.read().get("slug").unwrap_or_default(),
+        |slug| get_artist(slug),
+    );
     let update_artist = ServerAction::<UpdateArtist>::new();
     let value = Signal::derive(move || {
         update_artist
@@ -49,7 +47,7 @@ pub fn EditArtist() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if !slug.get().is_empty() {
+                    if !params.read().get("slug").unwrap_or_default().is_empty() {
                         match artist_resource.await {
                             Ok(this_artist) => {
                                 if this_artist.artist.id > 0 {
@@ -76,7 +74,6 @@ pub fn EditArtist() -> impl IntoView {
                                             let fresh_artist = artist_result.artist;
                                             if fresh_artist.id > 0 {
                                                 if fresh_artist.slug != artist.get().slug {
-                                                    slug.set(fresh_artist.clone().slug);
                                                     redirect(&format!("/admin/artist/{}", fresh_artist.slug));
                                                 }
                                                 if !success.get() {
@@ -103,7 +100,7 @@ pub fn EditArtist() -> impl IntoView {
                                             show=success.get()
                                         />
                                     }
-                                }} {move || artist.get().name} <Form artist=artist slug=slug />
+                                }} {move || artist.get().name} <Form artist=artist />
                             </div>
                         </ActionForm>
                     }
@@ -114,9 +111,14 @@ pub fn EditArtist() -> impl IntoView {
 }
 
 #[component]
-fn Form(artist: RwSignal<Artist>, slug: RwSignal<String>) -> impl IntoView {
+fn Form(artist: RwSignal<Artist>) -> impl IntoView {
     view! {
-        <input type="text" class="hidden" name="artist_form[slug]" bind:value=slug />
+        <input
+            type="text"
+            class="hidden"
+            name="artist_form[slug]"
+            value=move || artist.get().slug
+        />
         <div class="divider">Public</div>
         <label class="flex gap-2 items-center input">
             <input

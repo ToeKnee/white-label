@@ -39,27 +39,24 @@ pub fn EditRelease() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let artist_slug = RwSignal::new(String::new());
-    let release_slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("slug").unwrap_or_default();
-        artist_slug.set(s);
-        let rs = params.read().get("release_slug").unwrap_or_default();
-        release_slug.set(rs);
-    });
 
     let artist = RwSignal::new(Artist::default());
     let artist_resource = Resource::new(
-        move || artist_slug,
-        |artist_slug| get_artist(artist_slug.get()),
+        move || params.read().get("slug").unwrap_or_default(),
+        |artist_slug| get_artist(artist_slug),
     );
 
     let release = RwSignal::new(Release::default());
     let artists = RwSignal::new(Vec::new()); // Artists on the release
     let artist_ids = RwSignal::new(vec![]);
     let release_resource = Resource::new(
-        move || (artist_slug, release_slug),
-        |(artist_slug, release_slug)| get_release(artist_slug.get(), release_slug.get()),
+        move || {
+            (
+                params.read().get("slug").unwrap_or_default(),
+                params.read().get("release_slug").unwrap_or_default(),
+            )
+        },
+        |(artist_slug, release_slug)| get_release(artist_slug, release_slug),
     );
 
     let update_release = ServerAction::<UpdateRelease>::new();
@@ -96,7 +93,10 @@ pub fn EditRelease() -> impl IntoView {
                                 }
                                 Err(_) => {
                                     redirect(
-                                        &format!("/admin/artists/{}/releases", artist_slug.get()),
+                                        &format!(
+                                            "/admin/artists/{}/releases",
+                                            params.read().get("slug").unwrap_or_default(),
+                                        ),
                                     );
                                 }
                             }

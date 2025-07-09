@@ -33,14 +33,11 @@ pub fn CreateRelease() -> impl IntoView {
     let record_label = move || store.record_label().get();
 
     let params = use_params_map();
-    let slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("slug").unwrap_or_default();
-        slug.set(s);
-    });
-
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
+    let artist_resource = Resource::new(
+        move || params.read().get("slug").unwrap_or_default(),
+        |slug| get_artist(slug),
+    );
     let artist_ids = RwSignal::new(vec![]);
     Effect::new_isomorphic(move || {
         artist_ids.set(vec![artist.get().id]);

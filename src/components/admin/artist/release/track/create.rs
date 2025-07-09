@@ -30,28 +30,25 @@ pub fn CreateTrack() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let artist_slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("slug").unwrap_or_default();
-        artist_slug.set(s);
-    });
-
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || artist_slug, |slug| get_artist(slug.get()));
+    let artist_resource = Resource::new(
+        move || params.read().get("slug").unwrap_or_default(),
+        |slug| get_artist(slug),
+    );
     let artist_ids = RwSignal::new(vec![]);
     Effect::new_isomorphic(move || {
         artist_ids.set(vec![artist.get().id]);
     });
 
-    let release_slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("release_slug").unwrap_or_default();
-        release_slug.set(s);
-    });
     let release = RwSignal::new(Release::default());
     let release_resource = Resource::new(
-        move || [artist_slug, release_slug],
-        |[artist_slug, release_slug]| get_release(artist_slug.get(), release_slug.get()),
+        move || {
+            [
+                params.read().get("slug").unwrap_or_default(),
+                params.read().get("release_slug").unwrap_or_default(),
+            ]
+        },
+        |[artist_slug, release_slug]| get_release(artist_slug, release_slug),
     );
     let release_ids = RwSignal::new(vec![]);
     Effect::new_isomorphic(move || {
@@ -86,7 +83,12 @@ pub fn CreateTrack() -> impl IntoView {
                             release.set(this_release.release);
                         }
                         _ => {
-                            redirect(&format!("/admin/artist/{}/releases", artist_slug.get()));
+                            redirect(
+                                &format!(
+                                    "/admin/artist/{}/releases",
+                                    params.read().get("slug").unwrap_or_default(),
+                                ),
+                            );
                         }
                     }
                     view! {
@@ -103,8 +105,8 @@ pub fn CreateTrack() -> impl IntoView {
                                                 redirect(
                                                     &format!(
                                                         "/admin/artist/{}/release/{}/track/{}",
-                                                        artist_slug.get(),
-                                                        release_slug.get(),
+                                                        params.read().get("slug").unwrap_or_default(),
+                                                        params.read().get("release_slug").unwrap_or_default(),
                                                         track.slug,
                                                     ),
                                                 );
