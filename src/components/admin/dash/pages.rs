@@ -24,7 +24,7 @@ pub fn PagesTable() -> impl IntoView {
     let (user, set_user) = signal(User::default());
 
     view! {
-        <div class="overflow-x-auto shadow-xl grow not-prose card bg-neutral text-neutral-content bg-base-100">
+        <div class="overflow-x-auto shadow-xl grow not-prose card bg-neutral text-neutral-content">
             <div class="card-body">
                 <h2 class="card-title">Pages</h2>
                 <table class="table">

@@ -41,11 +41,11 @@ pub fn DeletePage(
 
         <dialog class="modal" node_ref=dialog_element>
             <div class="modal-box">
-                <h3 class="text-lg font-bold">"Delete "{page.get().name}</h3>
-                <p>"Are you sure you want to delete " {page.get().name} "?"</p>
+                <h3 class="text-lg font-bold">"Delete "{move || page.get().name}</h3>
+                <p>"Are you sure you want to delete " {move || page.get().name} "?"</p>
                 <p>"This action will be performed immediately."</p>
                 <p>
-                    "This will perform a soft delete. "{page.get().name}
+                    "This will perform a soft delete. "{move || page.get().name}
                     " will be unavailable to non-admin users."
                 </p>
                 <div class="modal-action">
@@ -67,7 +67,7 @@ pub fn DeletePage(
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
                             }
-                        }} <input name="slug" type="hidden" value=page.get().slug />
+                        }} <input name="slug" type="hidden" value=move || page.get().slug />
                         <button class="btn btn-error">Delete</button>
                     </ActionForm>
                 </div>

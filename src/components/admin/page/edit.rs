@@ -25,10 +25,11 @@ pub fn EditPage() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let slug = move || params.read().get("slug");
-
     let page = RwSignal::new(Page::default());
-    let page_resource = Resource::new(move || slug().unwrap_or_default(), get_page);
+    let page_resource = Resource::new(
+        move || params.read().get("slug").unwrap_or_default(),
+        get_page,
+    );
     let update_page = ServerAction::<UpdatePage>::new();
     let value = Signal::derive(move || {
         update_page
@@ -93,8 +94,15 @@ pub fn EditPage() -> impl IntoView {
                                             show=success.get()
                                         />
                                     }
-                                }} <Form page=page slug=slug().unwrap_or_default() />
-
+                                }}
+                                {move || {
+                                    view! {
+                                        <Form
+                                            page=page
+                                            slug=params.read().get("slug").unwrap_or_default()
+                                        />
+                                    }
+                                }}
                             </div>
                         </ActionForm>
                     }
