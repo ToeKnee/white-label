@@ -2,7 +2,7 @@
 
 pub mod artist;
 pub mod auth;
-pub mod music_services;
+pub mod music_service;
 pub mod page;
 pub mod record_label;
 pub mod release;
