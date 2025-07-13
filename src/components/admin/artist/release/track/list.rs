@@ -19,25 +19,32 @@ pub fn Tracks() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let artist_slug = RwSignal::new(String::new());
-    let release_slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        artist_slug.set(params.read().get("slug").unwrap_or_default());
-        release_slug.set(params.read().get("release_slug").unwrap_or_default());
-    });
 
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || artist_slug, |slug| get_artist(slug.get()));
+    let artist_resource = Resource::new_blocking(
+        move || params.read().get("slug").unwrap_or_default(),
+        get_artist,
+    );
 
-    let release_resource = Resource::new(
-        move || [artist_slug, release_slug],
-        |[artist_slug, release_slug]| get_release(artist_slug.get(), release_slug.get()),
+    let release_resource = Resource::new_blocking(
+        move || {
+            [
+                params.read().get("slug").unwrap_or_default(),
+                params.read().get("release_slug").unwrap_or_default(),
+            ]
+        },
+        |[artist_slug, release_slug]| get_release(artist_slug, release_slug),
     );
     let release = RwSignal::new(Release::default());
 
-    let tracks_resource = Resource::new(
-        move || [artist_slug, release_slug],
-        |[artist_slug, release_slug]| get_tracks(artist_slug.get(), release_slug.get()),
+    let tracks_resource = Resource::new_blocking(
+        move || {
+            [
+                params.read().get("slug").unwrap_or_default(),
+                params.read().get("release_slug").unwrap_or_default(),
+            ]
+        },
+        |[artist_slug, release_slug]| get_tracks(artist_slug, release_slug),
     );
     let tracks = RwSignal::new(Vec::new());
 
@@ -63,7 +70,12 @@ pub fn Tracks() -> impl IntoView {
                             title.set(format!("{} Tracks", release.get().name));
                         }
                         _ => {
-                            redirect(&format!("/admin/artist/{}", artist_slug.get()));
+                            redirect(
+                                &format!(
+                                    "/admin/artist/{}",
+                                    params.read().get("slug").unwrap_or_default(),
+                                ),
+                            );
                         }
                     }
                     match tracks_resource.await {
@@ -74,75 +86,73 @@ pub fn Tracks() -> impl IntoView {
                             redirect(
                                 &format!(
                                     "/admin/artist/{}/release/{}",
-                                    artist_slug.get(),
-                                    release_slug.get(),
+                                    params.read().get("slug").unwrap_or_default(),
+                                    params.read().get("release_slug").unwrap_or_default(),
                                 ),
                             );
                         }
                     }
-
-                    view! {
-                        <h1>"Tracks"</h1>
-
-                        <div class="divider"></div>
-
-                        <div class="overflow-x-auto">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <Show
-                                        when=move || { !tracks.get().is_empty() }
-                                        fallback=|| {
-                                            view! {
-                                                <tr>
-                                                    <td colspan="2">No tracks found.</td>
-                                                </tr>
-                                            }
+                })} <h2>"Tracks"</h2> <div class="divider"></div> <div class="overflow-x-auto">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <Show
+                                when=move || { !tracks.get().is_empty() }
+                                fallback=|| {
+                                    view! {
+                                        <tr>
+                                            <td colspan="2">No tracks found.</td>
+                                        </tr>
+                                    }
+                                }
+                            >
+                                <For
+                                    each=move || tracks.get()
+                                    key=|track| (track.slug.clone(), track.name.clone())
+                                    let(track)
+                                >
+                                    <TrackRow
+                                        track=track
+                                        artist_slug=params.read().get("slug").unwrap_or_default()
+                                        release_slug=params
+                                            .read()
+                                            .get("release_slug")
+                                            .unwrap_or_default()
+                                    />
+                                </For>
+                            </Show>
+                            <tr>
+                                <td></td>
+                                <td>
+                                    <A
+                                        href=move || {
+                                            format!(
+                                                "/admin/artist/{}/release/{}/tracks/new",
+                                                params.read().get("slug").unwrap_or_default(),
+                                                params.read().get("release_slug").unwrap_or_default(),
+                                            )
                                         }
+                                        attr:class="btn btn-primary"
                                     >
-                                        <For
-                                            each=move || tracks.get()
-                                            key=|track| (track.slug.clone(), track.name.clone())
-                                            let(track)
-                                        >
-                                            <TrackRow
-                                                track=track
-                                                artist_slug=artist_slug.get()
-                                                release_slug=release_slug.get()
-                                            />
-                                        </For>
-                                    </Show>
-                                    <tr>
-                                        <td></td>
-                                        <td>
-                                            <A
-                                                href=format!(
-                                                    "/admin/artist/{}/release/{}/tracks/new",
-                                                    artist_slug.get(),
-                                                    release_slug.get(),
-                                                )
-                                                attr:class="btn btn-primary"
-                                            >
-                                                Add
-                                            </A>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                <tfoot>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th></th>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    }
-                })}
+                                        Add
+                                    </A>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th>Name</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
             </ErrorBoundary>
         </Transition>
     }

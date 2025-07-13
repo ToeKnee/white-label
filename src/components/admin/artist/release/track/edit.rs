@@ -32,38 +32,35 @@ pub fn EditTrack() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let artist_slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("slug").unwrap_or_default();
-        artist_slug.set(s);
-    });
 
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || artist_slug, |slug| get_artist(slug.get()));
+    let artist_resource = Resource::new(
+        move || params.read().get("slug").unwrap_or_default(),
+        get_artist,
+    );
     let artist_ids = RwSignal::new(vec![]);
 
-    let release_slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("release_slug").unwrap_or_default();
-        release_slug.set(s);
-    });
     let release = RwSignal::new(Release::default());
     let release_resource = Resource::new(
-        move || [artist_slug, release_slug],
-        |[artist_slug, release_slug]| get_release(artist_slug.get(), release_slug.get()),
+        move || {
+            [
+                params.read().get("slug").unwrap_or_default(),
+                params.read().get("release_slug").unwrap_or_default(),
+            ]
+        },
+        |[artist_slug, release_slug]| get_release(artist_slug, release_slug),
     );
     let release_ids = RwSignal::new(vec![]);
 
-    let track_slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("track_slug").unwrap_or_default();
-        track_slug.set(s);
-    });
     let track_resource = Resource::new(
-        move || [artist_slug, release_slug, track_slug],
-        |[artist_slug, release_slug, track_slug]| {
-            get_track(artist_slug.get(), release_slug.get(), track_slug.get())
+        move || {
+            [
+                params.read().get("slug").unwrap_or_default(),
+                params.read().get("release_slug").unwrap_or_default(),
+                params.read().get("track_slug").unwrap_or_default(),
+            ]
         },
+        |[artist_slug, release_slug, track_slug]| get_track(artist_slug, release_slug, track_slug),
     );
     let track = RwSignal::new(Track::default());
     let update_track = ServerAction::<UpdateTrack>::new();
@@ -103,7 +100,12 @@ pub fn EditTrack() -> impl IntoView {
                             release.set(this_release.release);
                         }
                         _ => {
-                            redirect(&format!("/admin/artist/{}/releases", artist_slug.get()));
+                            redirect(
+                                &format!(
+                                    "/admin/artist/{}/releases",
+                                    params.read().get("slug").unwrap_or_default(),
+                                ),
+                            );
                         }
                     }
                     match track_resource.await {
@@ -116,8 +118,8 @@ pub fn EditTrack() -> impl IntoView {
                             redirect(
                                 &format!(
                                     "/admin/artist/{}/release/{}/tracks",
-                                    artist_slug.get(),
-                                    release_slug.get(),
+                                    params.read().get("slug").unwrap_or_default(),
+                                    params.read().get("release_slug").unwrap_or_default(),
                                 ),
                             );
                         }
@@ -139,8 +141,8 @@ pub fn EditTrack() -> impl IntoView {
                                                     redirect(
                                                         &format!(
                                                             "/admin/artist/{}/release/{}/track/{}",
-                                                            artist_slug.get(),
-                                                            release_slug.get(),
+                                                            params.read().get("slug").unwrap_or_default(),
+                                                            params.read().get("release_slug").unwrap_or_default(),
                                                             fresh_track.slug,
                                                         ),
                                                     );

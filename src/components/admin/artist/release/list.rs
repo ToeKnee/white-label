@@ -22,19 +22,18 @@ pub fn Releases() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let slug = RwSignal::new(String::new());
-    Effect::new_isomorphic(move || {
-        let s = params.read().get("slug").unwrap_or_default();
-        slug.set(s);
-    });
 
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(move || slug, |slug| get_artist(slug.get()));
+    let artist_resource = Resource::new(
+        move || params.read().get("slug").unwrap_or_default(),
+        get_artist,
+    );
 
-    let releases_resource = Resource::new(move || slug, |slug| get_releases(slug.get()));
+    let releases_resource = Resource::new(
+        move || params.read().get("slug").unwrap_or_default(),
+        get_releases,
+    );
     let (releases, set_releases) = signal(Vec::new());
-
-    let title = RwSignal::new("Releases".to_string());
 
     view! {
         <Transition fallback=Loading>
@@ -45,13 +44,12 @@ pub fn Releases() -> impl IntoView {
                     match artist_resource.await {
                         Ok(this_artist) => {
                             artist.set(this_artist.artist);
-                            title.set(format!("{} Releases", artist.get().name));
                         }
                         _ => {
                             redirect("/admin/artists");
                         }
                     }
-                    if !slug.get().is_empty() {
+                    if !params.read().get("slug").unwrap_or_default().is_empty() {
                         if let Ok(releases) = releases_resource.await {
                             set_releases.set(releases.releases);
                         } else {
@@ -61,8 +59,8 @@ pub fn Releases() -> impl IntoView {
                     }
 
                     view! {
-                        <Title text=title.get() />
-                        <h1>{move || title.get()}</h1>
+                        <Title text=move || format!("{} Releases", artist.get().name) />
+                        <h1>{move || format!("{} Releases", artist.get().name)}</h1>
 
                         <div class="overflow-x-auto">
                             <table class="table">
@@ -91,14 +89,20 @@ pub fn Releases() -> impl IntoView {
                                             key=|release| (release.slug.clone(), release.name.clone())
                                             let(release)
                                         >
-                                            <ReleaseRow release=release artist_slug=slug.get() />
+                                            <ReleaseRow
+                                                release=release
+                                                artist_slug=params.read().get("slug").unwrap_or_default()
+                                            />
                                         </For>
                                     </Show>
                                     <tr>
                                         <td colspan="4"></td>
                                         <td>
                                             <A
-                                                href=format!("/admin/artist/{}/releases/new", slug.get())
+                                                href=format!(
+                                                    "/admin/artist/{}/releases/new",
+                                                    params.read().get("slug").unwrap_or_default(),
+                                                )
                                                 attr:class="btn btn-primary"
                                             >
                                                 Add

@@ -43,7 +43,7 @@ pub fn EditRelease() -> impl IntoView {
     let artist = RwSignal::new(Artist::default());
     let artist_resource = Resource::new(
         move || params.read().get("slug").unwrap_or_default(),
-        |artist_slug| get_artist(artist_slug),
+        get_artist,
     );
 
     let release = RwSignal::new(Release::default());
@@ -68,7 +68,6 @@ pub fn EditRelease() -> impl IntoView {
     });
     let success = RwSignal::new(false);
 
-    let name = move || format!("{} - {}", release.get().name, artist.get().name);
     view! {
         <div class="flex gap-6 justify-around w-full">
             <div class="w-2/3">
@@ -102,8 +101,14 @@ pub fn EditRelease() -> impl IntoView {
                             }
 
                             view! {
-                                <Title text=name />
-                                <h1>{name}</h1>
+                                <Title text=move || {
+                                    format!("{} - {}", release.get().name, artist.get().name)
+                                } />
+                                <h1>
+                                    {move || {
+                                        format!("{} - {}", release.get().name, artist.get().name)
+                                    }}
+                                </h1>
 
                                 <ActionForm action=update_release>
                                     <div class="grid gap-6">

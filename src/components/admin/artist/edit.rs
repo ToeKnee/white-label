@@ -30,7 +30,7 @@ pub fn EditArtist() -> impl IntoView {
     let artist = RwSignal::new(Artist::default());
     let artist_resource = Resource::new(
         move || params.read().get("slug").unwrap_or_default(),
-        |slug| get_artist(slug),
+        get_artist,
     );
     let update_artist = ServerAction::<UpdateArtist>::new();
     let value = Signal::derive(move || {

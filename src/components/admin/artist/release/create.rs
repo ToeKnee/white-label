@@ -36,7 +36,7 @@ pub fn CreateRelease() -> impl IntoView {
     let artist = RwSignal::new(Artist::default());
     let artist_resource = Resource::new(
         move || params.read().get("slug").unwrap_or_default(),
-        |slug| get_artist(slug),
+        get_artist,
     );
     let artist_ids = RwSignal::new(vec![]);
     Effect::new_isomorphic(move || {
