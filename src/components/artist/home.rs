@@ -14,7 +14,7 @@ use crate::routes::{artist::get_artist, release::get_releases};
 pub fn ArtistPage() -> impl IntoView {
     let params = use_params_map();
     let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new_blocking(
+    let artist_resource = Resource::new(
         move || params.read().get("slug").unwrap_or_default(),
         get_artist,
     );
@@ -30,17 +30,15 @@ pub fn ArtistPage() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if !params.read().get("slug").unwrap_or_default().is_empty() {
-                        if let Ok(this_artist) = artist_resource.await {
-                            artist.set(this_artist.artist);
-                        } else {
-                            tracing::error!("Error while getting artist");
-                        }
-                        if let Ok(release_list) = releases_resource.await {
-                            releases.set(release_list.releases);
-                        } else {
-                            tracing::error!("Error while getting releases for artist");
-                        }
+                    if let Ok(this_artist) = artist_resource.await {
+                        artist.set(this_artist.artist);
+                    } else {
+                        tracing::error!("Error while getting artist");
+                    }
+                    if let Ok(release_list) = releases_resource.await {
+                        releases.set(release_list.releases);
+                    } else {
+                        tracing::error!("Error while getting releases for artist");
                     }
                 })} <Title text=move || artist.get().name />
                 <article class="my-6 md:container md:mx-auto prose">

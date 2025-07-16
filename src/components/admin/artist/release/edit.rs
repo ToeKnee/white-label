@@ -212,7 +212,6 @@ fn Form(
                 <ArtistSelect
                     primary_artist_id=release.get().primary_artist_id
                     artist_ids=artist_ids
-                    label_id=artist.get().label_id
                 />
             }
         }}

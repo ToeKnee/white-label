@@ -33,11 +33,9 @@ pub fn ArtistSelect(
     primary_artist_id: i64,
     /// The list of artist IDs that are selected. This should also include the primary artist ID.
     artist_ids: RwSignal<Vec<i64>>,
-    /// The id of the record label to fetch artists from
-    label_id: i64,
 ) -> impl IntoView {
     let artists = RwSignal::new(vec![]);
-    let artists_resource = Resource::new(move || label_id, get_label_artists);
+    let artists_resource = Resource::new(move || (), |()| get_label_artists());
 
     view! {
         <Transition fallback=Loading>

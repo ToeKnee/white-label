@@ -7,8 +7,7 @@ use reactive_stores::Store;
 
 use crate::components::utils::{error::ErrorPage, loading::Loading, status_badge::StatusBadge};
 use crate::models::artist::Artist;
-use crate::models::record_label::RecordLabel;
-use crate::routes::record_label::{get_label_artists, get_record_label};
+use crate::routes::record_label::get_label_artists;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::shorten_string::shorten_string;
 
@@ -16,11 +15,9 @@ use crate::utils::shorten_string::shorten_string;
 #[component]
 pub fn RecordLabelHome() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
-    let record_label_resource = Resource::new_blocking(move || {}, |()| get_record_label());
 
     let artists = RwSignal::new(vec![]);
-    let artists_resource =
-        Resource::new_blocking(move || store.record_label().get().id, get_label_artists);
+    let artists_resource = Resource::new(move || (), |()| get_label_artists());
 
     view! {
         <Transition fallback=move || view! { <Loading /> }>
@@ -28,14 +25,6 @@ pub fn RecordLabelHome() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match record_label_resource.await {
-                        Ok(label) => {
-                            let record_label = store.record_label();
-                            *record_label.write() = label.record_label.clone();
-                            label.record_label
-                        }
-                        Err(_) => RecordLabel::default(),
-                    };
                     if store.record_label().get().id > 0 {
                         match artists_resource.await {
                             Ok(these_artists) => {

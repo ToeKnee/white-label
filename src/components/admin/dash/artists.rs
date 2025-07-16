@@ -1,7 +1,6 @@
 //! Artists table component.
 use leptos::prelude::*;
 use leptos_router::components::A;
-use reactive_stores::Store;
 
 use crate::app::UserContext;
 use crate::components::utils::error::ErrorPage;
@@ -9,19 +8,12 @@ use crate::components::utils::status_badge::StatusBadge;
 use crate::models::artist::Artist;
 use crate::models::auth::User;
 use crate::routes::record_label::get_label_artists;
-use crate::store::GlobalState;
-use crate::store::GlobalStateStoreFields;
 
 /// Renders the artists table component.
 #[component]
 pub fn ArtistsTable() -> impl IntoView {
-    let store = expect_context::<Store<GlobalState>>();
-
     let (artists, set_artists) = signal(vec![]);
-    let artists_resource = Resource::new(
-        move || store.record_label().get(),
-        move |_| get_label_artists(store.record_label().get().id),
-    );
+    let artists_resource = Resource::new(move || (), |()| get_label_artists());
 
     let user_context = expect_context::<UserContext>();
     let (user, set_user) = signal(User::default());

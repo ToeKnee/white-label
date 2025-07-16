@@ -40,7 +40,7 @@ pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
     let pool = pool()?;
 
     let record_label = RecordLabel::first(&pool).await.map_err(|x| {
-        tracing::error!("Error while getting record label: {x:?}");
+        tracing::error!("get_record_label: Error while getting record label: {x:?}");
         ServerFnError::new("Could not retrieve record label, try again later")
     })?;
 
@@ -58,23 +58,18 @@ pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
 /// # Errors:
 /// Will return a `ServerFnError` if the record label cannot be found, or if there is an issue with the database connection.
 #[server(GetLabelArtists, "/api", endpoint="record_label_artists", output = Cbor)]
-pub async fn get_label_artists(
-    /// The ID of the record label.
-    record_label_id: i64,
-) -> Result<LabelArtistResult, ServerFnError> {
+pub async fn get_label_artists() -> Result<LabelArtistResult, ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;
 
     let current_user = auth.current_user.unwrap_or_default();
     let show_hidden = current_user.permissions.contains("label_owner");
 
-    let record_label = RecordLabel::get_by_id(&pool, record_label_id)
-        .await
-        .map_err(|x| {
-            let err = format!("Error while getting label: {x:?}");
-            tracing::error!("{err}");
-            ServerFnError::new("Could not retrieve label, try again later")
-        })?;
+    let record_label = RecordLabel::first(&pool).await.map_err(|x| {
+        let err = format!("Error while getting label: {x:?}");
+        tracing::error!("{err}");
+        ServerFnError::new("Could not retrieve label, try again later")
+    })?;
     let artists = record_label
         .artists(&pool, show_hidden)
         .await

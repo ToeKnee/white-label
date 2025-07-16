@@ -156,11 +156,8 @@ fn Form(
 
         {move || {
             view! {
-                <ArtistSelect
-                    primary_artist_id=artist.get().id
-                    artist_ids=artist_ids
-                    label_id=artist.get().label_id
-                />
+                <ArtistSelect primary_artist_id=artist.get().id artist_ids=artist_ids />
+
                 <ReleaseSelect
                     artist_ids=artist_ids.get()
                     primary_release=release.get()

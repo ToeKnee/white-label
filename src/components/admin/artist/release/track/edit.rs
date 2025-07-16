@@ -177,7 +177,7 @@ pub fn EditTrack() -> impl IntoView {
                                             show=success.get()
                                         />
                                     }
-                                }} <Form track artist artist_ids release release_ids />
+                                }} <Form track artist_ids release release_ids />
                             </div>
                         </ActionForm>
                     }
@@ -190,7 +190,6 @@ pub fn EditTrack() -> impl IntoView {
 #[component]
 fn Form(
     track: RwSignal<Track>,
-    artist: RwSignal<Artist>,
     artist_ids: RwSignal<Vec<i64>>,
     release: RwSignal<Release>,
     release_ids: RwSignal<Vec<i64>>,
@@ -221,8 +220,8 @@ fn Form(
                 <ArtistSelect
                     primary_artist_id=release.get().primary_artist_id
                     artist_ids=artist_ids
-                    label_id=artist.get().label_id
                 />
+
                 <ReleaseSelect
                     artist_ids=artist_ids.get()
                     primary_release=release.get()

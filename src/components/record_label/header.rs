@@ -7,7 +7,6 @@ use reactive_stores::Store;
 
 use crate::app::UserContext;
 use crate::components::utils::{error::ErrorPage, loading::Loading};
-use crate::models::auth::User;
 use crate::routes::record_label::get_record_label;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 
@@ -15,8 +14,7 @@ use crate::store::{GlobalState, GlobalStateStoreFields};
 #[component]
 pub fn LabelHeader() -> impl IntoView {
     let store = expect_context::<Store<GlobalState>>();
-    let record_label_resource =
-        Resource::new(move || store.record_label().get(), |_| get_record_label());
+    let record_label_resource = Resource::new(move || {}, |()| get_record_label());
 
     view! {
         <div class="navbar bg-primary text-primary-content">
@@ -52,11 +50,6 @@ pub fn LabelHeader() -> impl IntoView {
 #[component]
 pub fn UserMenu() -> impl IntoView {
     let user_context = expect_context::<UserContext>();
-    let (user, set_user) = signal(User::default());
-
-    Effect::new(move || {
-        set_user.set(user_context.0.get());
-    });
 
     view! {
         <Transition fallback=Loading>
@@ -64,7 +57,7 @@ pub fn UserMenu() -> impl IntoView {
                 ErrorPage
             }>
                 {move || {
-                    if user.get().is_authenticated() {
+                    if user_context.0.get().is_authenticated() {
                         view! {
                             <div class="flex-none">
                                 <ul class="px-1 menu menu-horizontal">
@@ -74,12 +67,12 @@ pub fn UserMenu() -> impl IntoView {
                                                 <div class="avatar">
                                                     <div class="w-10 rounded-full">
                                                         <img
-                                                            alt=format!("{}'s Avatar", user.get().username)
-                                                            src=user.get().avatar_url()
+                                                            alt=format!("{}'s Avatar", user_context.0.get().username)
+                                                            src=user_context.0.get().avatar_url()
                                                         />
                                                     </div>
                                                 </div>
-                                                {user.get().username}
+                                                {user_context.0.get().username}
                                             </summary>
                                             <ul
                                                 data-theme="light"
@@ -98,7 +91,7 @@ pub fn UserMenu() -> impl IntoView {
                                                         "Change Password"
                                                     </A>
                                                 </li>
-                                                {if user.get().permissions.contains("admin") {
+                                                {if user_context.0.get().permissions.contains("admin") {
                                                     view! {
                                                         <li>
                                                             <A href="/admin" attr:class="btn btn-ghost">

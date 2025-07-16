@@ -133,13 +133,7 @@ fn Form(
             markdown_text=String::new()
         />
         {move || {
-            view! {
-                <ArtistSelect
-                    primary_artist_id=artist.get().id
-                    artist_ids=artist_ids
-                    label_id=artist.get().label_id
-                />
-            }
+            view! { <ArtistSelect primary_artist_id=artist.get().id artist_ids=artist_ids /> }
         }}
         <label class="flex gap-2 items-center input">
             <input
