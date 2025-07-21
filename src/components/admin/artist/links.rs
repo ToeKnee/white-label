@@ -1,4 +1,4 @@
-//! Edit an artist
+//! Edit an artist music service and social links.
 
 use leptos::prelude::*;
 use leptos_meta::Title;
@@ -7,20 +7,22 @@ use leptos_router::hooks::use_params_map;
 
 use super::{delete::DeleteArtist, restore::RestoreArtist};
 use crate::components::{
-    admin::shared::{date_field::DateField, markdown_field::MarkdownField},
+    admin::artist::{music_service::MusicServiceEdit, social_media::SocialMediaServiceEdit},
     utils::{
-        error::ErrorPage, error::ServerErrors, loading::Loading,
-        permissions::permission_or_redirect, success::Success,
+        error::{ErrorPage, ServerErrors},
+        loading::Loading,
+        permissions::permission_or_redirect,
+        success::Success,
     },
 };
 use crate::models::artist::Artist;
 use crate::routes::artist::{ArtistResult, UpdateArtist, get_artist};
 use crate::utils::redirect::redirect;
 
-/// Renders the edit artist page.
+/// Renders the edit artist links page.
 #[component]
 #[allow(clippy::too_many_lines)] // components are a pain to make smaller
-pub fn EditArtist() -> impl IntoView {
+pub fn EditArtistLinks() -> impl IntoView {
     Effect::new_isomorphic(move || {
         permission_or_redirect("label_owner", "/admin");
     });
@@ -63,8 +65,8 @@ pub fn EditArtist() -> impl IntoView {
                     }
 
                     view! {
-                        <Title text=move || format!("{} Profile", artist.get().name) />
-                        <h1>{move || view! { {artist.get().name} }}" Profile"</h1>
+                        <Title text=move || format!("{} Links", artist.get().name) />
+                        <h1>{move || view! { {artist.get().name} }}" Links"</h1>
 
                         <ActionForm action=update_artist>
                             <div class="grid gap-6">
@@ -109,7 +111,7 @@ pub fn EditArtist() -> impl IntoView {
                                             )
                                         }
                                         attr:role="tab"
-                                        attr:class="tab tab-active"
+                                        attr:class="tab"
                                     >
                                         Information
                                     </A>
@@ -121,7 +123,7 @@ pub fn EditArtist() -> impl IntoView {
                                             )
                                         }
                                         attr:role="tab"
-                                        attr:class="tab"
+                                        attr:class="tab tab-active"
                                     >
                                         Links
                                     </A>
@@ -149,6 +151,8 @@ pub fn EditArtist() -> impl IntoView {
 
 #[component]
 fn Form(artist: RwSignal<Artist>) -> impl IntoView {
+    let params = use_params_map();
+
     view! {
         <input
             type="text"
@@ -156,45 +160,19 @@ fn Form(artist: RwSignal<Artist>) -> impl IntoView {
             name="artist_form[slug]"
             value=move || artist.get().slug
         />
-        <div class="divider">Public</div>
-        <label class="flex gap-2 items-center input">
-            <input
-                type="text"
-                class="grow"
-                placeholder="Artist name"
-                name="artist_form[name]"
-                value=move || artist.get().name
-            />
-        </label>
-        {move || {
-            view! {
-                <MarkdownField
-                    title="Description".to_string()
-                    field="artist_form[description]".to_string()
-                    markdown_text=artist.get().description
-                />
-            }
-        }}
-        <label class="flex gap-2 items-center input">
-            <input
-                type="text"
-                class="grow"
-                placeholder="Website"
-                name="artist_form[website]"
-                value=move || artist.get().website
-            />
-        </label>
 
-        <div class="divider">Private</div>
+        <div class="divider">Music Services</div>
+        {move || {
+            view! { <MusicServiceEdit artist_slug=params.read().get("slug").unwrap_or_default() /> }
+        }}
+
+        <div class="divider">Social Media</div>
         {move || {
             view! {
-                <DateField
-                    title="Published at".to_string()
-                    field="artist_form[published_at]"
-                    date=artist.get().published_at
-                />
+                <SocialMediaServiceEdit artist_slug=params.read().get("slug").unwrap_or_default() />
             }
         }}
+
         <div class="flex flex-auto gap-6">
             <button class="flex-1 btn btn-primary">Update</button>
             {move || {

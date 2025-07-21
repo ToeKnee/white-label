@@ -2,5 +2,9 @@
 pub mod create;
 pub mod delete;
 pub mod edit;
+pub mod images;
+pub mod links;
+pub mod music_service;
 pub mod release;
 pub mod restore;
+pub mod social_media;

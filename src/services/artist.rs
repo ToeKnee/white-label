@@ -194,7 +194,7 @@ pub async fn restore_artist_service(
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;
-
+    tracing::info!("Artist restored: {}", artist.slug);
     Ok(ArtistResult { artist })
 }
 

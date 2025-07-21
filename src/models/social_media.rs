@@ -3,13 +3,18 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use sqlx::{FromRow, PgPool};
 use std::fmt;
+use std::slice::Iter;
 
+use self::SocialMedia::{
+    BlueSky, Facebook, Instagram, LinkedIn, Mastodon, Pinterest, Snapchat, Threads, TikTok,
+    Twitter, YouTube,
+};
 #[cfg(feature = "ssr")]
 use super::artist::Artist;
 use super::traits::Validate;
 
 /// `SocialMedia` is an enum representing various social media platforms.
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Default, Hash)]
 #[cfg_attr(feature = "ssr", derive(sqlx::Type))]
 pub enum SocialMedia {
     /// `BlueSky` is a decentralized social media platform.
@@ -40,6 +45,17 @@ pub enum SocialMedia {
 impl fmt::Display for SocialMedia {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{self:?}")
+    }
+}
+
+impl SocialMedia {
+    /// Returns the name of the social media platform as a string.
+    pub fn iterator() -> Iter<'static, Self> {
+        static SOCIAL_MEDIA: [SocialMedia; 11] = [
+            BlueSky, Facebook, Instagram, LinkedIn, Mastodon, Pinterest, Snapchat, Threads, TikTok,
+            Twitter, YouTube,
+        ];
+        SOCIAL_MEDIA.iter()
     }
 }
 
@@ -145,7 +161,7 @@ impl SocialMediaService {
         }
 
         let services = sqlx::query_as::<_, Self>(
-            "SELECT * FROM social_media WHERE artist_id = $1 ORDER BY created_at DESC",
+            "SELECT * FROM social_media WHERE artist_id = $1 ORDER BY platform ASC",
         )
         .bind(artist_id)
         .fetch_all(pool)

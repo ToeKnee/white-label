@@ -4,13 +4,17 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use sqlx::{FromRow, PgPool};
 use std::fmt;
+use std::slice::Iter;
 
+use self::Platform::{
+    AmazonMusic, AppleMusic, Bandcamp, Beatport, Deezer, SoundCloud, Spotify, Tidal, YouTubeMusic,
+};
 #[cfg(feature = "ssr")]
 use super::artist::Artist;
 use super::traits::Validate;
 
 /// Enum representing different music services.
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Default, Hash)]
 #[cfg_attr(feature = "ssr", derive(sqlx::Type))]
 pub enum Platform {
     /// Amazon Music service.
@@ -46,6 +50,24 @@ pub enum Platform {
 impl fmt::Display for Platform {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{self:?}")
+    }
+}
+
+impl Platform {
+    /// Returns the name of the platform as a string.
+    pub fn iterator() -> Iter<'static, Self> {
+        static PLATFORM: [Platform; 9] = [
+            AmazonMusic,
+            AppleMusic,
+            Bandcamp,
+            Beatport,
+            Deezer,
+            SoundCloud,
+            Spotify,
+            Tidal,
+            YouTubeMusic,
+        ];
+        PLATFORM.iter()
     }
 }
 
@@ -151,7 +173,7 @@ impl MusicService {
         }
 
         let services = sqlx::query_as::<_, Self>(
-            "SELECT * FROM music_services WHERE artist_id = $1 ORDER BY created_at DESC",
+            "SELECT * FROM music_services WHERE artist_id = $1 ORDER BY platform ASC",
         )
         .bind(artist_id)
         .fetch_all(pool)

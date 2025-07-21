@@ -370,7 +370,7 @@ impl Track {
         self.validate(pool).await?;
 
         let track = match sqlx::query_as::<_, Self>(
-            "UPDATE tracks SET name = $1, slug = $2, description = $3, primary_artist_id = $4, primary_image = $5, isrc_code = $6, bpm = $7, published_at = $8, updated_at = $9 WHERE id = $10 RETURNING *",
+            "UPDATE tracks SET name = $1, slug = $2, description = $3, primary_artist_id = $4, primary_image = $5, isrc_code = $6, bpm = $7, published_at = $8, updated_at = $9, deleted_at = $10 WHERE id = $11 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
@@ -381,6 +381,7 @@ impl Track {
         .bind(self.bpm)
         .bind(self.published_at)
         .bind(chrono::Utc::now())
+        .bind(self.deleted_at)
         .bind(self.id)
         .fetch_one(pool)
         .await {

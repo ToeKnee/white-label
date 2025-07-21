@@ -422,7 +422,7 @@ impl Release {
         self.validate(pool).await?;
 
         let release = match sqlx::query_as::<_, Self>(
-            "UPDATE releases SET name = $1, slug = $2, description = $3, primary_artist_id = $4, primary_image = $5, catalogue_number = $6, release_date = $7, published_at = $8, updated_at = $9 WHERE id = $10 RETURNING *",
+            "UPDATE releases SET name = $1, slug = $2, description = $3, primary_artist_id = $4, primary_image = $5, catalogue_number = $6, release_date = $7, published_at = $8, updated_at = $9, deleted_at = $10 WHERE id = $11 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
@@ -433,6 +433,7 @@ impl Release {
         .bind(self.release_date)
         .bind(self.published_at)
         .bind(chrono::Utc::now())
+        .bind(self.deleted_at)
         .bind(self.id)
         .fetch_one(pool)
         .await {

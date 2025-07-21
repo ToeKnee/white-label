@@ -282,7 +282,7 @@ impl Artist {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
 
-        let artist = match sqlx::query_as::<_, Self>("UPDATE artists SET name = $1, slug = $2, description = $3, primary_image = $4, website = $5, published_at = $6, updated_at = $7 WHERE id = $8 RETURNING *")
+        let artist = match sqlx::query_as::<_, Self>("UPDATE artists SET name = $1, slug = $2, description = $3, primary_image = $4, website = $5, published_at = $6, updated_at = $7, deleted_at = $8 WHERE id = $9 RETURNING *")
             .bind(self.name)
             .bind(self.slug)
             .bind(self.description)
@@ -290,6 +290,7 @@ impl Artist {
             .bind(self.website)
             .bind(self.published_at)
             .bind(chrono::Utc::now())
+            .bind(self.deleted_at)
             .bind(self.id)
             .fetch_one(pool)
             .await
