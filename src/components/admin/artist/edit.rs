@@ -2,8 +2,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use leptos_router::components::A;
-use leptos_router::hooks::use_params_map;
+use reactive_stores::Store;
 
 use super::{delete::DeleteArtist, restore::RestoreArtist};
 use crate::components::{
@@ -14,7 +13,8 @@ use crate::components::{
     },
 };
 use crate::models::artist::Artist;
-use crate::routes::artist::{ArtistResult, UpdateArtist, get_artist};
+use crate::routes::artist::{ArtistResult, UpdateArtist};
+use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
 /// Renders the edit artist page.
@@ -25,13 +25,16 @@ pub fn EditArtist() -> impl IntoView {
         permission_or_redirect("label_owner", "/admin");
     });
 
-    let params = use_params_map();
-
-    let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_artist,
+    let store = expect_context::<Store<GlobalState>>();
+    let artist = RwSignal::new(
+        store
+            .artist()
+            .get_untracked()
+            .unwrap_or_else(Artist::default),
     );
+    Effect::new(move || {
+        artist.set(store.artist().get().unwrap_or_else(Artist::default));
+    });
     let update_artist = ServerAction::<UpdateArtist>::new();
     let value = Signal::derive(move || {
         update_artist
@@ -47,21 +50,6 @@ pub fn EditArtist() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if !params.read().get("slug").unwrap_or_default().is_empty() {
-                        match artist_resource.await {
-                            Ok(this_artist) => {
-                                if this_artist.artist.id > 0 {
-                                    artist.set(this_artist.artist);
-                                } else {
-                                    tracing::error!("Artist not found: {:?}", this_artist);
-                                }
-                            }
-                            _ => {
-                                redirect("/admin/artists");
-                            }
-                        }
-                    }
-
                     view! {
                         <Title text=move || format!("{} Profile", artist.get().name) />
                         <h1>{move || view! { {artist.get().name} }}" Profile"</h1>
@@ -73,9 +61,11 @@ pub fn EditArtist() -> impl IntoView {
                                         Ok(artist_result) => {
                                             let fresh_artist = artist_result.artist;
                                             if fresh_artist.id > 0 {
+                                                store.artist().set(Some(fresh_artist.clone()));
                                                 if fresh_artist.slug != artist.get().slug {
                                                     redirect(&format!("/admin/artist/{}", fresh_artist.slug));
                                                 }
+                                                artist.set(fresh_artist);
                                                 if !success.get() {
                                                     success.set(true);
                                                 }
@@ -100,44 +90,7 @@ pub fn EditArtist() -> impl IntoView {
                                             show=success.get()
                                         />
                                     }
-                                }} <div role="tablist" class="tabs tabs-border not-prose">
-                                    <A
-                                        href=move || {
-                                            format!(
-                                                "/admin/artist/{}",
-                                                params.read().get("slug").unwrap_or_default(),
-                                            )
-                                        }
-                                        attr:role="tab"
-                                        attr:class="tab tab-active"
-                                    >
-                                        Information
-                                    </A>
-                                    <A
-                                        href=move || {
-                                            format!(
-                                                "/admin/artist/{}/links",
-                                                params.read().get("slug").unwrap_or_default(),
-                                            )
-                                        }
-                                        attr:role="tab"
-                                        attr:class="tab"
-                                    >
-                                        Links
-                                    </A>
-                                    <A
-                                        href=move || {
-                                            format!(
-                                                "/admin/artist/{}/images",
-                                                params.read().get("slug").unwrap_or_default(),
-                                            )
-                                        }
-                                        attr:role="tab"
-                                        attr:class="tab"
-                                    >
-                                        Images
-                                    </A>
-                                </div> <Form artist=artist />
+                                }} <Form artist=artist />
                             </div>
                         </ActionForm>
                     }

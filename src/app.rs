@@ -27,6 +27,7 @@ use crate::components::{
                 list::Releases,
                 track::{create::CreateTrack, edit::EditTrack, list::Tracks},
             },
+            root::AdminArtistRoot,
         },
         dashboard::Dashboard,
         edit_label::EditLabel,
@@ -140,35 +141,30 @@ pub fn WhiteLabel() -> impl IntoView {
                     <ParentRoute path=path!("admin") view=AdminRoot>
                         <Route path=path!("") view=Dashboard />
                         <Route path=path!("label") view=EditLabel />
-                        <Route path=path!("artist") view=CreateArtist />
-                        <Route path=path!("artist/") view=CreateArtist />
-                        <Route path=path!("artist/:slug") view=EditArtist />
-                        <Route path=path!("artist/:slug/") view=EditArtist />
-                        <Route path=path!("artist/:slug/links") view=EditArtistLinks />
-                        <Route path=path!("artist/:slug/links/") view=EditArtistLinks />
-                        <Route path=path!("artist/:slug/images") view=EditArtistImages />
-                        <Route path=path!("artist/:slug/images/") view=EditArtistImages />
-                        <Route path=path!("artist/:slug/releases") view=Releases />
-                        <Route path=path!("artist/:slug/releases/") view=Releases />
-                        <Route path=path!("artist/:slug/releases/new") view=CreateRelease />
-                        <Route path=path!("artist/:slug/release/:release_slug") view=EditRelease />
-                        <Route path=path!("artist/:slug/release/:release_slug/") view=EditRelease />
-                        <Route
-                            path=path!("artist/:slug/release/:release_slug/tracks")
-                            view=Tracks
-                        />
-                        <Route
-                            path=path!("artist/:slug/release/:release_slug/tracks/")
-                            view=Tracks
-                        />
-                        <Route
-                            path=path!("artist/:slug/release/:release_slug/tracks/new")
-                            view=CreateTrack
-                        />
-                        <Route
-                            path=path!("artist/:slug/release/:release_slug/track/:track_slug")
-                            view=EditTrack
-                        />
+                        <ParentRoute path=path!("artist") view=AdminArtistRoot>
+                            <Route path=path!("") view=CreateArtist />
+                            <Route path=path!(":slug") view=EditArtist />
+                            <Route path=path!(":slug/") view=EditArtist />
+                            <Route path=path!(":slug/links") view=EditArtistLinks />
+                            <Route path=path!(":slug/links/") view=EditArtistLinks />
+                            <Route path=path!(":slug/images") view=EditArtistImages />
+                            <Route path=path!(":slug/images/") view=EditArtistImages />
+                            <Route path=path!(":slug/releases") view=Releases />
+                            <Route path=path!(":slug/releases/") view=Releases />
+                            <Route path=path!(":slug/releases/new") view=CreateRelease />
+                            <Route path=path!(":slug/release/:release_slug") view=EditRelease />
+                            <Route path=path!(":slug/release/:release_slug/") view=EditRelease />
+                            <Route path=path!(":slug/release/:release_slug/tracks") view=Tracks />
+                            <Route path=path!(":slug/release/:release_slug/tracks/") view=Tracks />
+                            <Route
+                                path=path!(":slug/release/:release_slug/tracks/new")
+                                view=CreateTrack
+                            />
+                            <Route
+                                path=path!(":slug/release/:release_slug/track/:track_slug")
+                                view=EditTrack
+                            />
+                        </ParentRoute>
                         <Route path=path!("page") view=CreatePage />
                         <Route path=path!("page/") view=CreatePage />
                         <Route path=path!("page/:slug") view=EditPage />

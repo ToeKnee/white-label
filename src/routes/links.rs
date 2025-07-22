@@ -30,7 +30,7 @@ pub struct LinksResult {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the artist cannot be found, or if there is an issue with the database connection.
-#[server(GetMusicServices, "/api", endpoint="get_music_services", output = Cbor)]
+#[server(GetLinks, "/api", endpoint="get_links", output = Cbor)]
 pub async fn get_links(
     /// The slug of the artist.
     artist_slug: String,

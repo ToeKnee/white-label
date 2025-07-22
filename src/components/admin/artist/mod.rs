@@ -7,4 +7,5 @@ pub mod links;
 pub mod music_service;
 pub mod release;
 pub mod restore;
+pub mod root;
 pub mod social_media;
