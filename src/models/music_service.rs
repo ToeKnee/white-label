@@ -140,7 +140,7 @@ impl MusicService {
         service.validate(pool).await?;
 
         let service = sqlx::query_as::<_, Self>(
-            "INSERT INTO music_services (artist_id,platform, url)
+            "INSERT INTO music_services (artist_id, platform, url)
             VALUES ($1, $2, $3)
             RETURNING *",
         )

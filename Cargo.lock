@@ -4061,6 +4061,7 @@ dependencies = [
  "bcrypt",
  "chrono",
  "console_error_panic_hook",
+ "convert_case 0.8.0",
  "dashmap",
  "deunicode",
  "dotenvy",

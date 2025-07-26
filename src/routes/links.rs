@@ -4,12 +4,13 @@ use leptos::prelude::ServerFnError;
 use leptos::server;
 use server_fn::codec::Cbor;
 
+use crate::forms::links::LinksForm;
 use crate::models::music_service::MusicService;
 use crate::models::social_media::SocialMediaService;
 #[cfg(feature = "ssr")]
-use crate::services::links::get_links_service;
+use crate::services::links::{get_links_service, update_links_service};
 #[cfg(feature = "ssr")]
-use crate::state::pool;
+use crate::state::{auth, pool};
 
 /// Contains the result of fetching music services for an artist.
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
@@ -37,4 +38,23 @@ pub async fn get_links(
 ) -> Result<LinksResult, ServerFnError> {
     let pool = pool()?;
     get_links_service(&pool, artist_slug).await
+}
+
+/// Update music services social median links for an artist.
+///
+/// # Arguments:
+/// * `artist_slug`: The slug of the artist.
+#[server(UpdateLinks, "/api", endpoint="update_links", output = Cbor)]
+pub async fn update_links(
+    /// The form containing the music service and social links to update.
+    form: LinksForm,
+) -> Result<LinksResult, ServerFnError> {
+    let pool = pool()?;
+    let auth = auth()?;
+    let user = auth.current_user.as_ref();
+
+    tracing::info!("Updating links for artist: {}", form.artist_slug);
+    tracing::info!("From: {:?}", form);
+
+    update_links_service(&pool, user, form).await
 }
