@@ -6,8 +6,14 @@ use leptos_router::{components::A, hooks::use_params_map};
 use markdown;
 
 use crate::components::utils::{error::ErrorPage, loading::Loading, status_badge::StatusBadge};
-use crate::models::{artist::Artist, release::Release};
-use crate::routes::{artist::get_artist, release::get_releases};
+use crate::models::{
+    artist::Artist, music_service::MusicService, release::Release, social_media::SocialMediaService,
+};
+use crate::routes::{
+    artist::get_artist,
+    links::{LinksResult, get_links},
+    release::get_releases,
+};
 
 /// Renders the artist home page.
 #[component]
@@ -17,6 +23,13 @@ pub fn ArtistPage() -> impl IntoView {
     let artist_resource = Resource::new(
         move || params.read().get("slug").unwrap_or_default(),
         get_artist,
+    );
+
+    let music_links = RwSignal::new(LinksResult::default().music_services);
+    let social_media_links = RwSignal::new(LinksResult::default().social_media_services);
+    let links_resource = Resource::new_blocking(
+        move || params.read().get("slug").unwrap_or_default(),
+        get_links,
     );
 
     let releases = RwSignal::new(vec![Release::default()]);
@@ -34,6 +47,12 @@ pub fn ArtistPage() -> impl IntoView {
                         artist.set(this_artist.artist);
                     } else {
                         tracing::error!("Error while getting artist");
+                    }
+                    if let Ok(links) = links_resource.await {
+                        music_links.set(links.music_services);
+                        social_media_links.set(links.social_media_services);
+                    } else {
+                        tracing::error!("Error while getting links for artist");
                     }
                     if let Ok(release_list) = releases_resource.await {
                         releases.set(release_list.releases);
@@ -55,15 +74,16 @@ pub fn ArtistPage() -> impl IntoView {
                                 }
                             }} <div class="flex flex-wrap gap-4 justify-between">
                                 <Show when=move || !artist.get().website.is_empty()>
-                                    <A
+                                    <a
                                         href=move || artist.get().website
-                                        attr:class="link link-hover"
+                                        class="link link-hover"
+                                        target="_blank"
                                     >
                                         "🌐 "
                                         {move || artist.get().website}
-                                    </A>
+                                    </a>
                                 </Show>
-                            </div>
+                            </div> <SocialLinks social_media_links /> <MusicLinks music_links />
                         </div>
                         <img
                             src=move || artist.get().primary_image_url()
@@ -78,6 +98,83 @@ pub fn ArtistPage() -> impl IntoView {
                 </article>
             </ErrorBoundary>
         </Transition>
+    }
+}
+
+#[component]
+/// Display the social media links for the artist
+pub fn SocialLinks(
+    /// The social media links to display
+    social_media_links: RwSignal<Vec<SocialMediaService>>,
+) -> impl IntoView {
+    view! {
+        <div class="">
+            <h2 class="text-2xl">"Social Media"</h2>
+            <div class="flex flex-wrap gap-4">
+                <For
+                    each=move || social_media_links.get()
+                    key=|social_media| social_media.platform.clone().to_string()
+                    let(social_media)
+                >
+                    <a
+                        href=move || social_media.url.clone()
+                        class="link link-hover"
+                        target="_blank"
+                    >
+                        <div class="w-8 rounded-full">
+                            <img
+                                src=format!(
+                                    "/images/social_media_services/{}.svg",
+                                    social_media.platform.to_string(),
+                                )
+                                alt=social_media.platform.clone().to_string()
+                            />
+                        </div>
+                    </a>
+                </For>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+/// Display the music links for the artist
+pub fn MusicLinks(
+    /// The music links to display
+    music_links: RwSignal<Vec<MusicService>>,
+) -> impl IntoView {
+    view! {
+        <div class="my-6 md:mx-auto">
+            <h2 class="text-2xl">"Music Links"</h2>
+            <div class="flex flex-wrap gap-4 justify-between">
+                <For
+                    each=move || music_links.get()
+                    key=|music_service| music_service.platform.clone().to_string()
+                    let(music_service)
+                >
+                    <a
+                        href=move || music_service.url.clone()
+                        class="link link-hover"
+                        target="_blank"
+                    >
+                        <div class="shadow-sm card bg-accent card-xs">
+                            <div class="card-body">
+                                <figure>
+                                    <img
+                                        class="mx-4 w-auto h-12"
+                                        src=format!(
+                                            "/images/music_services/{}.svg",
+                                            music_service.platform.to_string(),
+                                        )
+                                        alt=music_service.platform.clone().to_string()
+                                    />
+                                </figure>
+                            </div>
+                        </div>
+                    </a>
+                </For>
+            </div>
+        </div>
     }
 }
 
