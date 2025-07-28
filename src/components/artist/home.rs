@@ -83,13 +83,16 @@ pub fn ArtistPage() -> impl IntoView {
                                         {move || artist.get().website}
                                     </a>
                                 </Show>
-                            </div> <SocialLinks social_media_links /> <MusicLinks music_links />
+                            </div> <SocialLinks artist social_media_links />
+                            <MusicLinks artist music_links />
                         </div>
-                        <img
-                            src=move || artist.get().primary_image_url()
-                            alt=move || artist.get().name
-                            class="pl-6 w-1/2 h-auto"
-                        />
+                        <div class="w-1/2">
+                            <img
+                                class="ml-6"
+                                src=move || artist.get().primary_image_url()
+                                alt=move || artist.get().name
+                            />
+                        </div>
                     </div>
 
                     <Show when=move || { !releases.get().is_empty() }>
@@ -104,77 +107,85 @@ pub fn ArtistPage() -> impl IntoView {
 #[component]
 /// Display the social media links for the artist
 pub fn SocialLinks(
+    /// The artist whose social media links are being displayed
+    artist: RwSignal<Artist>,
     /// The social media links to display
     social_media_links: RwSignal<Vec<SocialMediaService>>,
 ) -> impl IntoView {
     view! {
-        <div class="">
-            <h2 class="text-2xl">"Social Media"</h2>
-            <div class="flex flex-wrap gap-4">
-                <For
-                    each=move || social_media_links.get()
-                    key=|social_media| social_media.platform.clone().to_string()
-                    let(social_media)
-                >
-                    <a
-                        href=move || social_media.url.clone()
-                        class="link link-hover"
-                        target="_blank"
+        <Show when=move || { !social_media_links.get().is_empty() }>
+            <div>
+                <h2 class="text-2xl">"Follow " {move || artist.get().name}</h2>
+                <div class="flex flex-wrap gap-4">
+                    <For
+                        each=move || social_media_links.get()
+                        key=|social_media| social_media.platform.clone().to_string()
+                        let(social_media)
                     >
-                        <div class="w-8 rounded-full">
-                            <img
-                                src=format!(
-                                    "/images/social_media_services/{}.svg",
-                                    social_media.platform.to_string(),
-                                )
-                                alt=social_media.platform.clone().to_string()
-                            />
-                        </div>
-                    </a>
-                </For>
+                        <a
+                            href=move || social_media.url.clone()
+                            class="link link-hover"
+                            target="_blank"
+                        >
+                            <div class="w-8 rounded-full">
+                                <img
+                                    src=format!(
+                                        "/images/social_media_services/{}.svg",
+                                        social_media.platform.to_string(),
+                                    )
+                                    alt=social_media.platform.clone().to_string()
+                                />
+                            </div>
+                        </a>
+                    </For>
+                </div>
             </div>
-        </div>
+        </Show>
     }
 }
 
 #[component]
 /// Display the music links for the artist
 pub fn MusicLinks(
+    /// The artist whose music links are being displayed
+    artist: RwSignal<Artist>,
     /// The music links to display
     music_links: RwSignal<Vec<MusicService>>,
 ) -> impl IntoView {
     view! {
-        <div class="my-6 md:mx-auto">
-            <h2 class="text-2xl">"Music Links"</h2>
-            <div class="flex flex-wrap gap-4 justify-between">
-                <For
-                    each=move || music_links.get()
-                    key=|music_service| music_service.platform.clone().to_string()
-                    let(music_service)
-                >
-                    <a
-                        href=move || music_service.url.clone()
-                        class="link link-hover"
-                        target="_blank"
+        <Show when=move || { !music_links.get().is_empty() }>
+            <div class="my-6 md:mx-auto">
+                <h2 class="text-2xl">"Listen to " {move || artist.get().name}</h2>
+                <div class="flex flex-wrap gap-4 justify-between">
+                    <For
+                        each=move || music_links.get()
+                        key=|music_service| music_service.platform.clone().to_string()
+                        let(music_service)
                     >
-                        <div class="shadow-sm card bg-accent card-xs">
-                            <div class="card-body">
-                                <figure>
-                                    <img
-                                        class="mx-4 w-auto h-12"
-                                        src=format!(
-                                            "/images/music_services/{}.svg",
-                                            music_service.platform.to_string(),
-                                        )
-                                        alt=music_service.platform.clone().to_string()
-                                    />
-                                </figure>
+                        <a
+                            href=move || music_service.url.clone()
+                            class="link link-hover"
+                            target="_blank"
+                        >
+                            <div class="shadow-sm card bg-neutral text-neutral-content card-xs">
+                                <div class="card-body">
+                                    <figure>
+                                        <img
+                                            class="mx-4 w-auto h-12"
+                                            src=format!(
+                                                "/images/music_services/{}.svg",
+                                                music_service.platform.to_string(),
+                                            )
+                                            alt=music_service.platform.clone().to_string()
+                                        />
+                                    </figure>
+                                </div>
                             </div>
-                        </div>
-                    </a>
-                </For>
+                        </a>
+                    </For>
+                </div>
             </div>
-        </div>
+        </Show>
     }
 }
 
