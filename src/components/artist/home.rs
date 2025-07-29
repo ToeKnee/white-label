@@ -116,7 +116,7 @@ pub fn SocialLinks(
         <Show when=move || { !social_media_links.get().is_empty() }>
             <div>
                 <h2 class="text-2xl">"Follow " {move || artist.get().name}</h2>
-                <div class="flex flex-wrap gap-4">
+                <div class="flex flex-wrap gap-4 not-prose">
                     <For
                         each=move || social_media_links.get()
                         key=|social_media| social_media.platform.clone().to_string()
@@ -154,9 +154,9 @@ pub fn MusicLinks(
 ) -> impl IntoView {
     view! {
         <Show when=move || { !music_links.get().is_empty() }>
-            <div class="my-6 md:mx-auto">
+            <div class="mb-4 md:mx-auto">
                 <h2 class="text-2xl">"Listen to " {move || artist.get().name}</h2>
-                <div class="flex flex-wrap gap-4 justify-between">
+                <div class="flex flex-wrap gap-4 justify-between not-prose">
                     <For
                         each=move || music_links.get()
                         key=|music_service| music_service.platform.clone().to_string()
@@ -171,7 +171,7 @@ pub fn MusicLinks(
                                 <div class="card-body">
                                     <figure>
                                         <img
-                                            class="mx-4 w-auto h-12"
+                                            class="m-2 w-auto h-6"
                                             src=format!(
                                                 "/images/music_services/{}.svg",
                                                 music_service.platform.to_string(),
