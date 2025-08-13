@@ -12,7 +12,7 @@ use crate::components::{
     },
 };
 use crate::models::page::Page;
-use crate::routes::page::{PageResult, UpdatePage, get_page};
+use crate::routes::page::{UpdatePage, get_page};
 use crate::utils::redirect::redirect;
 
 /// Renders the create page page.
@@ -31,12 +31,7 @@ pub fn EditPage() -> impl IntoView {
         get_page,
     );
     let update_page = ServerAction::<UpdatePage>::new();
-    let value = Signal::derive(move || {
-        update_page
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(PageResult::default()))
-    });
+    let value = update_page.value();
     let (success, set_success) = signal(false);
 
     view! {
@@ -63,7 +58,7 @@ pub fn EditPage() -> impl IntoView {
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(page_result) => {
+                                        Some(Ok(page_result)) => {
                                             let fresh_page = page_result.page;
                                             if fresh_page.id > 0 {
                                                 if fresh_page.slug != page.get().slug {
@@ -80,11 +75,12 @@ pub fn EditPage() -> impl IntoView {
                                             view! { "" }
                                                 .into_any()
                                         }
-                                        Err(errors) => {
+                                        Some(Err(errors)) => {
                                             set_success.set(false);
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                        None => view! { "" }.into_any(),
                                     }
                                 }}
                                 {move || {

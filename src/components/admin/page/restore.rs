@@ -9,7 +9,7 @@ use leptos::prelude::*;
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::page::Page;
-use crate::routes::page::{PageResult, RestorePage};
+use crate::routes::page::RestorePage;
 
 /// Renders the restore page component.
 #[component]
@@ -27,12 +27,7 @@ pub fn RestorePage(
     };
 
     let update_page = ServerAction::<RestorePage>::new();
-    let value = Signal::derive(move || {
-        update_page
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(PageResult { page: page.get() }))
-    });
+    let value = update_page.value();
 
     view! {
         <button class="btn btn-secondary" on:click=on_click_show>
@@ -52,7 +47,7 @@ pub fn RestorePage(
                     <ActionForm action=update_page>
                         {move || {
                             match value.get() {
-                                Ok(page_result) => {
+                                Some(Ok(page_result)) => {
                                     if page_result.page.deleted_at.is_none() {
                                         page.set(page_result.page);
                                         if let Some(dialog) = dialog_element.get() {
@@ -63,9 +58,10 @@ pub fn RestorePage(
                                     view! { "" }
                                         .into_any()
                                 }
-                                Err(errors) => {
+                                Some(Err(errors)) => {
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
+                                None => view! { "" }.into_any(),
                             }
                         }} <input name="slug" type="hidden" value=move || page.get().slug />
                         <button class="btn btn-secondary">Restore</button>

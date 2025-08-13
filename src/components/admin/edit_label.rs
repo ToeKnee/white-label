@@ -9,7 +9,6 @@ use crate::components::utils::{
     success::Success,
 };
 use crate::models::record_label::RecordLabel;
-use crate::routes::record_label::LabelResult;
 use crate::routes::record_label::UpdateRecordLabel;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 
@@ -23,12 +22,7 @@ pub fn EditLabel() -> impl IntoView {
 
     let store = expect_context::<Store<GlobalState>>();
     let update_record_label = ServerAction::<UpdateRecordLabel>::new();
-    let value = Signal::derive(move || {
-        update_record_label
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(LabelResult::default()))
-    });
+    let value = update_record_label.value();
     let (success, set_success) = signal(false);
 
     let var_name = view! {
@@ -44,7 +38,7 @@ pub fn EditLabel() -> impl IntoView {
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(label_result) => {
+                                        Some(Ok(label_result)) => {
                                             let record_label = label_result.record_label;
                                             if record_label.id > 0 {
                                                 let store_record_label = store.record_label();
@@ -57,11 +51,12 @@ pub fn EditLabel() -> impl IntoView {
                                             view! { "" }
                                                 .into_any()
                                         }
-                                        Err(errors) => {
+                                        Some(Err(errors)) => {
                                             set_success.set(false);
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                        None => view! { "" }.into_any(),
                                     }
                                 }}
                                 {move || {

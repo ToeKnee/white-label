@@ -13,7 +13,7 @@ use crate::components::{
     },
 };
 use crate::models::artist::Artist;
-use crate::routes::artist::{ArtistResult, UpdateArtist};
+use crate::routes::artist::UpdateArtist;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
@@ -36,12 +36,7 @@ pub fn EditArtist() -> impl IntoView {
         artist.set(store.artist().get().unwrap_or_else(Artist::default));
     });
     let update_artist = ServerAction::<UpdateArtist>::new();
-    let value = Signal::derive(move || {
-        update_artist
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(ArtistResult::default()))
-    });
+    let value = update_artist.value();
     let success = RwSignal::new(false);
 
     view! {
@@ -58,7 +53,7 @@ pub fn EditArtist() -> impl IntoView {
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(artist_result) => {
+                                        Some(Ok(artist_result)) => {
                                             let fresh_artist = artist_result.artist;
                                             if fresh_artist.id > 0 {
                                                 store.artist().set(Some(fresh_artist.clone()));
@@ -76,11 +71,12 @@ pub fn EditArtist() -> impl IntoView {
                                             view! { "" }
                                                 .into_any()
                                         }
-                                        Err(errors) => {
+                                        Some(Err(errors)) => {
                                             success.set(false);
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                        None => view! { "" }.into_any(),
                                     }
                                 }}
                                 {move || {

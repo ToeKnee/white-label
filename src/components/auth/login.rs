@@ -4,7 +4,6 @@ use leptos::prelude::*;
 
 use crate::app::UserContext;
 use crate::components::utils::{error::ErrorPage, error::ServerErrors};
-use crate::models::auth::User;
 use crate::routes::auth::Login;
 use crate::utils::redirect::redirect;
 
@@ -12,7 +11,7 @@ use crate::utils::redirect::redirect;
 #[component]
 pub fn Login() -> impl IntoView {
     let login = ServerAction::<Login>::new();
-    let value = Signal::derive(move || login.value().get().unwrap_or_else(|| Ok(User::default())));
+    let value = login.value();
 
     let user_context = expect_context::<UserContext>();
 
@@ -27,16 +26,17 @@ pub fn Login() -> impl IntoView {
                     }>
                         {move || {
                             match value.get() {
-                                Ok(user) => {
+                                Some(Ok(user)) => {
                                     user_context.1.set(user.clone());
                                     if user.is_authenticated() {
                                         redirect("/");
                                     }
                                     view! { "" }.into_any()
                                 }
-                                Err(errors) => {
+                                Some(Err(errors)) => {
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
+                                None => view! { "" }.into_any(),
                             }
                         }}
                     </ErrorBoundary>

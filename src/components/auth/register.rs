@@ -4,7 +4,6 @@ use leptos::prelude::*;
 
 use crate::app::UserContext;
 use crate::components::utils::error::ServerErrors;
-use crate::models::auth::User;
 use crate::routes::auth::Register;
 use crate::utils::redirect::redirect;
 
@@ -12,12 +11,7 @@ use crate::utils::redirect::redirect;
 #[component]
 pub fn Register() -> impl IntoView {
     let register = ServerAction::<Register>::new();
-    let value = Signal::derive(move || {
-        register
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(User::default()))
-    });
+    let value = register.value();
     let (server_errors, set_server_errors) = signal(Option::<ServerFnError>::None);
 
     let user_context = expect_context::<UserContext>();
@@ -30,7 +24,7 @@ pub fn Register() -> impl IntoView {
                     <Suspense>
                         {move || {
                             match value.get() {
-                                Ok(user_result) => {
+                                Some(Ok(user_result)) => {
                                     let this_user = user_result;
                                     user_context.1.set(this_user.clone());
                                     if this_user.is_authenticated() {
@@ -38,9 +32,10 @@ pub fn Register() -> impl IntoView {
                                     }
                                     set_server_errors.set(None);
                                 }
-                                Err(error) => {
+                                Some(Err(error)) => {
                                     set_server_errors.set(Some(error));
                                 }
+                                None => {}
                             }
                         }} {move || view! { <ServerErrors server_errors=server_errors.get() /> }}
                     </Suspense>

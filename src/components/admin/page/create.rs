@@ -11,7 +11,7 @@ use crate::components::{
     },
 };
 use crate::models::page::Page;
-use crate::routes::page::{CreatePage, PageResult};
+use crate::routes::page::CreatePage;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
@@ -35,12 +35,7 @@ pub fn CreatePage() -> impl IntoView {
     });
 
     let create_page = ServerAction::<CreatePage>::new();
-    let value = Signal::derive(move || {
-        create_page
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(PageResult::default()))
-    });
+    let value = create_page.value();
 
     let var_name = view! {
         <Title text="Create Page" />
@@ -56,7 +51,7 @@ pub fn CreatePage() -> impl IntoView {
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(page_result) => {
+                                        Some(Ok(page_result)) => {
                                             let page = page_result.page;
                                             if page.id > 0 {
                                                 redirect(&format!("/admin/page/{}", page.slug));
@@ -65,10 +60,11 @@ pub fn CreatePage() -> impl IntoView {
                                             view! { "" }
                                                 .into_any()
                                         }
-                                        Err(errors) => {
+                                        Some(Err(errors)) => {
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                        None => view! { "" }.into_any(),
                                     }
                                 }}
                                 <input

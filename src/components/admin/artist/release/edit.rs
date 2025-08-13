@@ -22,7 +22,7 @@ use crate::config::upload::UploadConfiguration;
 use crate::models::{artist::Artist, release::Release};
 use crate::routes::{
     artist::get_artist,
-    release::{ReleaseResult, UpdateRelease, get_release},
+    release::{UpdateRelease, get_release},
 };
 use crate::utils::redirect::redirect;
 
@@ -49,7 +49,7 @@ pub fn EditRelease() -> impl IntoView {
     let release = RwSignal::new(Release::default());
     let artists = RwSignal::new(Vec::new()); // Artists on the release
     let artist_ids = RwSignal::new(vec![]);
-    let release_resource = Resource::new(
+    let release_resource = Resource::new_blocking(
         move || {
             (
                 params.read().get("slug").unwrap_or_default(),
@@ -60,12 +60,7 @@ pub fn EditRelease() -> impl IntoView {
     );
 
     let update_release = ServerAction::<UpdateRelease>::new();
-    let value = Signal::derive(move || {
-        update_release
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(ReleaseResult::default()))
-    });
+    let value = update_release.value();
     let success = RwSignal::new(false);
 
     view! {
@@ -114,7 +109,7 @@ pub fn EditRelease() -> impl IntoView {
                                     <div class="grid gap-6">
                                         {move || {
                                             match value.get() {
-                                                Ok(release_result) => {
+                                                Some(Ok(release_result)) => {
                                                     let fresh_release = release_result.release;
                                                     let fresh_artists = release_result.artists;
                                                     if fresh_release.id > 0 {
@@ -144,11 +139,12 @@ pub fn EditRelease() -> impl IntoView {
                                                     view! { "" }
                                                         .into_any()
                                                 }
-                                                Err(errors) => {
+                                                Some(Err(errors)) => {
                                                     success.set(false);
                                                     view! { <ServerErrors server_errors=Some(errors) /> }
                                                         .into_any()
                                                 }
+                                                None => view! { "" }.into_any(),
                                             }
                                         }}
                                         {move || {

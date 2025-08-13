@@ -26,12 +26,7 @@ pub fn EditProfile() -> impl IntoView {
     let username = RwSignal::new(user_context.0.get_untracked().username);
 
     let update_user = ServerAction::<UpdateUser>::new();
-    let value = Signal::derive(move || {
-        update_user
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(User::default()))
-    });
+    let value = update_user.value();
     let (success, set_success) = signal(false);
 
     view! {
@@ -58,7 +53,7 @@ pub fn EditProfile() -> impl IntoView {
                                 <div class="grid gap-6">
                                     {move || {
                                         match value.get() {
-                                            Ok(fresh_user) => {
+                                            Some(Ok(fresh_user)) => {
                                                 if fresh_user.id > 0 {
                                                     user_context.1.set(fresh_user.clone());
                                                     username.set(fresh_user.username);
@@ -72,11 +67,12 @@ pub fn EditProfile() -> impl IntoView {
                                                 view! { "" }
                                                     .into_any()
                                             }
-                                            Err(errors) => {
+                                            Some(Err(errors)) => {
                                                 set_success.set(false);
                                                 view! { <ServerErrors server_errors=Some(errors) /> }
                                                     .into_any()
                                             }
+                                            None => view! { "" }.into_any(),
                                         }
                                     }}
                                     {move || {

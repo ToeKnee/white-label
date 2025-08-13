@@ -9,7 +9,7 @@ use leptos::prelude::*;
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::artist::Artist;
-use crate::routes::artist::{ArtistResult, DeleteArtist};
+use crate::routes::artist::DeleteArtist;
 
 /// Renders the delete artist component.
 #[component]
@@ -27,13 +27,7 @@ pub fn DeleteArtist(
     };
 
     let update_artist = ServerAction::<DeleteArtist>::new();
-    let value = Signal::derive(move || {
-        update_artist.value().get().unwrap_or_else(|| {
-            Ok(ArtistResult {
-                artist: artist.get(),
-            })
-        })
-    });
+    let value = update_artist.value();
 
     view! {
         <button class="btn btn-error" on:click=on_click_show>
@@ -53,7 +47,7 @@ pub fn DeleteArtist(
                     <ActionForm action=update_artist>
                         {move || {
                             match value.get() {
-                                Ok(artist_result) => {
+                                Some(Ok(artist_result)) => {
                                     if artist_result.artist.deleted_at.is_some() {
                                         artist.set(artist_result.artist);
                                         if let Some(dialog) = dialog_element.get() {
@@ -64,9 +58,10 @@ pub fn DeleteArtist(
                                     view! { "" }
                                         .into_any()
                                 }
-                                Err(errors) => {
+                                Some(Err(errors)) => {
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
+                                None => view! { "" }.into_any(),
                             }
                         }} <input name="slug" type="hidden" value=move || artist.get().slug />
                         <button class="btn btn-error">Delete</button>

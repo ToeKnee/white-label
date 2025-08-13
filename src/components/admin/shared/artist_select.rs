@@ -43,11 +43,10 @@ pub fn ArtistSelect(
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if artists.get().is_empty() {
-                        if let Ok(artist_list) = artists_resource.await {
-                            artists.set(artist_list.artists);
-                        }
+                    if let Ok(artist_list) = artists_resource.await {
+                        artists.set(artist_list.artists);
                     }
+
                     view! {
                         <div class="flex flex-col gap-4">
                             <h2>"Artists"</h2>

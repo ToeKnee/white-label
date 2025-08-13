@@ -7,7 +7,6 @@ use crate::components::utils::{
     error::ErrorPage, error::ServerErrors, loading::Loading,
     permissions::authenticated_or_redirect, success::Success,
 };
-use crate::models::auth::User;
 use crate::routes::auth::ChangePassword;
 
 /// ChangePassword component allows users to change their password.
@@ -18,8 +17,7 @@ pub fn ChangePassword() -> impl IntoView {
     });
 
     let change_password = ServerAction::<ChangePassword>::new();
-    let value =
-        Signal::derive(move || change_password.value().get().unwrap_or(Ok(User::default())));
+    let value = change_password.value();
     let (success, set_success) = signal(false);
 
     view! {
@@ -36,17 +34,18 @@ pub fn ChangePassword() -> impl IntoView {
                                 <div class="grid gap-6">
                                     {move || {
                                         match value.get() {
-                                            Ok(user) => {
+                                            Some(Ok(user)) => {
                                                 if user.is_authenticated() && !success.get() {
                                                     set_success.set(true);
                                                 }
                                                 view! { "" }.into_any()
                                             }
-                                            Err(errors) => {
+                                            Some(Err(errors)) => {
                                                 set_success.set(false);
                                                 view! { <ServerErrors server_errors=Some(errors) /> }
                                                     .into_any()
                                             }
+                                            None => view! { "" }.into_any(),
                                         }
                                     }}
                                     {move || {

@@ -12,7 +12,7 @@ use crate::components::{
     },
 };
 use crate::models::artist::Artist;
-use crate::routes::artist::{ArtistResult, CreateArtist};
+use crate::routes::artist::CreateArtist;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
@@ -38,12 +38,7 @@ pub fn CreateArtist() -> impl IntoView {
     });
 
     let create_artist = ServerAction::<CreateArtist>::new();
-    let value = Signal::derive(move || {
-        create_artist
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(ArtistResult::default()))
-    });
+    let value = create_artist.value();
 
     view! {
         <Title text="Create Artist" />
@@ -59,7 +54,7 @@ pub fn CreateArtist() -> impl IntoView {
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(artist_result) => {
+                                        Some(Ok(artist_result)) => {
                                             tracing::info!("Artist created: {:?}", artist_result);
                                             let artist = artist_result.artist;
                                             if artist.id > 0 {
@@ -69,10 +64,11 @@ pub fn CreateArtist() -> impl IntoView {
                                             view! { "" }
                                                 .into_any()
                                         }
-                                        Err(errors) => {
+                                        Some(Err(errors)) => {
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                        None => view! { "" }.into_any(),
                                     }
                                 }}
                                 <input

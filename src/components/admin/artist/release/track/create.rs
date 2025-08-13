@@ -15,11 +15,7 @@ use crate::components::{
     },
 };
 use crate::models::{artist::Artist, release::Release, track::Track};
-use crate::routes::{
-    artist::get_artist,
-    release::get_release,
-    track::{CreateTrack, TrackResult},
-};
+use crate::routes::{artist::get_artist, release::get_release, track::CreateTrack};
 use crate::utils::redirect::redirect;
 
 /// Renders the create track page.
@@ -57,12 +53,7 @@ pub fn CreateTrack() -> impl IntoView {
 
     let track = RwSignal::new(Track::default());
     let create_track = ServerAction::<CreateTrack>::new();
-    let value = Signal::derive(move || {
-        create_track
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(TrackResult::default()))
-    });
+    let value = create_track.value();
 
     view! {
         <Transition fallback=Loading>
@@ -99,7 +90,7 @@ pub fn CreateTrack() -> impl IntoView {
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(track_result) => {
+                                        Some(Ok(track_result)) => {
                                             let track = track_result.track;
                                             if track.id > 0 {
                                                 redirect(
@@ -115,10 +106,11 @@ pub fn CreateTrack() -> impl IntoView {
                                             view! { "" }
                                                 .into_any()
                                         }
-                                        Err(errors) => {
+                                        Some(Err(errors)) => {
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                        None => view! { "" }.into_any(),
                                     }
                                 }} <Form track artist artist_ids release release_ids />
                             </div>
@@ -159,9 +151,9 @@ fn Form(
                 <ArtistSelect primary_artist_id=artist.get().id artist_ids=artist_ids />
 
                 <ReleaseSelect
-                    artist_ids=artist_ids.get()
-                    primary_release=release.get()
-                    initial_release_ids=release_ids.get()
+                    artist_ids=artist_ids
+                    primary_release=release
+                    initial_release_ids=release_ids
                 />
             }
         }}

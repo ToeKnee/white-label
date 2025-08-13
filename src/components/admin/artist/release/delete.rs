@@ -9,7 +9,7 @@ use leptos::prelude::*;
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::release::Release;
-use crate::routes::release::{DeleteRelease, ReleaseResult};
+use crate::routes::release::DeleteRelease;
 
 /// Renders the delete release component.
 ///
@@ -30,12 +30,7 @@ pub fn DeleteRelease(
     };
 
     let update_release = ServerAction::<DeleteRelease>::new();
-    let value = Signal::derive(move || {
-        update_release
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(ReleaseResult::default()))
-    });
+    let value = update_release.value();
 
     view! {
         <button class="btn btn-error" on:click=on_click_show>
@@ -55,7 +50,7 @@ pub fn DeleteRelease(
                     <ActionForm action=update_release>
                         {move || {
                             match value.get() {
-                                Ok(release_result) => {
+                                Some(Ok(release_result)) => {
                                     if release_result.release.deleted_at.is_some() {
                                         release.set(release_result.release);
                                         if let Some(dialog) = dialog_element.get() {
@@ -66,9 +61,10 @@ pub fn DeleteRelease(
                                     view! { "" }
                                         .into_any()
                                 }
-                                Err(errors) => {
+                                Some(Err(errors)) => {
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
+                                None => view! { "" }.into_any(),
                             }
                         }} <input name="slug" type="hidden" value=move || release.get().slug />
                         <button class="btn btn-error">Delete</button>

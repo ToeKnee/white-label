@@ -49,17 +49,15 @@ pub fn Logout() -> impl IntoView {
                         }
                     }>
                         {move || {
-                            if value.get().is_some() {
-                                let this_user = match value.get() {
-                                    Some(Ok(user)) => user,
-                                    Some(Err(e)) => {
-                                        tracing::error!("{e}");
-                                        User::default()
-                                    }
-                                    None => User::default(),
-                                };
-                                user_context.1.set(this_user);
-                            }
+                            let this_user = match value.get() {
+                                Some(Ok(user)) => user,
+                                Some(Err(e)) => {
+                                    tracing::error!("{e}");
+                                    User::default()
+                                }
+                                None => User::default(),
+                            };
+                            user_context.1.set(this_user);
                         }}
                     </ErrorBoundary>
 

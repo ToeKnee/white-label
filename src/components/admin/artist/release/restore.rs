@@ -9,7 +9,7 @@ use leptos::prelude::*;
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::release::Release;
-use crate::routes::release::{ReleaseResult, RestoreRelease};
+use crate::routes::release::RestoreRelease;
 
 /// Renders the restore release component.
 #[component]
@@ -27,15 +27,7 @@ pub fn RestoreRelease(
     };
 
     let update_release = ServerAction::<RestoreRelease>::new();
-    let value = Signal::derive(move || {
-        update_release.value().get().unwrap_or_else(|| {
-            Ok(ReleaseResult {
-                release: release.get(),
-                artists: vec![],
-                tracks: vec![],
-            })
-        })
-    });
+    let value = update_release.value();
 
     view! {
         <button class="btn btn-secondary" on:click=on_click_show>
@@ -55,7 +47,7 @@ pub fn RestoreRelease(
                     <ActionForm action=update_release>
                         {move || {
                             match value.get() {
-                                Ok(release_result) => {
+                                Some(Ok(release_result)) => {
                                     if release_result.release.deleted_at.is_none() {
                                         release.set(release_result.release);
                                         if let Some(dialog) = dialog_element.get() {
@@ -66,9 +58,10 @@ pub fn RestoreRelease(
                                     view! { "" }
                                         .into_any()
                                 }
-                                Err(errors) => {
+                                Some(Err(errors)) => {
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
+                                None => view! { "" }.into_any(),
                             }
                         }} <input name="slug" type="hidden" value=move || release.get().slug />
                         <button class="btn btn-secondary">Restore</button>

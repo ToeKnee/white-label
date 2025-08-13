@@ -19,7 +19,7 @@ use crate::models::{artist::Artist, release::Release, track::Track};
 use crate::routes::{
     artist::get_artist,
     release::get_release,
-    track::{TrackResult, UpdateTrack, get_track},
+    track::{UpdateTrack, get_track},
 };
 use crate::utils::redirect::redirect;
 
@@ -64,12 +64,7 @@ pub fn EditTrack() -> impl IntoView {
     );
     let track = RwSignal::new(Track::default());
     let update_track = ServerAction::<UpdateTrack>::new();
-    let value = Signal::derive(move || {
-        update_track
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(TrackResult::default()))
-    });
+    let value = update_track.value();
     let success = RwSignal::new(false);
 
     let title = move || {
@@ -132,7 +127,7 @@ pub fn EditTrack() -> impl IntoView {
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(track_result) => {
+                                        Some(Ok(track_result)) => {
                                             let fresh_track = track_result.track;
                                             let fresh_artists = track_result.artists;
                                             let fresh_releases = track_result.releases;
@@ -164,10 +159,11 @@ pub fn EditTrack() -> impl IntoView {
                                             view! { "" }
                                                 .into_any()
                                         }
-                                        Err(errors) => {
+                                        Some(Err(errors)) => {
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                        None => view! { "" }.into_any(),
                                     }
                                 }}
                                 {move || {
@@ -221,11 +217,10 @@ fn Form(
                     primary_artist_id=release.get().primary_artist_id
                     artist_ids=artist_ids
                 />
-
                 <ReleaseSelect
-                    artist_ids=artist_ids.get()
-                    primary_release=release.get()
-                    initial_release_ids=release_ids.get()
+                    artist_ids=artist_ids
+                    primary_release=release
+                    initial_release_ids=release_ids
                 />
             }
         }}

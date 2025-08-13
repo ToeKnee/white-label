@@ -15,10 +15,7 @@ use crate::components::{
     },
 };
 use crate::models::{artist::Artist, release::Release};
-use crate::routes::{
-    artist::get_artist,
-    release::{CreateRelease, ReleaseResult},
-};
+use crate::routes::{artist::get_artist, release::CreateRelease};
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
@@ -45,12 +42,7 @@ pub fn CreateRelease() -> impl IntoView {
 
     let (release, _set_release) = signal(Release::default());
     let create_release = ServerAction::<CreateRelease>::new();
-    let value = Signal::derive(move || {
-        create_release
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(ReleaseResult::default()))
-    });
+    let value = create_release.value();
 
     view! {
         <Transition fallback=Loading>
@@ -74,7 +66,7 @@ pub fn CreateRelease() -> impl IntoView {
                             <div class="grid gap-6">
                                 {move || {
                                     match value.get() {
-                                        Ok(release_result) => {
+                                        Some(Ok(release_result)) => {
                                             let release = release_result.release;
                                             if release.id > 0 {
                                                 redirect(
@@ -89,10 +81,11 @@ pub fn CreateRelease() -> impl IntoView {
                                             view! { "" }
                                                 .into_any()
                                         }
-                                        Err(errors) => {
+                                        Some(Err(errors)) => {
                                             view! { <ServerErrors server_errors=Some(errors) /> }
                                                 .into_any()
                                         }
+                                        None => view! { "" }.into_any(),
                                     }
                                 }}
                                 <input

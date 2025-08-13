@@ -27,18 +27,18 @@ fn ids_to_str(ids: &[i64]) -> String {
 #[allow(clippy::needless_pass_by_value)]
 pub fn ReleaseSelect(
     /// The IDs of the artists to fetch releases for.
-    artist_ids: Vec<i64>,
+    artist_ids: RwSignal<Vec<i64>>,
     /// The primary release to be selected by default.
-    primary_release: Release,
+    primary_release: RwSignal<Release>,
     /// The initial release IDs to be checked by default.
-    initial_release_ids: Vec<i64>,
+    initial_release_ids: RwSignal<Vec<i64>>,
 ) -> impl IntoView {
-    let (releases, set_releases) = signal(vec![]);
+    let releases = RwSignal::new(vec![]);
     let releases_resource = Resource::new(
-        move || ids_to_str(&artist_ids.clone()),
+        move || ids_to_str(&artist_ids.get()),
         get_releases_for_artists,
     );
-    let release_ids = RwSignal::new(initial_release_ids);
+    let release_ids = RwSignal::new(initial_release_ids.get_untracked());
 
     view! {
         <Transition fallback=Loading>
@@ -48,7 +48,7 @@ pub fn ReleaseSelect(
                 {move || Suspend::new(async move {
                     if releases.get().is_empty() {
                         if let Ok(release_list) = releases_resource.await {
-                            set_releases.set(release_list.releases);
+                            releases.set(release_list.releases);
                         }
                     }
                     view! {
@@ -66,7 +66,7 @@ pub fn ReleaseSelect(
                                     <option
                                         class="option"
                                         value=release.id
-                                        selected=move || { release.id == primary_release.id }
+                                        selected=move || { release.id == primary_release.get().id }
                                     >
                                         {release.name}
                                     </option>

@@ -9,7 +9,7 @@ use leptos::prelude::*;
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::track::Track;
-use crate::routes::track::{DeleteTrack, TrackResult};
+use crate::routes::track::DeleteTrack;
 
 /// Renders the delete track component.
 ///
@@ -30,12 +30,7 @@ pub fn DeleteTrack(
     };
 
     let update_track = ServerAction::<DeleteTrack>::new();
-    let value = Signal::derive(move || {
-        update_track
-            .value()
-            .get()
-            .unwrap_or_else(|| Ok(TrackResult::default()))
-    });
+    let value = update_track.value();
 
     view! {
         <button class="btn btn-error" on:click=on_click_show>
@@ -55,7 +50,7 @@ pub fn DeleteTrack(
                     <ActionForm action=update_track>
                         {move || {
                             match value.get() {
-                                Ok(track_result) => {
+                                Some(Ok(track_result)) => {
                                     if track_result.track.deleted_at.is_some() {
                                         track.set(track_result.track);
                                         if let Some(dialog) = dialog_element.get() {
@@ -66,9 +61,10 @@ pub fn DeleteTrack(
                                     view! { "" }
                                         .into_any()
                                 }
-                                Err(errors) => {
+                                Some(Err(errors)) => {
                                     view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
                                 }
+                                None => view! { "" }.into_any(),
                             }
                         }} <input name="slug" type="hidden" value=move || track.get().slug />
                         <button class="btn btn-error">Delete</button>
