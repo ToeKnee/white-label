@@ -1,7 +1,6 @@
 //! Routes for managing artists in the application.
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use server_fn::codec::Cbor;
 
 use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
 use crate::models::artist::Artist;
@@ -31,7 +30,7 @@ pub struct ArtistResult {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the artist cannot be found, or if there is an issue with the database connection.
-#[server(GetArtist, "/api", endpoint="get_artist", output = Cbor)]
+#[server(GetArtist, "/api", endpoint = "get_artist")]
 pub async fn get_artist(
     /// The slug of the artist to fetch.
     slug: String,
@@ -50,7 +49,7 @@ pub async fn get_artist(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with creating the artist, such as invalid form data or database connection issues.
-#[server(CreateArtist, "/api", endpoint="create_artist", output = Cbor)]
+#[server(CreateArtist, "/api", endpoint = "create_artist")]
 pub async fn create_artist(
     /// The form containing the details of the artist to be created.
     artist_form: CreateArtistForm,
@@ -71,7 +70,7 @@ pub async fn create_artist(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with updating the artist, such as invalid form data or database connection issues.
-#[server(UpdateArtist, "/api", endpoint="update_artist", output = Cbor)]
+#[server(UpdateArtist, "/api", endpoint = "update_artist")]
 pub async fn update_artist(
     /// The form containing the details of the artist to be updated.
     artist_form: UpdateArtistForm,
@@ -92,7 +91,7 @@ pub async fn update_artist(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with deleting the artist, such as database connection issues or unauthorized access.
-#[server(DeleteArtist, "/api", endpoint="delete_artist", output = Cbor)]
+#[server(DeleteArtist, "/api", endpoint = "delete_artist")]
 pub async fn delete_artist(
     /// The slug of the artist to be deleted.
     slug: String,
@@ -113,7 +112,7 @@ pub async fn delete_artist(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with deleting the artist, such as database connection issues or unauthorized access.
-#[server(RestoreArtist, "/api", endpoint="restore_artist", output = Cbor)]
+#[server(RestoreArtist, "/api", endpoint = "restore_artist")]
 pub async fn restore_artist(
     /// The slug of the artist to be restored.
     slug: String,

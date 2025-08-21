@@ -1,7 +1,6 @@
 //! Routes for handling record label data.
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use server_fn::codec::Cbor;
 
 use crate::models::{artist::Artist, page::Page, record_label::RecordLabel};
 #[cfg(feature = "ssr")]
@@ -35,7 +34,7 @@ pub struct LabelPageResult {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue retrieving the record label.
-#[server(GetRecordLabel, "/api", endpoint="record_label", output = Cbor)]
+#[server(GetRecordLabel, "/api", endpoint = "record_label")]
 pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
     let pool = pool()?;
 
@@ -57,7 +56,7 @@ pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the record label cannot be found, or if there is an issue with the database connection.
-#[server(GetLabelArtists, "/api", endpoint="record_label_artists", output = Cbor)]
+#[server(GetLabelArtists, "/api", endpoint = "record_label_artists")]
 pub async fn get_label_artists() -> Result<LabelArtistResult, ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;
@@ -91,7 +90,7 @@ pub async fn get_label_artists() -> Result<LabelArtistResult, ServerFnError> {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the record label cannot be found, or if there is an issue with the database connection.
-#[server(GetLabelPages, "/api", endpoint="record_label_pages", output = Cbor)]
+#[server(GetLabelPages, "/api", endpoint = "record_label_pages")]
 pub async fn get_label_pages(
     /// The ID of the record label.
     record_label_id: i64,
@@ -130,7 +129,7 @@ pub async fn get_label_pages(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the user is not authenticated, does not have permission to update the label, or if there is an issue with the database connection.
-#[server(UpdateRecordLabel, "/api", endpoint="update_record_label", output = Cbor)]
+#[server(UpdateRecordLabel, "/api", endpoint="update_record_label"r)]
 pub async fn update_record_label(
     /// The ID of the record label to update.
     id: i64,

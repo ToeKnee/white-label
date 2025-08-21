@@ -1,7 +1,6 @@
 //! Routes for `Page` management.
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use server_fn::codec::Cbor;
 
 use crate::forms::page::{CreatePageForm, UpdatePageForm};
 use crate::models::page::Page;
@@ -31,7 +30,7 @@ pub struct PageResult {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the page cannot be found, or if there is an issue with the database connection.
-#[server(GetPage, "/api", endpoint="get_page", output = Cbor)]
+#[server(GetPage, "/api", endpoint = "get_page")]
 pub async fn get_page(
     /// The slug of the page to fetch.
     slug: String,
@@ -52,7 +51,7 @@ pub async fn get_page(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
-#[server(CreatePage, "/api", endpoint="create_page", output = Cbor)]
+#[server(CreatePage, "/api", endpoint = "create_page")]
 pub async fn create_page(
     /// The form data for creating a new page.
     page_form: CreatePageForm,
@@ -73,7 +72,7 @@ pub async fn create_page(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
-#[server(UpdatePage, "/api", endpoint="update_page", output = Cbor)]
+#[server(UpdatePage, "/api", endpoint = "update_page")]
 pub async fn update_page(
     /// The form data for updating an existing page.
     page_form: UpdatePageForm,
@@ -94,7 +93,7 @@ pub async fn update_page(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
-#[server(DeletePage, "/api", endpoint="delete_page", output = Cbor)]
+#[server(DeletePage, "/api", endpoint = "delete_page")]
 pub async fn delete_page(
     /// The slug of the page to delete.
     slug: String,
@@ -115,7 +114,7 @@ pub async fn delete_page(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with deleting the page, such as database connection issues or unauthorized access.
-#[server(RestorePage, "/api", endpoint="restore_page", output = Cbor)]
+#[server(RestorePage, "/api", endpoint = "restore_page")]
 pub async fn restore_page(
     /// The slug of the page to be restored.
     slug: String,

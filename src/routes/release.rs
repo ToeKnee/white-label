@@ -2,7 +2,6 @@
 
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use server_fn::codec::Cbor;
 
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 #[cfg(feature = "ssr")]
@@ -44,7 +43,7 @@ pub struct ReleaseResult {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the artist cannot be found, or if there is an issue with the database connection.
-#[server(GetReleases, "/api", endpoint="get_releases", output = Cbor)]
+#[server(GetReleases, "/api", endpoint = "get_releases")]
 pub async fn get_releases(
     /// The slug of the artist.
     artist_slug: String,
@@ -65,7 +64,11 @@ pub async fn get_releases(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the record label cannot be retrieved.
-#[server(GetNextScheduledRelease, "/api", endpoint="get_next_scheduled_release", output = Cbor)]
+#[server(
+    GetNextScheduledRelease,
+    "/api",
+    endpoint = "get_next_scheduled_release"
+)]
 pub async fn get_next_scheduled_release(
     /// The slug of the artist, if provided.
     artist_slug: Option<String>,
@@ -95,7 +98,7 @@ pub async fn get_next_scheduled_release(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the release cannot be found or if there is an issue with the database connection.
-#[server(GetRelease, "/api", endpoint="get_release", output = Cbor)]
+#[server(GetRelease, "/api", endpoint = "get_release")]
 pub async fn get_release(
     /// The slug of the artist.
     artist_slug: String,
@@ -118,7 +121,7 @@ pub async fn get_release(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the release cannot be created, or if there is an issue with the database connection.
-#[server(CreateRelease, "/api", endpoint="create_release", output = Cbor)]
+#[server(CreateRelease, "/api", endpoint = "create_release")]
 pub async fn create_release(
     /// The form data for creating a new release.
     form: CreateReleaseForm,
@@ -139,7 +142,7 @@ pub async fn create_release(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the release cannot be updated, or if there is an issue with the database connection.
-#[server(UpdateRelease, "/api", endpoint="update_release", output = Cbor)]
+#[server(UpdateRelease, "/api", endpoint = "update_release")]
 pub async fn update_release(
     /// The form data for updating an existing release.
     form: UpdateReleaseForm,
@@ -160,7 +163,7 @@ pub async fn update_release(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the release cannot be deleted, or if there is an issue with the database connection.
-#[server(DeleteRelease, "/api", endpoint="delete_release", output = Cbor)]
+#[server(DeleteRelease, "/api", endpoint = "delete_release")]
 pub async fn delete_release(
     /// The slug of the release to be deleted.
     slug: String,
@@ -181,7 +184,7 @@ pub async fn delete_release(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with deleting the release, such as database connection issues or unauthorized access.
-#[server(RestoreRelease, "/api", endpoint="restore_release", output = Cbor)]
+#[server(RestoreRelease, "/api", endpoint = "restore_release")]
 pub async fn restore_release(
     /// The slug of the release to be restored.
     slug: String,

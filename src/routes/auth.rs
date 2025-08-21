@@ -2,7 +2,6 @@
 #[cfg(feature = "ssr")]
 use bcrypt::verify;
 use leptos::prelude::*;
-use server_fn::codec::Cbor;
 
 use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::models::auth::User;
@@ -20,7 +19,7 @@ use crate::state::{auth, pool};
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the authentication session is not available.
-#[server(GetUser, "/api", endpoint="user", output = Cbor)]
+#[server(GetUser, "/api", endpoint = "user")]
 pub async fn get_user() -> Result<Option<User>, ServerFnError> {
     use crate::state::auth;
 
@@ -44,7 +43,7 @@ pub async fn get_user() -> Result<Option<User>, ServerFnError> {
 /// * The username or password is empty
 /// * If the user does not exist
 /// * If the password does not match the stored hash
-#[server(Login, "/api", endpoint="login", output = Cbor)]
+#[server(Login, "/api", endpoint = "login")]
 pub async fn login(
     /// The username of the user.
     username: String,
@@ -92,7 +91,7 @@ pub async fn login(
 /// * The username or password is empty
 /// * If the user already exists
 /// * If the registration fails for any other reason
-#[server(Register, "/api", endpoint="register", output = Cbor)]
+#[server(Register, "/api", endpoint = "register")]
 pub async fn register(
     /// The form data containing the details of the user to be registered.
     form: RegisterUserForm,
@@ -120,7 +119,7 @@ pub async fn register(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the authentication session is not available.
-#[server(Logout, "/api", endpoint="logout", output = Cbor)]
+#[server(Logout, "/api", endpoint = "logout")]
 pub async fn logout() -> Result<User, ServerFnError> {
     let auth = auth()?;
 
@@ -142,7 +141,7 @@ pub async fn logout() -> Result<User, ServerFnError> {
 /// * The authentication session is not available
 /// * If the user does not exist
 /// * If the update fails for any other reason
-#[server(UpdateUser, "/api", endpoint="update_profile", output = Cbor)]
+#[server(UpdateUser, "/api", endpoint = "update_profile")]
 pub async fn update_user(
     /// The form data containing the updated details of the user.
     user_form: UpdateUserForm,
@@ -170,7 +169,7 @@ pub async fn update_user(
 /// * If the user does not exist
 /// * If the current password does not match the stored hash
 /// * If the new password does not meet the required criteria
-#[server(ChangePassword, "/api", endpoint="change_password", output = Cbor)]
+#[server(ChangePassword, "/api", endpoint = "change_password")]
 pub async fn change_password(
     /// The form data containing the current password and the new password.
     password_form: ChangePasswordForm,

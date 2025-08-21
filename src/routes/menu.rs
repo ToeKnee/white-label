@@ -1,7 +1,6 @@
 //! Routes for handling admin menu data.
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use server_fn::codec::Cbor;
 
 use crate::models::{artist::Artist, page::Page, record_label::RecordLabel, release::Release};
 #[cfg(feature = "ssr")]
@@ -60,7 +59,7 @@ pub struct MenuPage {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue retrieving the record label.
-#[server(GetRecordLabel, "/api", endpoint="admin_menu", output = Cbor)]
+#[server(GetRecordLabel, "/api", endpoint = "admin_menu")]
 pub async fn get_admin_menu() -> Result<AdminMenu, ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;

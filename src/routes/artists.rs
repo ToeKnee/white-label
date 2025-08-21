@@ -2,7 +2,6 @@
 
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use server_fn::codec::Cbor;
 
 use crate::models::release::Release;
 #[cfg(feature = "ssr")]
@@ -27,7 +26,7 @@ pub struct ArtistsReleaseResult {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the releases cannot be retrieved.
-#[server(GetArtistsReleases, "/api", endpoint="artists_releases", output = Cbor)]
+#[server(GetArtistsReleases, "/api", endpoint = "artists_releases")]
 pub async fn get_releases_for_artists(
     /// A comma-separated string of artist IDs.
     artist_ids: String,

@@ -2,7 +2,6 @@
 
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use server_fn::codec::Cbor;
 
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
 use crate::models::{artist::Artist, release::Release, track::Track};
@@ -43,7 +42,7 @@ pub struct TrackResult {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the artist or release cannot be found, or if there is an issue with the database connection.
-#[server(GetTracks, "/api", endpoint="get_tracks", output = Cbor)]
+#[server(GetTracks, "/api", endpoint = "get_tracks")]
 pub async fn get_tracks(
     /// The slug of the artist.
     artist_slug: String,
@@ -68,7 +67,7 @@ pub async fn get_tracks(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the track cannot be found or if there is an issue with the database connection.
-#[server(GetTrack, "/api", endpoint="get_track", output = Cbor)]
+#[server(GetTrack, "/api", endpoint = "get_track")]
 pub async fn get_track(
     /// The slug of the artist.
     artist_slug: String,
@@ -93,7 +92,7 @@ pub async fn get_track(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
-#[server(CreateTrack, "/api", endpoint="create_track", output = Cbor)]
+#[server(CreateTrack, "/api", endpoint = "create_track")]
 pub async fn create_track(
     /// The form data containing the details of the track to be created.
     form: CreateTrackForm,
@@ -114,7 +113,7 @@ pub async fn create_track(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
-#[server(UpdateTrack, "/api", endpoint="update_track", output = Cbor)]
+#[server(UpdateTrack, "/api", endpoint = "update_track")]
 pub async fn update_track(
     /// The form data containing the updated details of the track.
     form: UpdateTrackForm,
@@ -134,7 +133,7 @@ pub async fn update_track(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the user is not authenticated.
-#[server(DeleteTrack, "/api", endpoint="delete_track", output = Cbor)]
+#[server(DeleteTrack, "/api", endpoint = "delete_track")]
 pub async fn delete_track(
     /// The slug of the track to be deleted.
     slug: String,
@@ -155,7 +154,7 @@ pub async fn delete_track(
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with deleting the track, such as database connection issues or unauthorized access.
-#[server(RestoreTrack, "/api", endpoint="restore_track", output = Cbor)]
+#[server(RestoreTrack, "/api", endpoint = "restore_track")]
 pub async fn restore_track(
     /// The slug of the track to be restored.
     slug: String,

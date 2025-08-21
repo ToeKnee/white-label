@@ -2,7 +2,6 @@
 
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use server_fn::codec::Cbor;
 
 use crate::forms::links::LinksForm;
 use crate::models::music_service::MusicService;
@@ -31,7 +30,7 @@ pub struct LinksResult {
 ///
 /// # Errors:
 /// Will return a `ServerFnError` if the artist cannot be found, or if there is an issue with the database connection.
-#[server(GetLinks, "/api", endpoint="get_links", output = Cbor)]
+#[server(GetLinks, "/api", endpoint = "get_links")]
 pub async fn get_links(
     /// The slug of the artist.
     artist_slug: String,
@@ -44,7 +43,7 @@ pub async fn get_links(
 ///
 /// # Arguments:
 /// * `artist_slug`: The slug of the artist.
-#[server(UpdateLinks, "/api", endpoint="update_links", output = Cbor)]
+#[server(UpdateLinks, "/api", endpoint = "update_links")]
 pub async fn update_links(
     /// The form containing the music service and social links to update.
     form: LinksForm,
