@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
+use reactive_stores::Store;
 
 use super::{delete::DeleteTrack, restore::RestoreTrack};
 use crate::components::{
@@ -15,12 +16,12 @@ use crate::components::{
         permissions::permission_or_redirect, success::Success,
     },
 };
-use crate::models::{artist::Artist, release::Release, track::Track};
+use crate::models::{release::Release, track::Track};
 use crate::routes::{
-    artist::get_artist,
     release::get_release,
     track::{UpdateTrack, get_track},
 };
+use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
 /// Renders the edit track page.
@@ -33,18 +34,15 @@ pub fn EditTrack() -> impl IntoView {
 
     let params = use_params_map();
 
-    let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_artist,
-    );
+    let store = expect_context::<Store<GlobalState>>();
+    let artist = store.artist();
     let artist_ids = RwSignal::new(vec![]);
 
     let release = RwSignal::new(Release::default());
     let release_resource = Resource::new(
         move || {
             [
-                params.read().get("slug").unwrap_or_default(),
+                artist.get().slug,
                 params.read().get("release_slug").unwrap_or_default(),
             ]
         },
@@ -55,7 +53,7 @@ pub fn EditTrack() -> impl IntoView {
     let track_resource = Resource::new(
         move || {
             [
-                params.read().get("slug").unwrap_or_default(),
+                artist.get().slug,
                 params.read().get("release_slug").unwrap_or_default(),
                 params.read().get("track_slug").unwrap_or_default(),
             ]
@@ -82,25 +80,12 @@ pub fn EditTrack() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            artist.set(this_artist.artist);
-                        }
-                        _ => {
-                            redirect("/admin/artists");
-                        }
-                    }
                     match release_resource.await {
                         Ok(this_release) => {
                             release.set(this_release.release);
                         }
                         _ => {
-                            redirect(
-                                &format!(
-                                    "/admin/artist/{}/releases",
-                                    params.read().get("slug").unwrap_or_default(),
-                                ),
-                            );
+                            redirect(&format!("/admin/artist/{}/releases", artist.get().slug));
                         }
                     }
                     match track_resource.await {
@@ -113,12 +98,13 @@ pub fn EditTrack() -> impl IntoView {
                             redirect(
                                 &format!(
                                     "/admin/artist/{}/release/{}/tracks",
-                                    params.read().get("slug").unwrap_or_default(),
+                                    artist.get().slug,
                                     params.read().get("release_slug").unwrap_or_default(),
                                 ),
                             );
                         }
                     }
+
                     view! {
                         <Title text=title />
                         <h1>{title}</h1>
@@ -136,7 +122,7 @@ pub fn EditTrack() -> impl IntoView {
                                                     redirect(
                                                         &format!(
                                                             "/admin/artist/{}/release/{}/track/{}",
-                                                            params.read().get("slug").unwrap_or_default(),
+                                                            artist.get().slug,
                                                             params.read().get("release_slug").unwrap_or_default(),
                                                             fresh_track.slug,
                                                         ),

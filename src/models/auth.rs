@@ -73,12 +73,12 @@ impl Validate for User {
             ));
         }
         // Check that the username is unique
-        if let Ok(user) = Self::get_by_username(pool, self.username.clone()).await {
-            if user.id != self.id {
-                return Err(anyhow::anyhow!(
-                    "Username or Email already taken.".to_string()
-                ));
-            }
+        if let Ok(user) = Self::get_by_username(pool, self.username.clone()).await
+            && user.id != self.id
+        {
+            return Err(anyhow::anyhow!(
+                "Username or Email already taken.".to_string()
+            ));
         }
 
         if self.email.len() > 255 {
@@ -90,12 +90,12 @@ impl Validate for User {
             return Err(anyhow::anyhow!("Email must be valid.".to_string()));
         }
         // Check that the email is unique
-        if let Ok(user) = Self::get_by_email(pool, self.email.clone()).await {
-            if user.id != self.id {
-                return Err(anyhow::anyhow!(
-                    "Username or Email already taken.".to_string()
-                ));
-            }
+        if let Ok(user) = Self::get_by_email(pool, self.email.clone()).await
+            && user.id != self.id
+        {
+            return Err(anyhow::anyhow!(
+                "Username or Email already taken.".to_string()
+            ));
         }
 
         Ok(())

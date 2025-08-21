@@ -2,7 +2,6 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use leptos_router::hooks::use_params_map;
 use reactive_stores::Store;
 
 use super::{delete::DeleteArtist, restore::RestoreArtist};
@@ -15,7 +14,6 @@ use crate::components::{
         success::Success,
     },
 };
-use crate::models::artist::Artist;
 use crate::routes::links::{LinksResult, UpdateLinks, get_links};
 use crate::store::{GlobalState, GlobalStateStoreFields};
 
@@ -27,24 +25,12 @@ pub fn EditArtistLinks() -> impl IntoView {
         permission_or_redirect("label_owner", "/admin");
     });
 
-    let params = use_params_map();
     let store = expect_context::<Store<GlobalState>>();
-    let artist = RwSignal::new(
-        store
-            .artist()
-            .get_untracked()
-            .unwrap_or_else(Artist::default),
-    );
-    Effect::new(move || {
-        artist.set(store.artist().get().unwrap_or_else(Artist::default));
-    });
+    let artist = store.artist();
 
     let active_music_services = RwSignal::new(LinksResult::default().music_services);
     let active_social_media_services = RwSignal::new(LinksResult::default().social_media_services);
-    let links_resource = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_links,
-    );
+    let links_resource = Resource::new(move || artist.get().slug, get_links);
 
     let update_artist_links = ServerAction::<UpdateLinks>::new();
     let value = update_artist_links.value();
@@ -109,7 +95,7 @@ pub fn EditArtistLinks() -> impl IntoView {
                                     type="text"
                                     class="hidden"
                                     name="form[artist_slug]"
-                                    value=move || params.read().get("slug").unwrap_or_default()
+                                    value=move || artist.get().slug
                                 /> <div class="divider">Music Services</div>
                                 {move || {
                                     view! { <MusicServiceEdit active_music_services /> }

@@ -8,7 +8,6 @@ use crate::components::{
     files::upload::FileUploadWithProgress, utils::permissions::permission_or_redirect,
 };
 use crate::config::upload::UploadConfiguration;
-use crate::models::artist::Artist;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 
 /// Renders the edit artist image page.
@@ -19,15 +18,7 @@ pub fn EditArtistImages() -> impl IntoView {
     });
 
     let store = expect_context::<Store<GlobalState>>();
-    let artist = RwSignal::new(
-        store
-            .artist()
-            .get_untracked()
-            .unwrap_or_else(Artist::default),
-    );
-    Effect::new(move || {
-        artist.set(store.artist().get().unwrap_or_else(Artist::default));
-    });
+    let artist = store.artist();
 
     view! {
         <Title text=move || format!("{} Images", artist.get().name) />

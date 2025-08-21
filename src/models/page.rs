@@ -61,10 +61,10 @@ impl Validate for Page {
         }
         // Check that the slug is unique
         let include_hidden = true; // We want to check for uniqueness even if the page is hidden
-        if let Ok(page) = Self::get_by_slug(pool, self.slug.clone(), include_hidden).await {
-            if page.id != self.id {
-                return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
-            }
+        if let Ok(page) = Self::get_by_slug(pool, self.slug.clone(), include_hidden).await
+            && page.id != self.id
+        {
+            return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
         }
 
         // Check that the description is less than 255 characters

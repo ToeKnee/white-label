@@ -50,10 +50,10 @@ impl Validate for RecordLabel {
             ));
         }
         // Check that the slug is unique
-        if let Ok(record_label) = Self::get_by_slug(pool, self.slug.clone()).await {
-            if record_label.id != self.id {
-                return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
-            }
+        if let Ok(record_label) = Self::get_by_slug(pool, self.slug.clone()).await
+            && record_label.id != self.id
+        {
+            return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
         }
 
         Ok(())

@@ -68,10 +68,10 @@ impl Validate for Track {
             ));
         }
         // Check that the slug is unique
-        if let Ok(track) = Self::get_by_slug(pool, self.slug.clone()).await {
-            if track.id != self.id {
-                return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
-            }
+        if let Ok(track) = Self::get_by_slug(pool, self.slug.clone()).await
+            && track.id != self.id
+        {
+            return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
         }
 
         // Check that the artist referenced in the primary_artist_id exists
@@ -1300,7 +1300,7 @@ mod tests {
         assert_eq!(artists[0].id, artist3.id);
     }
 
-    /// Test get_artists
+    /// Test `get_artists`
     #[sqlx::test]
     async fn test_get_artists(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1389,7 +1389,7 @@ mod tests {
         assert_eq!(releases[0].id, release3.id);
     }
 
-    /// Test get_releases
+    /// Test `get_releases`
     #[sqlx::test]
     async fn test_get_releases(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();

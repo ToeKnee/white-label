@@ -6,16 +6,18 @@
 use leptos::ev::MouseEvent;
 use leptos::html;
 use leptos::prelude::*;
+use reactive_stores::{Store, Subfield};
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::artist::Artist;
 use crate::routes::artist::DeleteArtist;
+use crate::store::GlobalState;
 
 /// Renders the delete artist component.
 #[component]
 pub fn DeleteArtist(
     /// The artist to delete
-    artist: RwSignal<Artist>,
+    artist: Subfield<Store<GlobalState>, GlobalState, Artist>,
 ) -> impl IntoView {
     let dialog_element: NodeRef<html::Dialog> = NodeRef::new();
 

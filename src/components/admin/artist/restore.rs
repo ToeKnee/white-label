@@ -6,16 +6,18 @@
 use leptos::ev::MouseEvent;
 use leptos::html;
 use leptos::prelude::*;
+use reactive_stores::{Store, Subfield};
 
 use crate::components::utils::error::ServerErrors;
 use crate::models::artist::Artist;
 use crate::routes::artist::RestoreArtist;
+use crate::store::GlobalState;
 
 /// Renders the restore artist component.
 #[component]
 pub fn RestoreArtist(
     /// The artist to restore
-    artist: RwSignal<Artist>,
+    artist: Subfield<Store<GlobalState>, GlobalState, Artist>,
 ) -> impl IntoView {
     let dialog_element: NodeRef<html::Dialog> = NodeRef::new();
 

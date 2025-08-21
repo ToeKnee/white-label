@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use reactive_stores::Store;
+use reactive_stores::{Store, Subfield};
 
 use super::{delete::DeleteArtist, restore::RestoreArtist};
 use crate::components::{
@@ -26,15 +26,7 @@ pub fn EditArtist() -> impl IntoView {
     });
 
     let store = expect_context::<Store<GlobalState>>();
-    let artist = RwSignal::new(
-        store
-            .artist()
-            .get_untracked()
-            .unwrap_or_else(Artist::default),
-    );
-    Effect::new(move || {
-        artist.set(store.artist().get().unwrap_or_else(Artist::default));
-    });
+    let artist = store.artist();
     let update_artist = ServerAction::<UpdateArtist>::new();
     let value = update_artist.value();
     let success = RwSignal::new(false);
@@ -56,7 +48,7 @@ pub fn EditArtist() -> impl IntoView {
                                         Some(Ok(artist_result)) => {
                                             let fresh_artist = artist_result.artist;
                                             if fresh_artist.id > 0 {
-                                                store.artist().set(Some(fresh_artist.clone()));
+                                                store.artist().set(fresh_artist.clone());
                                                 if fresh_artist.slug != artist.get().slug {
                                                     redirect(&format!("/admin/artist/{}", fresh_artist.slug));
                                                 }
@@ -97,7 +89,7 @@ pub fn EditArtist() -> impl IntoView {
 }
 
 #[component]
-fn Form(artist: RwSignal<Artist>) -> impl IntoView {
+fn Form(artist: Subfield<Store<GlobalState>, GlobalState, Artist>) -> impl IntoView {
     view! {
         <input
             type="text"

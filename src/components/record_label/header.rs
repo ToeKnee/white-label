@@ -23,10 +23,10 @@ pub fn LabelHeader() -> impl IntoView {
                     ErrorPage
                 }>
                     {move || Suspend::new(async move {
-                        if store.record_label().get().id == 0 {
-                            if let Ok(record_label_result) = record_label_resource.await {
-                                store.record_label().set(record_label_result.record_label);
-                            }
+                        if store.record_label().get().id == 0
+                            && let Ok(record_label_result) = record_label_resource.await
+                        {
+                            store.record_label().set(record_label_result.record_label);
                         }
                         view! {
                             <div class="navbar-start">

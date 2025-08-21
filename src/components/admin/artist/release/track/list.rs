@@ -2,12 +2,14 @@
 
 use leptos::prelude::*;
 use leptos_router::{components::A, hooks::use_params_map};
+use reactive_stores::Store;
 
 use crate::components::utils::{
     error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
 };
-use crate::models::{artist::Artist, release::Release, track::Track};
-use crate::routes::{artist::get_artist, release::get_release, track::get_tracks};
+use crate::models::{release::Release, track::Track};
+use crate::routes::{release::get_release, track::get_tracks};
+use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
 /// Renders the list tracks page.
@@ -20,16 +22,13 @@ pub fn Tracks() -> impl IntoView {
 
     let params = use_params_map();
 
-    let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new_blocking(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_artist,
-    );
+    let store = expect_context::<Store<GlobalState>>();
+    let artist = store.artist();
 
-    let release_resource = Resource::new_blocking(
+    let release_resource = Resource::new(
         move || {
             [
-                params.read().get("slug").unwrap_or_default(),
+                artist.get().slug,
                 params.read().get("release_slug").unwrap_or_default(),
             ]
         },
@@ -37,10 +36,10 @@ pub fn Tracks() -> impl IntoView {
     );
     let release = RwSignal::new(Release::default());
 
-    let tracks_resource = Resource::new_blocking(
+    let tracks_resource = Resource::new(
         move || {
             [
-                params.read().get("slug").unwrap_or_default(),
+                artist.get().slug,
                 params.read().get("release_slug").unwrap_or_default(),
             ]
         },
@@ -56,26 +55,13 @@ pub fn Tracks() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            artist.set(this_artist.artist);
-                        }
-                        _ => {
-                            redirect("/admin/artists");
-                        }
-                    }
                     match release_resource.await {
                         Ok(this_release) => {
                             release.set(this_release.release);
                             title.set(format!("{} Tracks", release.get().name));
                         }
                         _ => {
-                            redirect(
-                                &format!(
-                                    "/admin/artist/{}",
-                                    params.read().get("slug").unwrap_or_default(),
-                                ),
-                            );
+                            redirect(&format!("/admin/artist/{}", artist.get().slug));
                         }
                     }
                     match tracks_resource.await {
@@ -86,7 +72,7 @@ pub fn Tracks() -> impl IntoView {
                             redirect(
                                 &format!(
                                     "/admin/artist/{}/release/{}",
-                                    params.read().get("slug").unwrap_or_default(),
+                                    artist.get().slug,
                                     params.read().get("release_slug").unwrap_or_default(),
                                 ),
                             );
@@ -118,7 +104,7 @@ pub fn Tracks() -> impl IntoView {
                                 >
                                     <TrackRow
                                         track=track
-                                        artist_slug=params.read().get("slug").unwrap_or_default()
+                                        artist_slug=artist.get().slug
                                         release_slug=params
                                             .read()
                                             .get("release_slug")
@@ -133,7 +119,7 @@ pub fn Tracks() -> impl IntoView {
                                         href=move || {
                                             format!(
                                                 "/admin/artist/{}/release/{}/tracks/new",
-                                                params.read().get("slug").unwrap_or_default(),
+                                                artist.get().slug,
                                                 params.read().get("release_slug").unwrap_or_default(),
                                             )
                                         }

@@ -46,10 +46,8 @@ pub fn ReleaseSelect(
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if releases.get().is_empty() {
-                        if let Ok(release_list) = releases_resource.await {
-                            releases.set(release_list.releases);
-                        }
+                    if releases.get().is_empty() && let Ok(release_list) = releases_resource.await {
+                        releases.set(release_list.releases);
                     }
                     view! {
                         <div class="flex flex-col gap-4">

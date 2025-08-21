@@ -62,10 +62,10 @@ impl Validate for Artist {
             ));
         }
         // Check that the slug is unique
-        if let Ok(artist) = Self::get_by_slug(pool, self.slug.clone()).await {
-            if artist.id != self.id {
-                return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
-            }
+        if let Ok(artist) = Self::get_by_slug(pool, self.slug.clone()).await
+            && artist.id != self.id
+        {
+            return Err(anyhow::anyhow!("Slug must be unique.".to_string()));
         }
 
         // Check that the record label exists

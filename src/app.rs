@@ -107,10 +107,9 @@ pub fn WhiteLabel() -> impl IntoView {
                             |this_user| {
                                 if this_user.clone().unwrap_or_default().is_authenticated()
                                     && !user.get().is_authenticated()
+                                    && let Some(ref user) = this_user
                                 {
-                                    if let Some(ref user) = this_user {
-                                        *set_user.write() = user.clone();
-                                    }
+                                    *set_user.write() = user.clone();
                                 }
                                 this_user
                             },
@@ -143,25 +142,37 @@ pub fn WhiteLabel() -> impl IntoView {
                         <Route path=path!("label") view=EditLabel />
                         <ParentRoute path=path!("artist") view=AdminArtistRoot>
                             <Route path=path!("") view=CreateArtist />
-                            <Route path=path!(":slug") view=EditArtist />
-                            <Route path=path!(":slug/") view=EditArtist />
-                            <Route path=path!(":slug/links") view=EditArtistLinks />
-                            <Route path=path!(":slug/links/") view=EditArtistLinks />
-                            <Route path=path!(":slug/images") view=EditArtistImages />
-                            <Route path=path!(":slug/images/") view=EditArtistImages />
-                            <Route path=path!(":slug/releases") view=Releases />
-                            <Route path=path!(":slug/releases/") view=Releases />
-                            <Route path=path!(":slug/releases/new") view=CreateRelease />
-                            <Route path=path!(":slug/release/:release_slug") view=EditRelease />
-                            <Route path=path!(":slug/release/:release_slug/") view=EditRelease />
-                            <Route path=path!(":slug/release/:release_slug/tracks") view=Tracks />
-                            <Route path=path!(":slug/release/:release_slug/tracks/") view=Tracks />
+                            <Route path=path!(":artist_slug") view=EditArtist />
+                            <Route path=path!(":artist_slug/") view=EditArtist />
+                            <Route path=path!(":artist_slug/links") view=EditArtistLinks />
+                            <Route path=path!(":artist_slug/links/") view=EditArtistLinks />
+                            <Route path=path!(":artist_slug/images") view=EditArtistImages />
+                            <Route path=path!(":artist_slug/images/") view=EditArtistImages />
+                            <Route path=path!(":artist_slug/releases") view=Releases />
+                            <Route path=path!(":artist_slug/releases/") view=Releases />
+                            <Route path=path!(":artist_slug/releases/new") view=CreateRelease />
                             <Route
-                                path=path!(":slug/release/:release_slug/tracks/new")
+                                path=path!(":artist_slug/release/:release_slug")
+                                view=EditRelease
+                            />
+                            <Route
+                                path=path!(":artist_slug/release/:release_slug/")
+                                view=EditRelease
+                            />
+                            <Route
+                                path=path!(":artist_slug/release/:release_slug/tracks")
+                                view=Tracks
+                            />
+                            <Route
+                                path=path!(":artist_slug/release/:release_slug/tracks/")
+                                view=Tracks
+                            />
+                            <Route
+                                path=path!(":artist_slug/release/:release_slug/tracks/new")
                                 view=CreateTrack
                             />
                             <Route
-                                path=path!(":slug/release/:release_slug/track/:track_slug")
+                                path=path!(":artist_slug/release/:release_slug/track/:track_slug")
                                 view=EditTrack
                             />
                         </ParentRoute>

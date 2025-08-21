@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
+use reactive_stores::{Store, Subfield};
 
 use crate::components::{
     admin::shared::{
@@ -14,8 +15,10 @@ use crate::components::{
         permissions::permission_or_redirect,
     },
 };
+use crate::store::{GlobalState, GlobalStateStoreFields};
+
 use crate::models::{artist::Artist, release::Release, track::Track};
-use crate::routes::{artist::get_artist, release::get_release, track::CreateTrack};
+use crate::routes::{release::get_release, track::CreateTrack};
 use crate::utils::redirect::redirect;
 
 /// Renders the create track page.
@@ -26,11 +29,9 @@ pub fn CreateTrack() -> impl IntoView {
     });
 
     let params = use_params_map();
-    let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_artist,
-    );
+    let store = expect_context::<Store<GlobalState>>();
+    let artist = store.artist();
+
     let artist_ids = RwSignal::new(vec![]);
     Effect::new_isomorphic(move || {
         artist_ids.set(vec![artist.get().id]);
@@ -40,7 +41,7 @@ pub fn CreateTrack() -> impl IntoView {
     let release_resource = Resource::new(
         move || {
             [
-                params.read().get("slug").unwrap_or_default(),
+                artist.get().slug,
                 params.read().get("release_slug").unwrap_or_default(),
             ]
         },
@@ -61,27 +62,15 @@ pub fn CreateTrack() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            artist.set(this_artist.artist);
-                        }
-                        _ => {
-                            redirect("/admin/artists");
-                        }
-                    }
                     match release_resource.await {
                         Ok(this_release) => {
                             release.set(this_release.release);
                         }
                         _ => {
-                            redirect(
-                                &format!(
-                                    "/admin/artist/{}/releases",
-                                    params.read().get("slug").unwrap_or_default(),
-                                ),
-                            );
+                            redirect(&format!("/admin/artist/{}/releases", artist.get().slug));
                         }
                     }
+
                     view! {
                         <Title text="New Release" />
                         <h1>New Release</h1>
@@ -96,7 +85,7 @@ pub fn CreateTrack() -> impl IntoView {
                                                 redirect(
                                                     &format!(
                                                         "/admin/artist/{}/release/{}/track/{}",
-                                                        params.read().get("slug").unwrap_or_default(),
+                                                        artist.get().slug,
                                                         params.read().get("release_slug").unwrap_or_default(),
                                                         track.slug,
                                                     ),
@@ -125,7 +114,7 @@ pub fn CreateTrack() -> impl IntoView {
 #[component]
 fn Form(
     track: RwSignal<Track>,
-    artist: RwSignal<Artist>,
+    artist: Subfield<Store<GlobalState>, GlobalState, Artist>,
     artist_ids: RwSignal<Vec<i64>>,
     release: RwSignal<Release>,
     release_ids: RwSignal<Vec<i64>>,

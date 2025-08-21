@@ -2,8 +2,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use leptos_router::hooks::use_params_map;
-use reactive_stores::Store;
+use reactive_stores::{Store, Subfield};
 
 use crate::components::{
     admin::shared::{
@@ -15,7 +14,7 @@ use crate::components::{
     },
 };
 use crate::models::{artist::Artist, release::Release};
-use crate::routes::{artist::get_artist, release::CreateRelease};
+use crate::routes::release::CreateRelease;
 use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
@@ -27,14 +26,9 @@ pub fn CreateRelease() -> impl IntoView {
     });
 
     let store = expect_context::<Store<GlobalState>>();
-    let record_label = move || store.record_label().get();
+    let record_label = store.record_label();
+    let artist = store.artist();
 
-    let params = use_params_map();
-    let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_artist,
-    );
     let artist_ids = RwSignal::new(vec![]);
     Effect::new_isomorphic(move || {
         artist_ids.set(vec![artist.get().id]);
@@ -46,59 +40,44 @@ pub fn CreateRelease() -> impl IntoView {
 
     view! {
         <Transition fallback=Loading>
-            <ErrorBoundary fallback=|_| {
-                ErrorPage
-            }>
-                {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            artist.set(this_artist.artist);
-                        }
-                        _ => {
-                            redirect("/admin/artists");
-                        }
-                    }
-                    view! {
-                        <Title text="New Release" />
-                        <h1>New Release</h1>
+            <ErrorBoundary fallback=|_| { ErrorPage }>
+                <Title text="New Release" />
+                <h1>New Release</h1>
 
-                        <ActionForm action=create_release>
-                            <div class="grid gap-6">
-                                {move || {
-                                    match value.get() {
-                                        Some(Ok(release_result)) => {
-                                            let release = release_result.release;
-                                            if release.id > 0 {
-                                                redirect(
-                                                    &format!(
-                                                        "/admin/artist/{}/release/{}",
-                                                        artist.get().slug,
-                                                        release.slug,
-                                                    ),
-                                                );
-                                            }
-
-                                            view! { "" }
-                                                .into_any()
-                                        }
-                                        Some(Err(errors)) => {
-                                            view! { <ServerErrors server_errors=Some(errors) /> }
-                                                .into_any()
-                                        }
-                                        None => view! { "" }.into_any(),
+                <ActionForm action=create_release>
+                    <div class="grid gap-6">
+                        {move || {
+                            match value.get() {
+                                Some(Ok(release_result)) => {
+                                    let release = release_result.release;
+                                    if release.id > 0 {
+                                        redirect(
+                                            &format!(
+                                                "/admin/artist/{}/release/{}",
+                                                artist.get().slug,
+                                                release.slug,
+                                            ),
+                                        );
                                     }
-                                }}
-                                <input
-                                    type="text"
-                                    class="hidden"
-                                    placeholder=""
-                                    name="form[label_id]"
-                                    value=move || { record_label().id }
-                                /><Form release artist artist_ids />
-                            </div>
-                        </ActionForm>
-                    }
-                })}
+
+                                    view! { "" }
+                                        .into_any()
+                                }
+                                Some(Err(errors)) => {
+                                    view! { <ServerErrors server_errors=Some(errors) /> }.into_any()
+                                }
+                                None => view! { "" }.into_any(),
+                            }
+                        }}
+                        <input
+                            type="text"
+                            class="hidden"
+                            placeholder=""
+                            name="form[label_id]"
+                            value=move || { record_label.get().id }
+                        /><Form release artist artist_ids />
+                    </div>
+                </ActionForm>
             </ErrorBoundary>
         </Transition>
     }
@@ -107,7 +86,7 @@ pub fn CreateRelease() -> impl IntoView {
 #[component]
 fn Form(
     release: ReadSignal<Release>,
-    artist: RwSignal<Artist>,
+    artist: Subfield<Store<GlobalState>, GlobalState, Artist>,
     artist_ids: RwSignal<Vec<i64>>,
 ) -> impl IntoView {
     view! {

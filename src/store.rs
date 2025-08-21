@@ -10,5 +10,5 @@ pub struct GlobalState {
     /// The currently selected record label
     record_label: RecordLabel,
     /// The currently selected artist
-    artist: Option<Artist>,
+    artist: Artist,
 }

@@ -2,16 +2,16 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use leptos_router::{components::A, hooks::use_params_map};
+use leptos_router::components::A;
+use reactive_stores::Store;
 
 use crate::components::utils::{
     error::ErrorPage, loading::Loading, permissions::permission_or_redirect,
     status_badge::StatusBadge,
 };
-use crate::models::{artist::Artist, release::Release};
-use crate::routes::{artist::get_artist, release::get_releases};
-
-use crate::utils::redirect::redirect;
+use crate::models::release::Release;
+use crate::routes::release::get_releases;
+use crate::store::{GlobalState, GlobalStateStoreFields};
 
 /// Renders the list releases page.
 #[component]
@@ -21,18 +21,10 @@ pub fn Releases() -> impl IntoView {
         permission_or_redirect("label_owner", "/admin");
     });
 
-    let params = use_params_map();
+    let store = expect_context::<Store<GlobalState>>();
+    let artist = store.artist();
 
-    let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_artist,
-    );
-
-    let releases_resource = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_releases,
-    );
+    let releases_resource = Resource::new(move || artist.get().slug, get_releases);
     let (releases, set_releases) = signal(Vec::new());
 
     view! {
@@ -41,99 +33,97 @@ pub fn Releases() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    match artist_resource.await {
-                        Ok(this_artist) => {
-                            artist.set(this_artist.artist);
-                        }
-                        _ => {
-                            redirect("/admin/artists");
-                        }
-                    }
-                    if !params.read().get("slug").unwrap_or_default().is_empty() {
-                        if let Ok(releases) = releases_resource.await {
-                            set_releases.set(releases.releases);
-                        } else {
-                            tracing::error!("Error while getting releases");
-                            redirect("/admin/artists");
+                    if artist.get().id != 0 {
+                        match releases_resource.await {
+                            Ok(releases_result) => {
+                                set_releases.set(releases_result.releases);
+                            }
+                            Err(e) => {
+                                tracing::error!("Error while getting releases: {}", e);
+                            }
                         }
                     }
-
-                    view! {
-                        <Title text=move || format!("{} Releases", artist.get().name) />
-                        <h1>{move || format!("{} Releases", artist.get().name)}</h1>
-
-                        <div class="overflow-x-auto">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th></th>
-                                        <th>Name</th>
-                                        <th>Tracks</th>
-                                        <th>Release Date</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <Show
-                                        when=move || { !releases.get().is_empty() }
-                                        fallback=|| {
-                                            view! {
-                                                <tr>
-                                                    <td colspan="5">No releases found.</td>
-                                                </tr>
-                                            }
+                })} <Title text=move || format!("{} Releases", artist.get().name) />
+                <h1>{move || format!("{} Releases", artist.get().name)}</h1>
+                <div class="overflow-x-auto">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Name</th>
+                                <th>Tracks</th>
+                                <th>Release Date</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <Show
+                                when=move || { !releases.get().is_empty() }
+                                fallback=|| {
+                                    view! {
+                                        <tr>
+                                            <td colspan="5">No releases found.</td>
+                                        </tr>
+                                    }
+                                }
+                            >
+                                <For
+                                    each=move || releases.get()
+                                    key=|release| (release.slug.clone(), release.name.clone())
+                                    let(release)
+                                >
+                                    <ReleaseRow release=release />
+                                </For>
+                            </Show>
+                            <tr>
+                                <td colspan="4"></td>
+                                <td>
+                                    <A
+                                        href=move || {
+                                            format!("/admin/artist/{}/releases/new", artist.get().slug)
                                         }
+                                        attr:class="btn btn-primary"
                                     >
-                                        <For
-                                            each=move || releases.get()
-                                            key=|release| (release.slug.clone(), release.name.clone())
-                                            let(release)
-                                        >
-                                            <ReleaseRow
-                                                release=release
-                                                artist_slug=params.read().get("slug").unwrap_or_default()
-                                            />
-                                        </For>
-                                    </Show>
-                                    <tr>
-                                        <td colspan="4"></td>
-                                        <td>
-                                            <A
-                                                href=format!(
-                                                    "/admin/artist/{}/releases/new",
-                                                    params.read().get("slug").unwrap_or_default(),
-                                                )
-                                                attr:class="btn btn-primary"
-                                            >
-                                                Add
-                                            </A>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                <tfoot>
-                                    <tr>
-                                        <th></th>
-                                        <th>Name</th>
-                                        <th>Tracks</th>
-                                        <th>Release Date</th>
-                                        <th></th>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    }
-                })}
+                                        Add
+
+                                    </A>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th>Name</th>
+                                <th>Tracks</th>
+                                <th>Release Date</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
             </ErrorBoundary>
         </Transition>
     }
 }
 
 #[component]
-fn ReleaseRow(#[prop(into)] release: Release, artist_slug: String) -> impl IntoView {
+fn ReleaseRow(#[prop(into)] release: Release) -> impl IntoView {
+    let store = expect_context::<Store<GlobalState>>();
+    let artist = store.artist();
+
     let release_date = release.release_date.map_or_else(
         || "Unreleased".to_string(),
         |date| date.format("%e %B %Y").to_string(),
     );
+    let release_slug = release.slug.clone();
+    let release_url = move || {
+        format!(
+            "/admin/artist/{}/release/{}",
+            artist.get().slug,
+            release_slug,
+        )
+    };
 
     view! {
         <tr>
@@ -153,11 +143,7 @@ fn ReleaseRow(#[prop(into)] release: Release, artist_slug: String) -> impl IntoV
                     </div>
                     <div>
                         <div class="font-bold">
-                            <A href=format!(
-                                "/admin/artist/{}/release/{}",
-                                artist_slug,
-                                release.slug,
-                            )>{release.name.clone()}</A>
+                            <A href=release_url>{release.name.clone()}</A>
                         </div>
                         <div class="text-sm opacity-50">
                             {release.catalogue_number.clone()} <br /> {release.slug.clone()}
@@ -169,7 +155,9 @@ fn ReleaseRow(#[prop(into)] release: Release, artist_slug: String) -> impl IntoV
             <td>{release_date}</td>
             <td>
                 <A
-                    href=format!("/admin/artist/{}/release/{}", artist_slug, release.slug)
+                    href=move || {
+                        format!("/admin/artist/{}/release/{}", artist.get().slug, release.slug)
+                    }
                     attr:class="btn btn-primary"
                 >
                     Edit

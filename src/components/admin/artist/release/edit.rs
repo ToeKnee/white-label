@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
+use reactive_stores::{Store, Subfield};
 
 use super::{delete::DeleteRelease, restore::RestoreRelease};
 use crate::components::{
@@ -20,10 +21,8 @@ use crate::components::{
 };
 use crate::config::upload::UploadConfiguration;
 use crate::models::{artist::Artist, release::Release};
-use crate::routes::{
-    artist::get_artist,
-    release::{UpdateRelease, get_release},
-};
+use crate::routes::release::{UpdateRelease, get_release};
+use crate::store::{GlobalState, GlobalStateStoreFields};
 use crate::utils::redirect::redirect;
 
 fn artists_ids(artists: &[Artist]) -> Vec<i64> {
@@ -40,19 +39,16 @@ pub fn EditRelease() -> impl IntoView {
 
     let params = use_params_map();
 
-    let artist = RwSignal::new(Artist::default());
-    let artist_resource = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_artist,
-    );
+    let store = expect_context::<Store<GlobalState>>();
+    let artist = store.artist();
 
     let release = RwSignal::new(Release::default());
     let artists = RwSignal::new(Vec::new()); // Artists on the release
     let artist_ids = RwSignal::new(vec![]);
-    let release_resource = Resource::new_blocking(
+    let release_resource = Resource::new(
         move || {
             (
-                params.read().get("slug").unwrap_or_default(),
+                artist.get().slug,
                 params.read().get("release_slug").unwrap_or_default(),
             )
         },
@@ -71,95 +67,75 @@ pub fn EditRelease() -> impl IntoView {
                         ErrorPage
                     }>
                         {move || Suspend::new(async move {
-                            match artist_resource.await {
-                                Ok(this_artist) => {
-                                    artist.set(this_artist.artist);
-                                }
-                                Err(_) => {
-                                    redirect("/admin/artists/");
-                                }
-                            }
                             match release_resource.await {
                                 Ok(this_release) => {
                                     release.set(this_release.release);
                                     artists.set(this_release.artists.clone());
                                     artist_ids.set(artists_ids(&this_release.artists));
                                 }
-                                Err(_) => {
-                                    redirect(
-                                        &format!(
-                                            "/admin/artists/{}/releases",
-                                            params.read().get("slug").unwrap_or_default(),
-                                        ),
-                                    );
+                                Err(e) => {
+                                    tracing::error!("Failed to fetch release. Error: {e:?}");
                                 }
                             }
-
-                            view! {
-                                <Title text=move || {
-                                    format!("{} - {}", release.get().name, artist.get().name)
-                                } />
-                                <h1>
-                                    {move || {
-                                        format!("{} - {}", release.get().name, artist.get().name)
-                                    }}
-                                </h1>
-
-                                <ActionForm action=update_release>
-                                    <div class="grid gap-6">
-                                        {move || {
-                                            match value.get() {
-                                                Some(Ok(release_result)) => {
-                                                    let fresh_release = release_result.release;
-                                                    let fresh_artists = release_result.artists;
-                                                    if fresh_release.id > 0 {
-                                                        if fresh_release.slug != release.get().slug {
-                                                            redirect(
-                                                                &format!(
-                                                                    "/admin/artist/{}/release/{}",
-                                                                    artist.get().slug,
-                                                                    fresh_release.slug,
-                                                                ),
-                                                            );
-                                                        }
-                                                        if fresh_release != release.get() {
-                                                            release.set(fresh_release);
-                                                        }
-                                                        if fresh_artists != artists.get() {
-                                                            artists.set(fresh_artists.clone());
-                                                            artist_ids.set(artists_ids(&fresh_artists));
-                                                        }
-                                                        if !success.get() {
-                                                            success.set(true);
-                                                        }
-                                                    } else {
-                                                        success.set(false);
-                                                    }
-
-                                                    view! { "" }
-                                                        .into_any()
-                                                }
-                                                Some(Err(errors)) => {
-                                                    success.set(false);
-                                                    view! { <ServerErrors server_errors=Some(errors) /> }
-                                                        .into_any()
-                                                }
-                                                None => view! { "" }.into_any(),
-                                            }
-                                        }}
-                                        {move || {
-                                            view! {
-                                                <Success
-                                                    message=format!("{} Updated!", release.get().name)
-                                                    show=success.get()
-                                                />
-                                            }
-                                        }}
-                                        <Form release=release artist=artist artist_ids=artist_ids />
-                                    </div>
-                                </ActionForm>
-                            }
                         })}
+                        <Title text=move || {
+                            format!("{} - {}", release.get().name, artist.get().name)
+                        } />
+                        <h1>
+                            {move || { format!("{} - {}", release.get().name, artist.get().name) }}
+                        </h1> <ActionForm action=update_release>
+                            <div class="grid gap-6">
+                                {move || {
+                                    match value.get() {
+                                        Some(Ok(release_result)) => {
+                                            let fresh_release = release_result.release;
+                                            let fresh_artists = release_result.artists;
+                                            if fresh_release.id > 0 {
+                                                if fresh_release.slug != release.get().slug {
+                                                    redirect(
+                                                        &format!(
+                                                            "/admin/artist/{}/release/{}",
+                                                            artist.get().slug,
+                                                            fresh_release.slug,
+                                                        ),
+                                                    );
+                                                }
+                                                if fresh_release != release.get() {
+                                                    release.set(fresh_release);
+                                                }
+                                                if fresh_artists != artists.get() {
+                                                    artists.set(fresh_artists.clone());
+                                                    artist_ids.set(artists_ids(&fresh_artists));
+                                                }
+                                                if !success.get() {
+                                                    success.set(true);
+                                                }
+                                            } else {
+                                                success.set(false);
+                                            }
+
+                                            view! { "" }
+                                                .into_any()
+                                        }
+                                        Some(Err(errors)) => {
+                                            success.set(false);
+                                            view! { <ServerErrors server_errors=Some(errors) /> }
+                                                .into_any()
+                                        }
+                                        None => view! { "" }.into_any(),
+                                    }
+                                }}
+                                {move || {
+                                    view! {
+                                        <Success
+                                            message=format!("{} Updated!", release.get().name)
+                                            show=success.get()
+                                        />
+                                    }
+                                }} <Form release=release artist=artist artist_ids=artist_ids />
+                            </div>
+                        </ActionForm>
+
                     </ErrorBoundary>
                 </Transition>
             </div>
@@ -173,7 +149,7 @@ pub fn EditRelease() -> impl IntoView {
 #[component]
 fn Form(
     release: RwSignal<Release>,
-    artist: RwSignal<Artist>,
+    artist: Subfield<Store<GlobalState>, GlobalState, Artist>,
     artist_ids: RwSignal<Vec<i64>>,
 ) -> impl IntoView {
     view! {
