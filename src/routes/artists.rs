@@ -31,7 +31,7 @@ pub async fn get_releases_for_artists(
     /// A comma-separated string of artist IDs.
     artist_ids: String,
 ) -> Result<ArtistsReleaseResult, ServerFnError> {
-    let auth = auth()?;
+    let auth = auth().await?;
     let pool = pool()?;
     let user = auth.current_user.as_ref();
 

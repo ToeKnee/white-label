@@ -61,8 +61,9 @@ pub struct MenuPage {
 /// Will return a `ServerFnError` if there is an issue retrieving the record label.
 #[server(GetRecordLabel, "/api", endpoint = "admin_menu")]
 pub async fn get_admin_menu() -> Result<AdminMenu, ServerFnError> {
-    let auth = auth()?;
     let pool = pool()?;
+    let auth = auth().await?;
+
     let user = auth.current_user.as_ref();
 
     admin_menu(&pool, user).await

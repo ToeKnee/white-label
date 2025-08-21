@@ -49,7 +49,7 @@ pub async fn get_releases(
     artist_slug: String,
 ) -> Result<ReleasesResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     get_releases_service(&pool, user, artist_slug).await
 }
@@ -106,7 +106,7 @@ pub async fn get_release(
     slug: String,
 ) -> Result<ReleaseResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     get_release_service(&pool, user, artist_slug, slug).await
 }
@@ -127,7 +127,7 @@ pub async fn create_release(
     form: CreateReleaseForm,
 ) -> Result<ReleaseResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     create_release_service(&pool, user, form).await
 }
@@ -148,7 +148,7 @@ pub async fn update_release(
     form: UpdateReleaseForm,
 ) -> Result<ReleaseResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     update_release_service(&pool, user, form).await
 }
@@ -169,7 +169,7 @@ pub async fn delete_release(
     slug: String,
 ) -> Result<ReleaseResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     delete_release_service(&pool, user, slug).await
 }
@@ -190,7 +190,7 @@ pub async fn restore_release(
     slug: String,
 ) -> Result<ReleaseResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     restore_release_service(&pool, user, slug).await
 }

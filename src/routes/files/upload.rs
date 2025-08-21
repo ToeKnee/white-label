@@ -113,7 +113,7 @@ pub async fn upload_file(
         }
     };
 
-    let auth = auth()?;
+    let auth = auth().await?;
     // Convert vector of String to vector of &str
     let permissions = upload_details
         .permissions
@@ -328,8 +328,9 @@ async fn store_artist_primary_image(
     file_name: &str,
     slug_field: &str,
 ) -> Result<(), ServerFnError> {
-    let auth = auth()?;
     let pool = pool()?;
+    let auth = auth().await?;
+
     let _user =
         match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"]) {
             Ok(user) => user,
@@ -373,7 +374,7 @@ async fn store_artist_primary_image(
 /// * Unable to update the user's avatar field
 #[cfg(feature = "ssr")]
 async fn store_avatar(file_name: &str, slug_field: &str) -> Result<(), ServerFnError> {
-    let mut auth = auth()?;
+    let mut auth = auth().await?;
     let pool = pool()?;
     let Some(current_user) = auth.current_user.as_ref() else {
         return Err(ServerFnError::new("No user found.".to_string()));
@@ -419,7 +420,7 @@ async fn store_avatar(file_name: &str, slug_field: &str) -> Result<(), ServerFnE
 /// * Unable to get the release from the database
 #[cfg(feature = "ssr")]
 async fn store_release(file_name: &str, slug_field: &str) -> Result<(), ServerFnError> {
-    let auth = auth()?;
+    let auth = auth().await?;
     let pool = pool()?;
     let _user =
         match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"]) {
@@ -470,7 +471,7 @@ pub async fn file_progress(
 ) -> Result<TextStream, ServerFnError> {
     use futures::StreamExt;
 
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = match user_with_permissions(auth.current_user.as_ref(), vec!["admin", "label_owner"])
     {
         Ok(user) => user,

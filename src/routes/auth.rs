@@ -23,7 +23,7 @@ use crate::state::{auth, pool};
 pub async fn get_user() -> Result<Option<User>, ServerFnError> {
     use crate::state::auth;
 
-    let auth = auth()?;
+    let auth = auth().await?;
 
     Ok(auth.current_user)
 }
@@ -53,7 +53,7 @@ pub async fn login(
     remember: Option<String>,
 ) -> Result<User, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
 
     if username.is_empty() || password.is_empty() {
         return Err(ServerFnError::ServerError(
@@ -99,7 +99,7 @@ pub async fn register(
     remember: Option<String>,
 ) -> Result<User, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
 
     let user = register_user_service(&pool, form).await;
     match user {
@@ -121,7 +121,7 @@ pub async fn register(
 /// Will return a `ServerFnError` if the authentication session is not available.
 #[server(Logout, "/api", endpoint = "logout")]
 pub async fn logout() -> Result<User, ServerFnError> {
-    let auth = auth()?;
+    let auth = auth().await?;
 
     auth.logout_user();
 
@@ -147,7 +147,7 @@ pub async fn update_user(
     user_form: UpdateUserForm,
 ) -> Result<User, ServerFnError> {
     let pool = pool()?;
-    let mut auth = auth()?;
+    let mut auth = auth().await?;
     let user = auth.current_user.as_ref();
 
     let response = update_user_service(&pool, user, user_form).await;
@@ -175,7 +175,7 @@ pub async fn change_password(
     password_form: ChangePasswordForm,
 ) -> Result<User, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
 
     change_password_service(&pool, user, password_form).await

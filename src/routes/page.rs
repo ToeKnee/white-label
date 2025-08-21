@@ -36,7 +36,7 @@ pub async fn get_page(
     slug: String,
 ) -> Result<PageResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     get_page_service(&pool, user, slug).await
 }
@@ -57,7 +57,7 @@ pub async fn create_page(
     page_form: CreatePageForm,
 ) -> Result<PageResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     create_page_service(&pool, user, page_form).await
 }
@@ -78,7 +78,7 @@ pub async fn update_page(
     page_form: UpdatePageForm,
 ) -> Result<PageResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     update_page_service(&pool, user, page_form).await
 }
@@ -99,7 +99,7 @@ pub async fn delete_page(
     slug: String,
 ) -> Result<PageResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     delete_page_service(&pool, user, slug).await
 }
@@ -120,7 +120,7 @@ pub async fn restore_page(
     slug: String,
 ) -> Result<PageResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     restore_page_service(&pool, user, slug).await
 }

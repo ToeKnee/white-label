@@ -58,8 +58,8 @@ pub async fn get_record_label() -> Result<LabelResult, ServerFnError> {
 /// Will return a `ServerFnError` if the record label cannot be found, or if there is an issue with the database connection.
 #[server(GetLabelArtists, "/api", endpoint = "record_label_artists")]
 pub async fn get_label_artists() -> Result<LabelArtistResult, ServerFnError> {
-    let auth = auth()?;
     let pool = pool()?;
+    let auth = auth().await?;
 
     let current_user = auth.current_user.unwrap_or_default();
     let show_hidden = current_user.permissions.contains("label_owner");
@@ -95,8 +95,8 @@ pub async fn get_label_pages(
     /// The ID of the record label.
     record_label_id: i64,
 ) -> Result<LabelPageResult, ServerFnError> {
-    let auth = auth()?;
     let pool = pool()?;
+    let auth = auth().await?;
 
     let current_user = auth.current_user.unwrap_or_default();
     let show_hidden = current_user.permissions.contains("label_owner");
@@ -140,8 +140,8 @@ pub async fn update_record_label(
     /// The new ISRC base for the record label.
     isrc_base: String,
 ) -> Result<LabelResult, ServerFnError> {
-    let auth = auth()?;
     let pool = pool()?;
+    let auth = auth().await?;
 
     let current_user = auth
         .current_user

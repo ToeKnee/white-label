@@ -49,7 +49,7 @@ pub async fn update_links(
     form: LinksForm,
 ) -> Result<LinksResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
 
     tracing::info!("Updating links for artist: {}", form.artist_slug);

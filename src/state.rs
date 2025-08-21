@@ -2,7 +2,7 @@
 use axum::extract::FromRef;
 use leptos::prelude::LeptosOptions;
 use leptos::prelude::*;
-use leptos_axum::AxumRouteListing;
+use leptos_axum::{AxumRouteListing, extract};
 use sqlx::PgPool;
 
 use crate::app::UserContext;
@@ -36,9 +36,9 @@ pub fn pool() -> Result<PgPool, ServerFnError> {
 /// # Errors
 ///
 /// Will return a `ServerError` error if the auth session is missing.
-pub fn auth() -> Result<AuthSession, ServerFnError> {
-    use_context::<AuthSession>()
-        .ok_or_else(|| ServerFnError::ServerError("Auth session missing.".into()))
+pub async fn auth() -> Result<AuthSession, ServerFnError> {
+    let auth = extract().await?;
+    Ok(auth)
 }
 
 /// This gets the user context from state

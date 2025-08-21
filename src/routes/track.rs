@@ -50,7 +50,7 @@ pub async fn get_tracks(
     release_slug: String,
 ) -> Result<TracksResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     get_tracks_service(&pool, user, artist_slug, release_slug).await
 }
@@ -77,7 +77,7 @@ pub async fn get_track(
     slug: String,
 ) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     get_track_service(&pool, user, artist_slug, release_slug, slug).await
 }
@@ -98,7 +98,7 @@ pub async fn create_track(
     form: CreateTrackForm,
 ) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     create_track_service(&pool, user, form).await
 }
@@ -119,7 +119,7 @@ pub async fn update_track(
     form: UpdateTrackForm,
 ) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     update_track_service(&pool, user, form).await
 }
@@ -139,7 +139,7 @@ pub async fn delete_track(
     slug: String,
 ) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     delete_track_service(&pool, user, slug).await
 }
@@ -160,7 +160,7 @@ pub async fn restore_track(
     slug: String,
 ) -> Result<TrackResult, ServerFnError> {
     let pool = pool()?;
-    let auth = auth()?;
+    let auth = auth().await?;
     let user = auth.current_user.as_ref();
     restore_track_service(&pool, user, slug).await
 }
