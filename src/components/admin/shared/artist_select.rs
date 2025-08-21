@@ -46,51 +46,47 @@ pub fn ArtistSelect(
                     if let Ok(artist_list) = artists_resource.await {
                         artists.set(artist_list.artists);
                     }
+                })} <div class="flex flex-col gap-4">
+                    <h2>"Artists"</h2>
+                    <legend class="label">
+                        <span class="label-text">"Main Artist"</span>
+                    </legend>
+                    <select class="select" name="form[primary_artist_id]">
+                        <For
+                            each=move || artists.get()
+                            key=|artist| (artist.slug.clone(), artist.name.clone())
+                            let(artist)
+                        >
+                            <option
+                                class="option"
+                                value=artist.id
+                                selected=primary_artist_id == artist.id
+                            >
+                                {artist.name}
+                            </option>
+                        </For>
+                    </select>
 
-                    view! {
-                        <div class="flex flex-col gap-4">
-                            <h2>"Artists"</h2>
-                            <legend class="label">
-                                <span class="label-text">"Main Artist"</span>
-                            </legend>
-                            <select class="select" name="form[primary_artist_id]">
-                                <For
-                                    each=move || artists.get()
-                                    key=|artist| (artist.slug.clone(), artist.name.clone())
-                                    let(artist)
-                                >
-                                    <option
-                                        class="option"
-                                        value=artist.id
-                                        selected=primary_artist_id == artist.id
-                                    >
-                                        {artist.name}
-                                    </option>
-                                </For>
-                            </select>
-
-                            <fieldset class="flex flex-row flex-wrap gap-6 justify-center p-4 fieldset">
-                                <legend class="label">
-                                    <span class="label-text">"All Artists"</span>
-                                </legend>
-                                <Show
-                                    when=move || { !artists.get().is_empty() }
-                                    fallback=|| {
-                                        view! { <p>"No artists found…"</p> }
-                                    }
-                                >
-                                    <For
-                                        each=move || artists.get()
-                                        key=|artist| (artist.slug.clone(), artist.name.clone())
-                                        let(artist)
-                                    >
-                                        <ArtistCheckbox artist artist_ids />
-                                    </For>
-                                </Show>
-                            </fieldset>
-                        </div>
-                    }
-                })}
+                    <fieldset class="flex flex-row flex-wrap gap-6 justify-center p-4 fieldset">
+                        <legend class="label">
+                            <span class="label-text">"All Artists"</span>
+                        </legend>
+                        <Show
+                            when=move || { !artists.get().is_empty() }
+                            fallback=|| {
+                                view! { <p>"No artists found…"</p> }
+                            }
+                        >
+                            <For
+                                each=move || artists.get()
+                                key=|artist| (artist.slug.clone(), artist.name.clone())
+                                let(artist)
+                            >
+                                <ArtistCheckbox artist artist_ids />
+                            </For>
+                        </Show>
+                    </fieldset>
+                </div>
                 <input
                     type="text"
                     class="hidden"
