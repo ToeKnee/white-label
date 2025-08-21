@@ -28,7 +28,8 @@ pub struct AppState {
 ///
 /// Will return a `ServerError` error if the pool is missing.
 pub fn pool() -> Result<PgPool, ServerFnError> {
-    use_context::<PgPool>().ok_or_else(|| ServerFnError::ServerError("Pool missing.".into()))
+    with_context::<AppState, _>(|state| state.pool.clone())
+        .ok_or_else(|| ServerFnError::ServerError("Pool missing.".into()))
 }
 
 /// This gets the auth session from state
