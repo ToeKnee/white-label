@@ -28,7 +28,7 @@ pub fn Dashboard() -> impl IntoView {
                             <SocialMediaTips />
                             <UpcomingRelease />
 
-                            <div class="shadow-xl grow not-prose card bg-neutral text-neutral-content bg-base-100">
+                            <div class="shadow-xl grow not-prose card bg-neutral text-neutral-content">
                                 <div class="card-body">
                                     <h2 class="card-title">Mailing list</h2>
                                     <div class="shadow stats">
@@ -48,7 +48,7 @@ pub fn Dashboard() -> impl IntoView {
                                                     ></path>
                                                 </svg>
                                             </div>
-                                            <div class="stat-title">Email:</div>
+                                            <div class="stat-title text-neutral-content">Email:</div>
                                             <div class="stat-value text-primary">0</div>
                                             <div class="stat-desc">subscribers</div>
                                         </div>

@@ -24,7 +24,7 @@ pub fn ArtistsTable() -> impl IntoView {
                 <h2 class="card-title">Artists</h2>
                 <table class="table">
                     <thead>
-                        <tr>
+                        <tr class="text-neutral-content">
                             <th>Name</th>
                             <th>Status</th>
                             <th>Actions</th>
