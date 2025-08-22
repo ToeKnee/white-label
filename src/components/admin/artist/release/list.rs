@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use leptos_router::components::A;
+use leptos_router::{components::A, hooks::use_params_map};
 use reactive_stores::Store;
 
 use crate::components::utils::{
@@ -21,11 +21,15 @@ pub fn Releases() -> impl IntoView {
         permission_or_redirect("label_owner", "/admin");
     });
 
+    let params = use_params_map();
     let store = expect_context::<Store<GlobalState>>();
     let artist = store.artist();
 
-    let releases_resource = Resource::new(move || artist.get().slug, get_releases);
-    let (releases, set_releases) = signal(Vec::new());
+    let releases_resource = Resource::new(
+        move || params.read().get("artist_slug").unwrap_or_default(),
+        get_releases,
+    );
+    let releases = RwSignal::new(Vec::new());
 
     view! {
         <Transition fallback=Loading>
@@ -33,10 +37,10 @@ pub fn Releases() -> impl IntoView {
                 ErrorPage
             }>
                 {move || Suspend::new(async move {
-                    if artist.get().id != 0 {
+                    if !artist.get().slug.is_empty() {
                         match releases_resource.await {
                             Ok(releases_result) => {
-                                set_releases.set(releases_result.releases);
+                                releases.set(releases_result.releases);
                             }
                             Err(e) => {
                                 tracing::error!("Error while getting releases: {}", e);
@@ -163,33 +167,6 @@ fn ReleaseRow(#[prop(into)] release: Release) -> impl IntoView {
                     Edit
                 </A>
             </td>
-        </tr>
-    }
-}
-
-#[component]
-fn ArtistRowFallback() -> impl IntoView {
-    view! {
-        <tr>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-        </tr>
-        <tr>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-        </tr>
-        <tr>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
-            <td class="w-full h-4 skeleton"></td>
         </tr>
     }
 }

@@ -27,6 +27,25 @@ pub fn AdminArtistRoot() -> impl IntoView {
     );
 
     view! {
+        <Transition fallback=Loading>
+            <ErrorBoundary fallback=|_| {
+                ErrorPage
+            }>
+                {move || Suspend::new(async move {
+                    if !params.read().get("artist_slug").unwrap_or_default().is_empty() {
+                        match artist_resource.await {
+                            Ok(this_artist) => {
+                                artist.set(this_artist.artist);
+                            }
+                            Err(e) => {
+                                tracing::error!("Error while getting artist {:?}", e);
+                            }
+                        }
+                    }
+                })}
+            </ErrorBoundary>
+        </Transition>
+
         <div role="tablist" class="mb-6 tabs tabs-border not-prose">
             <A
                 href=move || {
@@ -87,23 +106,6 @@ pub fn AdminArtistRoot() -> impl IntoView {
             </A>
         </div>
 
-        <Transition fallback=Loading>
-            <ErrorBoundary fallback=|_| {
-                ErrorPage
-            }>
-                {move || Suspend::new(async move {
-                    if !params.read().get("artist_slug").unwrap_or_default().is_empty() {
-                        match artist_resource.await {
-                            Ok(this_artist) => {
-                                artist.set(this_artist.artist);
-                            }
-                            Err(e) => {
-                                tracing::error!("Error while getting artist {:?}", e);
-                            }
-                        }
-                    }
-                })} <Outlet />
-            </ErrorBoundary>
-        </Transition>
+        <Outlet />
     }
 }
