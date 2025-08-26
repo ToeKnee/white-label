@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
-use sqlx::{FromRow, PgPool, Row};
+use sqlx::{FromRow, PgPool};
 
 use super::traits::Validate;
 #[cfg(feature = "ssr")]
@@ -200,6 +200,33 @@ impl Release {
         Ok(release)
     }
 
+    /// Get release by id
+    ///
+    /// # Arguments
+    /// * `pool` - The database connection pool
+    /// * `id` - The id of the release
+    ///
+    /// # Returns
+    /// The release
+    ///
+    /// # Errors
+    /// If the release cannot be found, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
+        let release = sqlx::query_as::<_, Self>("SELECT * FROM releases WHERE id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await;
+
+        match release {
+            Ok(release) => Ok(release),
+            Err(e) => {
+                tracing::error!("{e}");
+                Err(anyhow::anyhow!("Could not find release with id {}.", id))
+            }
+        }
+    }
+
     /// Get release by slug
     ///
     /// # Arguments
@@ -213,37 +240,21 @@ impl Release {
     /// If the release cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
-        let row = sqlx::query("SELECT * FROM releases WHERE slug = $1")
+        let release = sqlx::query_as::<_, Self>("SELECT * FROM releases WHERE slug = $1")
             .bind(slug.clone())
             .fetch_one(pool)
             .await;
 
-        let row = match row {
-            Ok(row) => row,
+        match release {
+            Ok(release) => Ok(release),
             Err(e) => {
                 tracing::error!("{e}");
-                return Err(anyhow::anyhow!(
+                Err(anyhow::anyhow!(
                     "Could not find release with slug {}.",
                     slug
-                ));
+                ))
             }
-        };
-
-        Ok(Self {
-            id: row.get("id"),
-            name: row.get("name"),
-            slug: row.get("slug"),
-            description: row.get("description"),
-            primary_artist_id: row.get("primary_artist_id"),
-            primary_image: row.get("primary_image"),
-            catalogue_number: row.get("catalogue_number"),
-            release_date: row.get("release_date"),
-            label_id: row.get("label_id"),
-            published_at: row.get("published_at"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-            deleted_at: row.get("deleted_at"),
-        })
+        }
     }
 
     /// Get specific release by artist and record label and slug
@@ -558,51 +569,6 @@ impl Release {
         Ok(artists)
     }
 
-    /// Set the tracks for the release
-    ///
-    /// # Arguments
-    /// * `pool` - The database connection pool
-    /// * `track_ids` - The IDs of the tracks
-    /// # Returns
-    /// The release
-    /// # Errors
-    /// If the release cannot be updated, return an error
-    /// # Panics
-    /// If the release cannot be updated, return an error
-    #[cfg(feature = "ssr")]
-    pub async fn set_tracks(&self, pool: &PgPool, track_ids: Vec<i64>) -> anyhow::Result<Self> {
-        let mut tx = pool.begin().await?;
-
-        // Delete all tracks for the release
-        sqlx::query("DELETE FROM release_tracks WHERE release_id = $1")
-            .bind(self.id)
-            .execute(&mut *tx)
-            .await?;
-
-        // Insert the new tracks
-        for track_id in track_ids {
-            match sqlx::query("INSERT INTO release_tracks (release_id, track_id) VALUES ($1, $2)")
-                .bind(self.id)
-                .bind(track_id)
-                .execute(&mut *tx)
-                .await
-            {
-                Ok(_) => (),
-                Err(e) => {
-                    tracing::error!("{e}");
-                    return Err(anyhow::anyhow!(
-                        "Could not set tracks for release with id {}.",
-                        self.id
-                    ));
-                }
-            }
-        }
-
-        let _ = tx.commit().await;
-
-        Ok(self.clone())
-    }
-
     /// Get the tracks for the release
     ///
     /// # Arguments
@@ -619,8 +585,7 @@ impl Release {
     pub async fn get_tracks(&self, pool: &PgPool) -> anyhow::Result<Vec<TrackWithArtists>> {
         let tracks = sqlx::query_as::<_, Track>(
             "SELECT tracks.* FROM tracks
-             INNER JOIN release_tracks ON tracks.id = release_tracks.track_id
-             WHERE release_tracks.release_id = $1",
+             WHERE tracks.release_id = $1",
         )
         .bind(self.id)
         .fetch_all(pool)
@@ -1425,84 +1390,6 @@ mod tests {
         assert_eq!(artists[1].id, artist2.id);
     }
 
-    #[sqlx::test]
-    async fn test_set_tracks(pool: PgPool) {
-        let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label))
-            .await
-            .unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone()))
-            .await
-            .unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
-            .await
-            .unwrap();
-        let track2 = create_test_track(&pool, 2, Some(release.clone()), Some(artist))
-            .await
-            .unwrap();
-
-        let result = release.set_tracks(&pool, vec![track.id, track2.id]).await;
-
-        assert!(result.is_ok());
-    }
-
-    #[sqlx::test]
-    async fn test_set_tracks_not_found(pool: PgPool) {
-        let release = Release::default();
-        let result = release.set_tracks(&pool, vec![1, 2]).await;
-
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Could not set tracks for release with id 0.".to_string()
-        );
-    }
-
-    #[sqlx::test]
-    async fn test_set_tracks_no_tracks(pool: PgPool) {
-        let release = create_test_release(&pool, 1, None).await.unwrap();
-        let result = release.set_tracks(&pool, vec![]).await;
-
-        assert!(result.is_ok());
-        assert!(result.unwrap().get_tracks(&pool).await.unwrap().is_empty());
-    }
-
-    #[sqlx::test]
-    async fn test_set_tracks_replace(pool: PgPool) {
-        let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label))
-            .await
-            .unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone()))
-            .await
-            .unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
-            .await
-            .unwrap();
-        let track2 = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
-            .await
-            .unwrap();
-        let track3 = create_test_track(&pool, 3, Some(release.clone()), Some(artist.clone()))
-            .await
-            .unwrap();
-
-        // Set the tracks for the release
-        release
-            .set_tracks(&pool, vec![track.id, track2.id])
-            .await
-            .unwrap();
-
-        // Replace the tracks for the release
-        let result = release.set_tracks(&pool, vec![track3.id]).await;
-
-        assert!(result.is_ok());
-        let tracks = release.get_tracks(&pool).await.unwrap();
-        assert_eq!(tracks.len(), 1);
-        assert_eq!(tracks[0].track.id, track3.id);
-        assert_eq!(tracks[0].artists.len(), 1);
-        assert_eq!(tracks[0].artists[0].id, artist.id);
-    }
-
     /// Test `get_tracks`
     #[sqlx::test]
     async fn test_get_tracks(pool: PgPool) {
@@ -1517,12 +1404,6 @@ mod tests {
             .await
             .unwrap();
         let track2 = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
-            .await
-            .unwrap();
-
-        // Set the tracks for the release
-        release
-            .set_tracks(&pool, vec![track.id, track2.id])
             .await
             .unwrap();
 

@@ -56,7 +56,12 @@ pub fn AdminArtistRoot() -> impl IntoView {
                 }
                 attr:role="tab"
                 attr:class=move || {
-                    if url.get().path() == format!("/admin/artist/{}", artist.get().slug) {
+                    if url.get().path()
+                        == format!(
+                            "/admin/artist/{}",
+                            params.read().get("artist_slug").unwrap_or_default(),
+                        )
+                    {
                         "tab tab-active"
                     } else {
                         "tab"
@@ -66,10 +71,20 @@ pub fn AdminArtistRoot() -> impl IntoView {
                 Profile
             </A>
             <A
-                href=move || { format!("/admin/artist/{}/releases", artist.get().slug) }
+                href=move || {
+                    format!(
+                        "/admin/artist/{}/releases",
+                        params.read().get("artist_slug").unwrap_or_default(),
+                    )
+                }
                 attr:role="tab"
                 attr:class=move || {
-                    if url.get().path() == format!("/admin/artist/{}/releases", artist.get().slug) {
+                    if url.get().path()
+                        == format!(
+                            "/admin/artist/{}/releases",
+                            params.read().get("artist_slug").unwrap_or_default(),
+                        )
+                    {
                         "tab tab-active"
                     } else {
                         "tab"
@@ -79,10 +94,20 @@ pub fn AdminArtistRoot() -> impl IntoView {
                 Releases
             </A>
             <A
-                href=move || { format!("/admin/artist/{}/links", artist.get().slug) }
+                href=move || {
+                    format!(
+                        "/admin/artist/{}/links",
+                        params.read().get("artist_slug").unwrap_or_default(),
+                    )
+                }
                 attr:role="tab"
                 attr:class=move || {
-                    if url.get().path() == format!("/admin/artist/{}/links", artist.get().slug) {
+                    if url.get().path()
+                        == format!(
+                            "/admin/artist/{}/links",
+                            params.read().get("artist_slug").unwrap_or_default(),
+                        )
+                    {
                         "tab tab-active"
                     } else {
                         "tab"
@@ -92,10 +117,20 @@ pub fn AdminArtistRoot() -> impl IntoView {
                 Links
             </A>
             <A
-                href=move || { format!("/admin/artist/{}/images", artist.get().slug) }
+                href=move || {
+                    format!(
+                        "/admin/artist/{}/images",
+                        params.read().get("artist_slug").unwrap_or_default(),
+                    )
+                }
                 attr:role="tab"
                 attr:class=move || {
-                    if url.get().path() == format!("/admin/artist/{}/images", artist.get().slug) {
+                    if url.get().path()
+                        == format!(
+                            "/admin/artist/{}/images",
+                            params.read().get("artist_slug").unwrap_or_default(),
+                        )
+                    {
                         "tab tab-active"
                     } else {
                         "tab"

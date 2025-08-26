@@ -28,6 +28,8 @@ pub struct Track {
     /// This can also be included in the artsts relation, but it must contain one artist.
     /// Other artists are considered contributing artists
     pub primary_artist_id: i64,
+    /// The releases the track is associated with
+    pub release_id: i64,
     /// The primary image of the track
     pub primary_image: Option<String>,
     /// The ISRC code of the track
@@ -36,6 +38,8 @@ pub struct Track {
     /// The BPM or beats per minute of the track
     /// For tracks with variable BPM, this value is undefined
     pub bpm: Option<i32>,
+    /// Track number is the position of the track on a release
+    pub track_number: i32,
     /// The date the track is published.
     /// If this is None, the track is not published
     /// If this is in the future, the track is scheduled to be published
@@ -83,6 +87,19 @@ impl Validate for Track {
             ));
         }
 
+        // Check that the release exists
+        let release = match Release::get_by_id(pool, self.release_id).await {
+            Ok(release) => release,
+            Err(e) => {
+                tracing::error!("{e}");
+                return Err(anyhow::anyhow!(
+                    "Could not find release with id {}.",
+                    self.release_id
+                ));
+            }
+        };
+        self.validate_track_number(&release, pool).await?;
+
         if let Some(ref isrc_code) = self.isrc_code {
             if isrc_code.len() != 12 {
                 return Err(anyhow::anyhow!(
@@ -105,6 +122,33 @@ impl Validate for Track {
 }
 
 impl Track {
+    /// Validate that the track number is unique for the release
+    /// This is broken out from the main validate function to simplify the code
+    #[cfg(feature = "ssr")]
+    async fn validate_track_number(&self, release: &Release, pool: &PgPool) -> anyhow::Result<()> {
+        if let Ok(tracks) = release.get_tracks(pool).await {
+            if tracks.iter().any(|tracks_with_artists| {
+                tracks_with_artists.track.track_number == self.track_number
+                    && tracks_with_artists.track.id != self.id
+            }) {
+                return Err(anyhow::anyhow!(format!(
+                    "Track number {} must be unique for release with id {}.",
+                    self.track_number, self.release_id
+                )));
+            }
+        } else {
+            tracing::error!(
+                "Could not get tracks for release with id {}.",
+                self.release_id
+            );
+            return Err(anyhow::anyhow!(
+                "Track number must be unique for release with id {}.",
+                self.release_id
+            ));
+        }
+        Ok(())
+    }
+
     /// Get the primary image URL
     /// If the primary image is None, return the default image
     pub fn primary_image_url(&self) -> String {
@@ -136,8 +180,10 @@ impl Track {
         name: String,
         description: String,
         primary_artist_id: i64,
+        release_id: i64,
         isrc_code: Option<String>,
         bpm: Option<i32>,
+        track_number: i32,
         published_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> anyhow::Result<Self> {
         let slug = slugify(&name);
@@ -148,9 +194,11 @@ impl Track {
             slug,
             description,
             primary_artist_id,
+            release_id,
             primary_image: None,
             isrc_code,
             bpm,
+            track_number,
             published_at,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -159,14 +207,16 @@ impl Track {
         track.validate(pool).await?;
 
         let track = sqlx::query_as::<_, Self>(
-         "INSERT INTO tracks (name, slug, description, primary_artist_id, isrc_code, bpm,  published_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+         "INSERT INTO tracks (name, slug, description, primary_artist_id, release_id, isrc_code, bpm, track_number, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
      )
          .bind(track.name)
          .bind(track.slug)
          .bind(track.description)
          .bind(track.primary_artist_id)
+         .bind(track.release_id)
          .bind(track.isrc_code)
          .bind(track.bpm)
+         .bind(track.track_number)
          .bind(track.published_at)
          .fetch_one(pool)
          .await?;
@@ -228,27 +278,23 @@ impl Track {
         let query = if include_hidden {
             "SELECT t.*
              FROM tracks t
-             INNER JOIN release_tracks rt
-             ON t.id = rt.track_id
              INNER JOIN release_artists ra
-             ON rt.release_id = ra.release_id
+             ON t.release_id = ra.release_id
              INNER JOIN artists a
              ON a.id = ra.artist_id
              WHERE t.slug = $1
-                AND rt.release_id = $2
+                AND t.release_id = $2
                 AND a.id = $3
                 AND a.label_id = $4"
         } else {
             "SELECT t.*
              FROM tracks t
-             INNER JOIN release_tracks rt
-             ON t.id = rt.track_id
              INNER JOIN release_artists ra
-             ON rt.release_id = ra.release_id
+             ON t.release_id = ra.release_id
              INNER JOIN artists a
              ON a.id = ra.artist_id
              WHERE t.slug = $1
-                AND rt.release_id = $2
+                AND t.release_id = $2
                 AND a.id = $3
                 AND a.label_id = $4
                 AND t.deleted_at IS NULL
@@ -306,24 +352,20 @@ impl Track {
         let query = if include_hidden {
             "SELECT t.*
              FROM tracks t
-             INNER JOIN release_tracks rt
-             ON t.id = rt.track_id
              INNER JOIN release_artists ra
-             ON rt.release_id = ra.release_id
+             ON t.release_id = ra.release_id
              INNER JOIN artists a
              ON a.id = ra.artist_id
-             WHERE rt.release_id = $1 AND a.id = $2 AND a.label_id = $3
+             WHERE t.release_id = $1 AND a.id = $2 AND a.label_id = $3
              ORDER BY t.deleted_at DESC, t.name ASC"
         } else {
             "SELECT t.*
              FROM tracks t
-             INNER JOIN release_tracks rt
-             ON t.id = rt.track_id
              INNER JOIN release_artists ra
-             ON rt.release_id = ra.release_id
+             ON t.release_id = ra.release_id
              INNER JOIN artists a
              ON a.id = ra.artist_id
-             WHERE rt.release_id = $1 AND a.id = $2 AND a.label_id = $3
+             WHERE t.release_id = $1 AND a.id = $2 AND a.label_id = $3
               AND t.deleted_at IS NULL
               AND t.published_at < NOW()
               AND t.published_at IS NOT NULL
@@ -370,15 +412,17 @@ impl Track {
         self.validate(pool).await?;
 
         let track = match sqlx::query_as::<_, Self>(
-            "UPDATE tracks SET name = $1, slug = $2, description = $3, primary_artist_id = $4, primary_image = $5, isrc_code = $6, bpm = $7, published_at = $8, updated_at = $9, deleted_at = $10 WHERE id = $11 RETURNING *",
+            "UPDATE tracks SET name = $1, slug = $2, description = $3, primary_artist_id = $4, release_id = $5, primary_image = $6, isrc_code = $7, bpm = $8, track_number = $9, published_at = $10, updated_at = $11, deleted_at = $12 WHERE id = $13 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
         .bind(self.description)
         .bind(self.primary_artist_id)
+        .bind(self.release_id)
         .bind(self.primary_image)
         .bind(self.isrc_code)
         .bind(self.bpm)
+        .bind(self.track_number)
         .bind(self.published_at)
         .bind(chrono::Utc::now())
         .bind(self.deleted_at)
@@ -505,81 +549,6 @@ impl Track {
 
         Ok(artists)
     }
-
-    /// Set the releases for the track
-    ///
-    /// # Arguments
-    /// * `pool` - The database connection pool
-    /// * `release_ids` - The IDs of the releases
-    /// # Returns
-    /// The track
-    /// # Errors
-    /// If the track cannot be updated, return an error
-    /// # Panics
-    /// If the track cannot be updated, return an error
-    #[cfg(feature = "ssr")]
-    pub async fn set_releases(&self, pool: &PgPool, release_ids: Vec<i64>) -> anyhow::Result<Self> {
-        if release_ids.is_empty() {
-            return Err(anyhow::anyhow!("release IDs cannot be empty."));
-        }
-
-        let mut tx = pool.begin().await?;
-
-        // Delete all releases for the track
-        sqlx::query("DELETE FROM release_tracks WHERE track_id = $1")
-            .bind(self.id)
-            .execute(&mut *tx)
-            .await?;
-
-        // Insert the new releases
-        for release_id in release_ids {
-            match sqlx::query("INSERT INTO release_tracks (release_id, track_id) VALUES ($1, $2)")
-                .bind(release_id)
-                .bind(self.id)
-                .execute(&mut *tx)
-                .await
-            {
-                Ok(_) => (),
-                Err(e) => {
-                    tracing::error!("{e}");
-                    return Err(anyhow::anyhow!(
-                        "Could not set releases for track with id {}.",
-                        self.id
-                    ));
-                }
-            }
-        }
-
-        let _ = tx.commit().await;
-
-        Ok(self.clone())
-    }
-
-    /// Get the releases for the track
-    ///
-    /// # Arguments
-    /// * `pool` - The database connection pool
-    ///
-    /// # Returns
-    /// The releases for the track
-    ///
-    /// # Errors
-    /// If the track cannot be found, return an error
-    /// # Panics
-    /// If the track cannot be found, return an error
-    #[cfg(feature = "ssr")]
-    pub async fn get_releases(&self, pool: &PgPool) -> anyhow::Result<Vec<Release>> {
-        let releases = sqlx::query_as::<_, Release>(
-            "SELECT releases.* FROM releases
-             INNER JOIN release_tracks ON releases.id = release_tracks.release_id
-             WHERE release_tracks.track_id = $1",
-        )
-        .bind(self.id)
-        .fetch_all(pool)
-        .await?;
-
-        Ok(releases)
-    }
 }
 
 #[cfg(test)]
@@ -598,15 +567,20 @@ mod tests {
         let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
             .await
             .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
         let track = Track {
             id: 1,
             name: "Test Track".to_string(),
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             primary_image: None,
             isrc_code: Some("UKUXX2020123".to_string()),
             bpm: Some(120),
+            track_number: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -621,15 +595,20 @@ mod tests {
     #[sqlx::test]
     async fn test_validate_name_is_empty(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
         let track = Track {
             id: 1,
             name: String::new(),
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             primary_image: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
+            track_number: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -648,6 +627,9 @@ mod tests {
     #[sqlx::test]
     async fn test_validate_name_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
         let name = "a".repeat(256);
         let track = Track {
             id: 1,
@@ -655,9 +637,11 @@ mod tests {
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             primary_image: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
+            track_number: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -676,6 +660,9 @@ mod tests {
     #[sqlx::test]
     async fn test_validate_slug_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
         let slug = "a".repeat(256);
         let track = Track {
             id: 1,
@@ -683,9 +670,11 @@ mod tests {
             slug,
             description: "This is a test track".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             primary_image: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
+            track_number: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -719,15 +708,18 @@ mod tests {
 
     #[sqlx::test]
     async fn test_primary_artist_does_not_exist(pool: PgPool) {
+        let release = create_test_release(&pool, 1, None).await.unwrap();
         let track = Track {
             id: 1,
             name: "Test Track".to_string(),
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
-            primary_artist_id: 1,
+            primary_artist_id: 10,
+            release_id: release.id,
             primary_image: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
+            track_number: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -739,14 +731,45 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Artist with id 1 does not exist.".to_string()
+            "Artist with id 10 does not exist.".to_string()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_validate_release_does_not_exist(pool: PgPool) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let track = Track {
+            id: 1,
+            name: "Test Track".to_string(),
+            slug: "test-track".to_string(),
+            description: "This is a test track".to_string(),
+            primary_artist_id: artist.id,
+            release_id: 1,
+            primary_image: None,
+            isrc_code: Some("UKXXX2020123".to_string()),
+            bpm: Some(120),
+            track_number: 1,
+            published_at: Some(chrono::Utc::now()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            deleted_at: None,
+        };
+
+        let result = track.validate(&pool).await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not find release with id 1.".to_string()
         );
     }
 
     #[sqlx::test]
     async fn test_validate_isrc_code_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
-
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
         let isrc_code = "a".repeat(13);
         let track = Track {
             id: 1,
@@ -754,9 +777,11 @@ mod tests {
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             primary_image: None,
             isrc_code: Some(isrc_code),
             bpm: Some(123),
+            track_number: 1,
             published_at: Some(chrono::Utc::now()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -778,6 +803,7 @@ mod tests {
         let mut new_track = track.clone();
         new_track.id = 2;
         new_track.slug = "new-track-2".to_string();
+        new_track.track_number = 2;
         new_track.isrc_code = track.isrc_code;
 
         let result = new_track.validate(&pool).await;
@@ -790,15 +816,41 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn test_validate_track_number_unique_for_release(pool: PgPool) {
+        let track = create_test_track(&pool, 1, None, None).await.unwrap();
+        let mut new_track = track.clone();
+        new_track.id = 2;
+        new_track.isrc_code = Some("UKUXX2020456".to_string());
+        new_track.slug = "new-track-2".to_string();
+        new_track.track_number = track.track_number;
+
+        let result = new_track.validate(&pool).await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            format!(
+                "Track number {} must be unique for release with id {}.",
+                track.track_number, track.release_id
+            )
+        );
+    }
+
+    #[sqlx::test]
     async fn test_create(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
         let track = Track::create(
             &pool,
             "Test Track".to_string(),
             "This is a test track".to_string(),
             artist.id,
+            release.id,
             Some("UKXXX2020123".to_string()),
             Some(120),
+            1,
             Some(chrono::Utc::now()),
         )
         .await
@@ -811,13 +863,18 @@ mod tests {
     #[sqlx::test]
     async fn test_create_with_validation_error(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
         let track = Track::create(
             &pool,
             String::new(),
             "This is a test track".to_string(),
             artist.id,
+            release.id,
             Some("UKXXX2020123".to_string()),
             Some(120),
+            1,
             Some(chrono::Utc::now()),
         )
         .await;
@@ -1324,90 +1381,6 @@ mod tests {
         assert_eq!(artists.len(), 2);
         assert_eq!(artists[0].id, artist.id);
         assert_eq!(artists[1].id, artist2.id);
-    }
-
-    #[sqlx::test]
-    async fn test_set_releases(pool: PgPool) {
-        let track = create_test_track(&pool, 1, None, None).await.unwrap();
-        let release = track.get_releases(&pool).await.unwrap()[0].clone();
-        let release2 = create_test_release(&pool, 2, None).await.unwrap();
-
-        let result = track
-            .set_releases(&pool, vec![release.id, release2.id])
-            .await;
-
-        assert!(result.is_ok());
-        let releases = track.get_releases(&pool).await.unwrap();
-        assert_eq!(releases.len(), 2);
-        assert_eq!(releases[0].id, release.id);
-        assert_eq!(releases[1].id, release2.id);
-    }
-
-    #[sqlx::test]
-    async fn test_set_releases_not_found(pool: PgPool) {
-        let track = Track::default();
-        let result = track.set_releases(&pool, vec![1, 2]).await;
-
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Could not set releases for track with id 0.".to_string()
-        );
-    }
-
-    #[sqlx::test]
-    async fn test_set_releases_no_releases(pool: PgPool) {
-        let track = create_test_track(&pool, 1, None, None).await.unwrap();
-        let result = track.set_releases(&pool, vec![]).await;
-
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "release IDs cannot be empty.".to_string()
-        );
-    }
-
-    #[sqlx::test]
-    async fn test_set_releases_replace(pool: PgPool) {
-        let track = create_test_track(&pool, 1, None, None).await.unwrap();
-        let release = track.get_releases(&pool).await.unwrap()[0].clone();
-        let release2 = create_test_release(&pool, 2, None).await.unwrap();
-        let release3 = create_test_release(&pool, 3, None).await.unwrap();
-
-        // Set the releases for the track
-        track
-            .set_releases(&pool, vec![release.id, release2.id])
-            .await
-            .unwrap();
-
-        // Replace the releases for the track
-        let result = track.set_releases(&pool, vec![release3.id]).await;
-
-        assert!(result.is_ok());
-        let releases = track.get_releases(&pool).await.unwrap();
-        assert_eq!(releases.len(), 1);
-        assert_eq!(releases[0].id, release3.id);
-    }
-
-    /// Test `get_releases`
-    #[sqlx::test]
-    async fn test_get_releases(pool: PgPool) {
-        let track = create_test_track(&pool, 1, None, None).await.unwrap();
-        let release = track.get_releases(&pool).await.unwrap()[0].clone();
-        let release2 = create_test_release(&pool, 2, None).await.unwrap();
-
-        // Set the releases for the track
-        track
-            .set_releases(&pool, vec![release.id, release2.id])
-            .await
-            .unwrap();
-
-        // Get the releases for the track
-        let releases = track.get_releases(&pool).await.unwrap();
-
-        assert_eq!(releases.len(), 2);
-        assert_eq!(releases[0].id, release.id);
-        assert_eq!(releases[1].id, release2.id);
     }
 
     #[sqlx::test]

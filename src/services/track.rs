@@ -138,17 +138,7 @@ pub async fn get_track_service(
         ServerFnError::new(e)
     })?;
 
-    let releases = track.get_releases(pool).await.map_err(|e| {
-        let err = format!("Error while getting releases: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
-
-    Ok(TrackResult {
-        track,
-        artists,
-        releases,
-    })
+    Ok(TrackResult { track, artists })
 }
 
 /// Create a new track
@@ -181,8 +171,10 @@ pub async fn create_track_service(
         form.name,
         form.description,
         form.primary_artist_id,
+        form.release_id,
         form.isrc_code,
         form.bpm,
+        form.track_number,
         form.published_at,
     )
     .await
@@ -208,27 +200,7 @@ pub async fn create_track_service(
         ServerFnError::new(e)
     })?;
 
-    let release_ids = form
-        .release_ids
-        .split(',')
-        .filter_map(|s| s.parse::<i64>().ok())
-        .collect::<Vec<i64>>();
-    track.set_releases(pool, release_ids).await.map_err(|e| {
-        let err = format!("Error while setting releases: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
-    let releases = track.get_releases(pool).await.map_err(|e| {
-        let err = format!("Error while getting releases: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
-
-    Ok(TrackResult {
-        track,
-        artists,
-        releases,
-    })
+    Ok(TrackResult { track, artists })
 }
 
 /// Update a track
@@ -265,9 +237,11 @@ pub async fn update_track_service(
     track.name = form.name;
     track.description = form.description;
     track.primary_artist_id = form.primary_artist_id;
+    track.release_id = form.release_id;
     track.isrc_code = form.isrc_code;
     track.bpm = form.bpm;
     track.published_at = form.published_at;
+    track.track_number = form.track_number;
 
     track = track.update(pool).await.map_err(|e| {
         let err = format!("Error while updating track: {e:?}");
@@ -290,27 +264,8 @@ pub async fn update_track_service(
         tracing::error!("{err}");
         ServerFnError::new(e)
     })?;
-    let release_ids = form
-        .release_ids
-        .split(',')
-        .filter_map(|s| s.parse::<i64>().ok())
-        .collect::<Vec<i64>>();
-    track.set_releases(pool, release_ids).await.map_err(|e| {
-        let err = format!("Error while setting releases: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
-    let releases = track.get_releases(pool).await.map_err(|e| {
-        let err = format!("Error while getting releases: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
 
-    Ok(TrackResult {
-        track,
-        artists,
-        releases,
-    })
+    Ok(TrackResult { track, artists })
 }
 
 /// Soft delete a track
@@ -351,11 +306,6 @@ pub async fn delete_track_service(
         })?,
         artists: track.get_artists(pool).await.map_err(|e| {
             let err = format!("Error while getting artists: {e:?}");
-            tracing::error!("{err}");
-            ServerFnError::new(e)
-        })?,
-        releases: track.get_releases(pool).await.map_err(|e| {
-            let err = format!("Error while getting releases: {e:?}");
             tracing::error!("{err}");
             ServerFnError::new(e)
         })?,
@@ -402,11 +352,6 @@ pub async fn restore_track_service(
         track: track.clone(),
         artists: track.get_artists(pool).await.map_err(|e| {
             let err = format!("Error while getting artists: {e:?}");
-            tracing::error!("{err}");
-            ServerFnError::new(e)
-        })?,
-        releases: track.get_releases(pool).await.map_err(|e| {
-            let err = format!("Error while getting releases: {e:?}");
             tracing::error!("{err}");
             ServerFnError::new(e)
         })?,
@@ -607,11 +552,12 @@ mod tests {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
-            release_ids: release.id.to_string(),
+            track_number: 1,
         };
 
         let track_result = create_track_service(&pool, Some(&user), form.clone())
@@ -620,16 +566,16 @@ mod tests {
         assert_eq!(track_result.track.name, "Test Track");
         assert_eq!(track_result.track.description, "Test Track Description");
         assert_eq!(track_result.track.primary_artist_id, artist.id);
+        assert_eq!(track_result.track.release_id, release.id);
         assert_eq!(
             track_result.track.isrc_code,
             Some("UKXXX2020123".to_string())
         );
         assert_eq!(track_result.track.bpm, Some(120));
+        assert_eq!(track_result.track.track_number, 1);
         assert!(track_result.track.published_at.is_some());
         assert_eq!(track_result.artists.len(), 1);
         assert_eq!(track_result.artists[0].id, artist.id);
-        assert_eq!(track_result.releases.len(), 1);
-        assert_eq!(track_result.releases[0].id, release.id);
     }
 
     #[sqlx::test]
@@ -651,11 +597,12 @@ mod tests {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
-            release_ids: release.id.to_string(),
+            track_number: 1,
         };
 
         let track_result = create_track_service(&pool, Some(&user), form).await;
@@ -685,11 +632,12 @@ mod tests {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             isrc_code: Some("UKXX2020123".to_string()),
             bpm: Some(120),
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
-            release_ids: release.id.to_string(),
+            track_number: 1,
         };
 
         let track_result = create_track_service(&pool, Some(&user), form).await;
@@ -724,9 +672,10 @@ mod tests {
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             primary_artist_id: artist.id,
+            release_id: release.id,
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
-            release_ids: release.id.to_string(),
+            track_number: 1,
         };
 
         let track_result = create_track_service(&pool, Some(&user), form).await;
@@ -739,11 +688,12 @@ mod tests {
             slug: "test-track".to_string(),
             description: "Updated Track Description".to_string(),
             primary_artist_id: artist.id,
+            release_id: release2.id,
             isrc_code: Some("UKXXX2025321".to_string()),
             bpm: Some(130),
+            track_number: 2,
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
-            release_ids: [release.id.to_string(), release2.id.to_string()].join(","),
         };
 
         let update_result = update_track_service(&pool, Some(&user), update_form.clone()).await;
@@ -754,14 +704,15 @@ mod tests {
         assert_eq!(updated_track.track.name, "Updated Track");
         assert_eq!(updated_track.track.description, "Updated Track Description");
         assert_eq!(updated_track.track.primary_artist_id, artist.id);
+        assert_eq!(updated_track.track.release_id, release2.id);
         assert_eq!(
             updated_track.track.isrc_code,
             Some("UKXXX2025321".to_string())
         );
         assert_eq!(updated_track.track.bpm, Some(130));
+        assert_eq!(updated_track.track.track_number, 2);
         assert!(updated_track.track.published_at.is_some());
         assert_eq!(updated_track.artists, vec![artist]);
-        assert_eq!(updated_track.releases, vec![release, release2]);
     }
 
     #[sqlx::test]
@@ -783,11 +734,12 @@ mod tests {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
             primary_artist_id: artist.id,
+            release_id: release.id,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
+            track_number: 1,
             published_at: Some(chrono::Utc::now()),
             artist_ids: artist.id.to_string(),
-            release_ids: release.id.to_string(),
         };
 
         let track_result = create_track_service(&pool, Some(&user), form).await;

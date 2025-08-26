@@ -9,7 +9,6 @@ use super::{delete::DeleteTrack, restore::RestoreTrack};
 use crate::components::{
     admin::shared::{
         artist_select::ArtistSelect, date_field::DateField, markdown_field::MarkdownField,
-        release_select::ReleaseSelect,
     },
     utils::{
         error::ErrorPage, error::ServerErrors, loading::Loading,
@@ -48,7 +47,6 @@ pub fn EditTrack() -> impl IntoView {
         },
         |[artist_slug, release_slug]| get_release(artist_slug, release_slug),
     );
-    let release_ids = RwSignal::new(vec![]);
 
     let track_resource = Resource::new(
         move || {
@@ -92,7 +90,6 @@ pub fn EditTrack() -> impl IntoView {
                         Ok(this_track) => {
                             track.set(this_track.track);
                             artist_ids.set(this_track.artists.iter().map(|a| a.id).collect());
-                            release_ids.set(this_track.releases.iter().map(|r| r.id).collect());
                         }
                         _ => {
                             redirect(
@@ -116,7 +113,6 @@ pub fn EditTrack() -> impl IntoView {
                                         Some(Ok(track_result)) => {
                                             let fresh_track = track_result.track;
                                             let fresh_artists = track_result.artists;
-                                            let fresh_releases = track_result.releases;
                                             if fresh_track.id > 0 {
                                                 if fresh_track.slug != track.get().slug {
                                                     redirect(
@@ -132,8 +128,6 @@ pub fn EditTrack() -> impl IntoView {
                                                     track.set(fresh_track);
                                                     artist_ids
                                                         .set(fresh_artists.iter().map(|a| a.id).collect());
-                                                    release_ids
-                                                        .set(fresh_releases.iter().map(|r| r.id).collect());
                                                 }
                                                 if !success.get() {
                                                     success.set(true);
@@ -159,7 +153,7 @@ pub fn EditTrack() -> impl IntoView {
                                             show=success.get()
                                         />
                                     }
-                                }} <Form track artist_ids release release_ids />
+                                }} <Form track artist_ids release />
                             </div>
                         </ActionForm>
                     }
@@ -174,9 +168,14 @@ fn Form(
     track: RwSignal<Track>,
     artist_ids: RwSignal<Vec<i64>>,
     release: RwSignal<Release>,
-    release_ids: RwSignal<Vec<i64>>,
 ) -> impl IntoView {
     view! {
+        <input
+            name="form[release_id]"
+            type="number"
+            class="hidden"
+            value=move || release.get().id
+        />
         <input type="text" class="hidden" name="form[slug]" value=move || { track.get().slug } />
         <label class="flex gap-2 items-center input">
             <input
@@ -203,11 +202,6 @@ fn Form(
                     primary_artist_id=release.get().primary_artist_id
                     artist_ids=artist_ids
                 />
-                <ReleaseSelect
-                    artist_ids=artist_ids
-                    primary_release=release
-                    initial_release_ids=release_ids
-                />
             }
         }}
         <label class="flex gap-2 items-center input">
@@ -228,6 +222,17 @@ fn Form(
                 placeholder="BPM"
                 name="form[bpm]"
                 value=move || track.get().bpm
+            />
+        </label>
+        <label class="flex gap-2 items-center input">
+            <input
+                type="number"
+                min="0"
+                max="999"
+                class="grow"
+                placeholder="Track Number"
+                name="form[track_number]"
+                value=move || track.get().track_number
             />
         </label>
         {move || {

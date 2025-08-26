@@ -5,7 +5,7 @@ use leptos::server;
 
 use crate::models::release::Release;
 #[cfg(feature = "ssr")]
-use crate::services::artists::get_releases_for_artists_service;
+use crate::services::artists::get_releases_for_artist_service;
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
@@ -27,20 +27,15 @@ pub struct ArtistsReleaseResult {
 /// # Errors:
 /// Will return a `ServerFnError` if there is an issue with the database connection or if the releases cannot be retrieved.
 #[server(GetArtistsReleases, "/api", endpoint = "artists_releases")]
-pub async fn get_releases_for_artists(
-    /// A comma-separated string of artist IDs.
-    artist_ids: String,
+pub async fn get_releases_for_artist(
+    /// The artist ID
+    artist_id: i64,
 ) -> Result<ArtistsReleaseResult, ServerFnError> {
     let auth = auth().await?;
     let pool = pool()?;
     let user = auth.current_user.as_ref();
 
-    let artist_ids = artist_ids
-        .split(',')
-        .map(|s| s.parse::<i64>().unwrap_or_default())
-        .collect::<Vec<_>>();
-
-    let releases = get_releases_for_artists_service(&pool, user, artist_ids)
+    let releases = get_releases_for_artist_service(&pool, user, artist_id)
         .await
         .map_err(|x| {
             let err = format!("Error while getting releases: {x:?}");
