@@ -24,6 +24,8 @@ pub struct Track {
     pub slug: String,
     /// The description of the track
     pub description: String,
+    /// Lyrics for the track
+    pub lyrics: String,
     /// The primary artist
     /// This can also be included in the artsts relation, but it must contain one artist.
     /// Other artists are considered contributing artists
@@ -179,6 +181,7 @@ impl Track {
         pool: &PgPool,
         name: String,
         description: String,
+        lyrics: String,
         primary_artist_id: i64,
         release_id: i64,
         isrc_code: Option<String>,
@@ -193,6 +196,7 @@ impl Track {
             name,
             slug,
             description,
+            lyrics,
             primary_artist_id,
             release_id,
             primary_image: None,
@@ -207,11 +211,12 @@ impl Track {
         track.validate(pool).await?;
 
         let track = sqlx::query_as::<_, Self>(
-         "INSERT INTO tracks (name, slug, description, primary_artist_id, release_id, isrc_code, bpm, track_number, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+         "INSERT INTO tracks (name, slug, description, lyrics, primary_artist_id, release_id, isrc_code, bpm, track_number, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *",
      )
          .bind(track.name)
          .bind(track.slug)
          .bind(track.description)
+            .bind(track.lyrics)
          .bind(track.primary_artist_id)
          .bind(track.release_id)
          .bind(track.isrc_code)
@@ -414,11 +419,12 @@ impl Track {
         self.validate(pool).await?;
 
         let track = match sqlx::query_as::<_, Self>(
-            "UPDATE tracks SET name = $1, slug = $2, description = $3, primary_artist_id = $4, release_id = $5, primary_image = $6, isrc_code = $7, bpm = $8, track_number = $9, published_at = $10, updated_at = $11, deleted_at = $12 WHERE id = $13 RETURNING *",
+            "UPDATE tracks SET name = $1, slug = $2, description = $3, lyrics = $4, primary_artist_id = $5, release_id = $6, primary_image = $7, isrc_code = $8, bpm = $9, track_number = $10, published_at = $11, updated_at = $12, deleted_at = $13 WHERE id = $14 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
         .bind(self.description)
+        .bind(self.lyrics)
         .bind(self.primary_artist_id)
         .bind(self.release_id)
         .bind(self.primary_image)
@@ -577,6 +583,7 @@ mod tests {
             name: "Test Track".to_string(),
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
+            lyrics: "These are the lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
@@ -605,6 +612,7 @@ mod tests {
             name: String::new(),
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
+            lyrics: "These are the lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
@@ -638,6 +646,7 @@ mod tests {
             name,
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
+            lyrics: "These are the lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
@@ -671,6 +680,7 @@ mod tests {
             name: "Test Track".to_string(),
             slug,
             description: "This is a test track".to_string(),
+            lyrics: "These are the lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
@@ -716,6 +726,7 @@ mod tests {
             name: "Test Track".to_string(),
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
+            lyrics: "These are the lyrics".to_string(),
             primary_artist_id: 10,
             release_id: release.id,
             primary_image: None,
@@ -745,6 +756,7 @@ mod tests {
             name: "Test Track".to_string(),
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
+            lyrics: "These are the lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: 1,
             primary_image: None,
@@ -778,6 +790,7 @@ mod tests {
             name: "Test Track".to_string(),
             slug: "test-track".to_string(),
             description: "This is a test track".to_string(),
+            lyrics: "These are the lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
@@ -848,6 +861,7 @@ mod tests {
             &pool,
             "Test Track".to_string(),
             "This is a test track".to_string(),
+            "These are some lyrics".to_string(),
             artist.id,
             release.id,
             Some("UKXXX2020123".to_string()),
@@ -872,6 +886,7 @@ mod tests {
             &pool,
             String::new(),
             "This is a test track".to_string(),
+            "These are some lyrics".to_string(),
             artist.id,
             release.id,
             Some("UKXXX2020123".to_string()),

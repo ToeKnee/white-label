@@ -134,6 +134,11 @@ fn Form(
             field="form[description]".to_string()
             markdown_text=String::new()
         />
+        <MarkdownField
+            title="Lyrics".to_string()
+            field="form[lyrics]".to_string()
+            markdown_text=String::new()
+        />
 
         {move || {
             view! { <ArtistSelect primary_artist_id=artist.get().id artist_ids=artist_ids /> }

@@ -193,6 +193,11 @@ fn Form(
                     field="form[description]".to_string()
                     markdown_text=track.get().description
                 />
+                <MarkdownField
+                    title="Lyrics".to_string()
+                    field="form[lyrics]".to_string()
+                    markdown_text=track.get().lyrics
+                />
             }
         }}
 

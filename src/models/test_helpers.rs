@@ -219,10 +219,11 @@ pub async fn create_test_track(
 
     let isrc_code = format!("UKXXX25{id:0>5}");
     let track_number = i32::try_from(id);
-    let track = sqlx::query_as::<_, Track>("INSERT INTO tracks (name, slug, description, primary_artist_id, release_id, isrc_code, bpm, track_number, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *")
+    let track = sqlx::query_as::<_, Track>("INSERT INTO tracks (name, slug, description, lyrics, primary_artist_id, release_id, isrc_code, bpm, track_number, published_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *")
         .bind(format!("Test Track {id}"))
         .bind(format!("test-track-{id}"))
         .bind(format!("A track for testing purposes with the id of {id}"))
+        .bind(format!("# Lyrics for testing purposes with the id of {id}"))
         .bind(release.primary_artist_id)
         .bind(release.id)
         .bind(isrc_code)

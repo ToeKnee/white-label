@@ -9,6 +9,8 @@ pub struct CreateTrackForm {
     pub name: String,
     /// Description of the track
     pub description: String,
+    /// Lyrics of the track
+    pub lyrics: String,
     /// Primary artist ID
     pub primary_artist_id: i64,
     /// Release ID
@@ -34,6 +36,8 @@ pub struct UpdateTrackForm {
     pub name: String,
     /// Description of the track
     pub description: String,
+    /// Lyrics of the track
+    pub lyrics: String,
     /// Primary artist ID
     pub primary_artist_id: i64,
     /// Release ID

@@ -170,6 +170,7 @@ pub async fn create_track_service(
         pool,
         form.name,
         form.description,
+        form.lyrics,
         form.primary_artist_id,
         form.release_id,
         form.isrc_code,
@@ -236,6 +237,7 @@ pub async fn update_track_service(
 
     track.name = form.name;
     track.description = form.description;
+    track.lyrics = form.lyrics;
     track.primary_artist_id = form.primary_artist_id;
     track.release_id = form.release_id;
     track.isrc_code = form.isrc_code;
@@ -551,6 +553,7 @@ mod tests {
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
+            lyrics: "Test lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             isrc_code: Some("UKXXX2020123".to_string()),
@@ -596,6 +599,7 @@ mod tests {
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
+            lyrics: "Test lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             isrc_code: Some("UKXXX2020123".to_string()),
@@ -631,6 +635,7 @@ mod tests {
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
+            lyrics: "Test lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             isrc_code: Some("UKXX2020123".to_string()),
@@ -669,6 +674,7 @@ mod tests {
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
+            lyrics: "Test lyrics".to_string(),
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             primary_artist_id: artist.id,
@@ -687,6 +693,7 @@ mod tests {
             name: "Updated Track".to_string(),
             slug: "test-track".to_string(),
             description: "Updated Track Description".to_string(),
+            lyrics: "Updated lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release2.id,
             isrc_code: Some("UKXXX2025321".to_string()),
@@ -703,6 +710,7 @@ mod tests {
         assert_eq!(track.track.id, updated_track.track.id);
         assert_eq!(updated_track.track.name, "Updated Track");
         assert_eq!(updated_track.track.description, "Updated Track Description");
+        assert_eq!(updated_track.track.lyrics, "Updated lyrics");
         assert_eq!(updated_track.track.primary_artist_id, artist.id);
         assert_eq!(updated_track.track.release_id, release2.id);
         assert_eq!(
@@ -733,6 +741,7 @@ mod tests {
         let form = CreateTrackForm {
             name: "Test Track".to_string(),
             description: "Test Track Description".to_string(),
+            lyrics: "Test lyrics".to_string(),
             primary_artist_id: artist.id,
             release_id: release.id,
             isrc_code: Some("UKXXX2020123".to_string()),
