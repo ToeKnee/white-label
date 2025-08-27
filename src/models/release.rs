@@ -585,13 +585,13 @@ impl Release {
     pub async fn get_tracks(&self, pool: &PgPool) -> anyhow::Result<Vec<TrackWithArtists>> {
         let tracks = sqlx::query_as::<_, Track>(
             "SELECT tracks.* FROM tracks
-             WHERE tracks.release_id = $1",
+             WHERE tracks.release_id = $1
+             ORDER BY tracks.track_number ASC",
         )
         .bind(self.id)
         .fetch_all(pool)
         .await?;
 
-        tracing::debug!("Loaded {} tracks for release {}", tracks.len(), self.name);
         let mut tracks_with_artists: Vec<TrackWithArtists> = Vec::new();
         for track in &tracks {
             // Ensure each track has its artists loaded
@@ -601,7 +601,6 @@ impl Release {
                 track: track.clone(),
                 artists: artists.clone(),
             });
-            tracing::debug!("Loaded {} artists for track {}", artists.len(), track.name);
         }
 
         Ok(tracks_with_artists)

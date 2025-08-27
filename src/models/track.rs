@@ -285,7 +285,8 @@ impl Track {
              WHERE t.slug = $1
                 AND t.release_id = $2
                 AND a.id = $3
-                AND a.label_id = $4"
+                AND a.label_id = $4
+            ORDER BY t.deleted_at DESC, t.track_number ASC"
         } else {
             "SELECT t.*
              FROM tracks t
@@ -299,7 +300,8 @@ impl Track {
                 AND a.label_id = $4
                 AND t.deleted_at IS NULL
                 AND t.published_at < NOW()
-                AND t.published_at IS NOT NULL"
+                AND t.published_at IS NOT NULL
+            ORDER BY t.track_number ASC"
         };
 
         let track = sqlx::query_as::<_, Self>(query)
@@ -357,7 +359,7 @@ impl Track {
              INNER JOIN artists a
              ON a.id = ra.artist_id
              WHERE t.release_id = $1 AND a.id = $2 AND a.label_id = $3
-             ORDER BY t.deleted_at DESC, t.name ASC"
+             ORDER BY t.deleted_at DESC, t.track_number ASC"
         } else {
             "SELECT t.*
              FROM tracks t
@@ -369,7 +371,7 @@ impl Track {
               AND t.deleted_at IS NULL
               AND t.published_at < NOW()
               AND t.published_at IS NOT NULL
-             ORDER BY t.name ASC"
+             ORDER BY t.track_number ASC"
         };
 
         let tracks = sqlx::query_as::<_, Self>(query)
