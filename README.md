@@ -1,5 +1,9 @@
 # White Label - a record label management website
 
+> **Migration note:** The project is currently a Leptos 0.8 SSR app. A plan to migrate to
+> Dioxus (web + desktop + iOS/Android from one codebase) is in [MIGRATION.md](MIGRATION.md).
+> Until the migration lands, all notes below describe the Leptos setup.
+
 ## Running the project
 
 ```bash
