@@ -26,6 +26,7 @@ mod links;
 mod menu;
 mod page;
 mod record_label;
+mod release;
 mod track;
 
 use axum::Router;
@@ -86,6 +87,17 @@ pub fn api_routes() -> Router {
         .route("/api/update_track", post(track::update_track))
         .route("/api/delete_track", post(track::delete_track))
         .route("/api/restore_track", post(track::restore_track))
+        // Releases (routes/release.rs)
+        .route("/api/get_releases", post(release::get_releases))
+        .route(
+            "/api/get_next_scheduled_release",
+            post(release::get_next_scheduled_release),
+        )
+        .route("/api/get_release", post(release::get_release))
+        .route("/api/create_release", post(release::create_release))
+        .route("/api/update_release", post(release::update_release))
+        .route("/api/delete_release", post(release::delete_release))
+        .route("/api/restore_release", post(release::restore_release))
 }
 
 /// A failure rendered in the Leptos server-fn error wire format:
