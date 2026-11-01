@@ -72,10 +72,19 @@ pub async fn login(
     auth.login_user(user_id);
     auth.remember_user(remember.is_some());
 
-    match auth.current_user {
-        Some(user) => Ok(user),
-        None => {
-            tracing::error!("login: user loaded but current_user is empty");
+    // Verified behaviour of axum_session_auth 0.20.1: `login_user` writes the
+    // session but does NOT populate `current_user` in the same request (the
+    // cookie works from the next request on). So return the user loaded
+    // explicitly instead of reading `auth.current_user`.
+    match <User as axum_session_auth::Authentication<User, i64, sqlx::PgPool>>::load_user(
+        user_id,
+        Some(&db.0.0),
+    )
+    .await
+    {
+        Ok(user) => Ok(user),
+        Err(error) => {
+            tracing::error!("login: session set but load_user failed: {error}");
             HttpError::internal_server_error("Login succeeded but the user could not be loaded")
         }
     }

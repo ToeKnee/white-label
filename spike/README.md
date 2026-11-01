@@ -33,16 +33,16 @@ would call the server URL set by `set_server_url` in `src/main.rs`.
 
 ## Gate results (validated against dioxus 0.7.10, dx CLI 0.7.6)
 
-| Gate item | Outcome |
-| --- | --- |
-| axum_session + axum_session_auth pattern | Works; layer order Session → Auth → `Extension(Db)`, see `src/main.rs` |
-| Router feature combo | Umbrella `dioxus = { features = ["fullstack", "router"] }` is enough — no separate `dioxus-router` dep, and **not** the router's `streaming` feature (tested both ways) |
-| Server-side state (pool) | `Extension<Db>` newtype passed via macro attr; access with `db.0.0` — chosen over `Lazy`/`State` to dodge the orphan rule on remote types |
-| Upload extra fields | Query-string extractors: `#[post("/api/upload_file?file_type&slug", …)]` + `FileStream` body — port of the multipart "type then slug then file" convention |
-| Progress streaming | `TextStream`/`Streaming` server fn + client `stream.next().await` compiles and the unauthenticated gate returns 401; authenticated upload + live stream not exercised (no test credentials, see Open items) |
-| Trailing slashes | Parsing is tolerant (both present/absent parse; unit-tested); `ArtistOverview` *renders* canonically with a trailing slash because its nest route is `/` |
-| Session wire behaviour | Logout rotates the `session` cookie and clears `store`; sessions are interchangeable with the running Leptos app (same `axum_sessions` table) |
-| SSR + `use_resource` | **Needs `SuspenseBoundary` + `Resource::suspend()?`** — see findings below |
+| Gate item                                | Outcome                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| axum_session + axum_session_auth pattern | Works; layer order Session → Auth → `Extension(Db)`, see `src/main.rs`                                                                                                                                                                                                                                                              |
+| Router feature combo                     | Umbrella `dioxus = { features = ["fullstack", "router"] }` is enough — no separate `dioxus-router` dep, and **not** the router's `streaming` feature (tested both ways)                                                                                                                                                             |
+| Server-side state (pool)                 | `Extension<Db>` newtype passed via macro attr; access with `db.0.0` — chosen over `Lazy`/`State` to dodge the orphan rule on remote types                                                                                                                                                                                           |
+| Upload extra fields                      | Query-string extractors: `#[post("/api/upload_file?file_type&slug", …)]` + `FileStream` body — port of the multipart "type then slug then file" convention                                                                                                                                                                          |
+| Progress streaming                       | **Verified end-to-end**: 8 MiB authenticated upload returned `8388608`; concurrent `GET /api/file_progress?filename=blob.bin` streamed growing byte counts. The tracker keys the _original_ filename; the stored file is sanitized (`uploads/artists/spiketest-blob_bin`)                                                           |
+| Trailing slashes                         | Parsing is tolerant (both present/absent parse; unit-tested); `ArtistOverview` _renders_ canonically with a trailing slash because its nest route is `/`                                                                                                                                                                            |
+| Session wire behaviour                   | Logout rotates the `session` cookie and clears `store`; sessions are interchangeable with the running Leptos app (same `axum_sessions` table). A one-off 300 s hang at logout during the auth gate did **not** reproduce in isolation (unauth logout 200, authed logout 200, later `GET /api/user` → `null`) — treated as transient |
+| SSR + `use_resource`                     | **Needs `SuspenseBoundary` + `Resource::suspend()?`** — see findings below                                                                                                                                                                                                                                                          |
 
 ## Big findings
 
@@ -99,7 +99,18 @@ API parity with the Leptos server.
 - Login with bogus creds: 401 in both JSON-arg variants (omitted vs
   `"remember": null`), proving multi-arg JSON body handling.
 
-### 5. Router params and nesting
+### 5. `login_user` does not populate `current_user` in the same request
+
+In `axum_session_auth` 0.20.1, `auth.login_user(id)` + `remember_user(...)` persist
+the session (cookie valid from the **next** request), but `auth.current_user` stays
+`None` for the request that logged in. Reading it right after login yields a false
+error. Idiomatic fix (see `src/api.rs` `login`): return the user loaded explicitly:
+
+```rust
+<User as axum_session_auth::Authentication<User, i64, sqlx::PgPool>>::load_user(user_id, Some(&db.0.0)).await?
+```
+
+### 6. Router params and nesting
 
 `#[nest("/admin/artist/:artist_slug")] #[layout(ArtistAdmin)] …` works; the
 nest param reaches layout and leaf components, and into server fns called
@@ -107,7 +118,7 @@ under SSR. Client-side `Route::from_str`/`to_string` round-trips are unit
 tested in `src/routes.rs` (top-level, nested with both params, trailing-slash
 tolerance, canonical URL forms).
 
-### 6. Dependency risk: axum_session version yank storm
+### 7. Dependency risk: axum_session version yank storm
 
 The maintainer yanked nearly the entire version history of `axum_session`
 (only 0.20.0/0.20.1/0.21.0/0.22.1 remain installable), `axum_session_auth`
@@ -118,7 +129,7 @@ would break. The spike pins the co-resident set: `axum_session = 0.20.1`,
 sqlx 0.8 compatible). Newer `axum_session` (0.21+) or the sqlx store (0.10+)
 require sqlx 0.9, which the app is not on.
 
-### 7. Smaller notes
+### 8. Smaller notes
 
 - `current_user` is `Option<User>` (not `Arc`); `login_user`/`remember_user`/
   `logout_user` as expected; the spike's `Authentication` uses standard
@@ -140,11 +151,21 @@ require sqlx 0.9, which the app is not on.
 - dx CLI installed is 0.7.6 while crates are 0.7.10 — gates were run with
   cargo, not dx; upgrade dx before Phase 1 UI work.
 
+Authenticated upload/progress was gated with a throwaway `label_owner` user
+seeded directly into the dev DB (bcrypt hash insert; user deleted afterwards —
+never commit test credentials). The upload is a **raw-body** POST, not
+multipart, over HTTP:
+
+```sh
+curl -b jar -X POST 'HOST/api/upload_file?file_type=artist_image&slug=spiketest' \
+  -H 'Content-Disposition: attachment; filename="blob.bin"' \
+  -H 'content-type: application/octet-stream' \
+  -H 'X-Content-Size: 8388608' --data-binary @blob.bin
+curl -b -N 'HOST/api/file_progress?filename=blob.bin'   # items are concatenated, no newlines
+```
+
 ## Open items
 
-- Authenticated upload + progress stream end-to-end needs an admin/
-  label_owner test account (the DB has no known test user); everything up to
-  the permission gate (401) is verified.
 - Desktop runtime smoke (needs a display); iOS/Android not attempted yet.
 - A pre-commit hook update (`leptosfmt` → dioxus fmt) is a Phase 8 concern.
 
