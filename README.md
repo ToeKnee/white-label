@@ -19,6 +19,14 @@ cargo run --no-default-features --features server --bin dioxus-server
 crate version (currently 0.7.10); `dx serve` replaces the `cargo run` above
 once Dioxus UI work (Phase 2+) lands.
 
+The `server`-gated modules (router assembly, sessions, current-user
+extractor) have their own tests, but plain `cargo test` (and the pre-commit
+hook) only builds default features, so run them explicitly:
+
+```bash
+cargo test --features server   # 330 lib tests, includes src/server/ tests
+```
+
 ## Running the project
 
 ```bash

@@ -24,6 +24,12 @@ fn main() {
             )
             .try_init();
 
-        white_label::server::build_router().await
+        white_label::server::build_router(
+            white_label::database::create_pool().await,
+            std::env::var("UPLOAD_PATH")
+                .ok()
+                .map(std::path::PathBuf::from),
+        )
+        .await
     });
 }

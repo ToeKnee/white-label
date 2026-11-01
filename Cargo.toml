@@ -148,6 +148,7 @@ debug = "line-tables-only"
 
 [dev-dependencies]
 axum-test = "17.0.1"
+tempfile = "3"
 
 [package.metadata.leptos]
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
