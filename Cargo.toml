@@ -57,6 +57,10 @@ reactive_stores = "0.2.0"
 reactive_stores_macro = "0.2.0"
 regex = "1.11.1"
 serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1"
+# Decodes server-fn request bodies in `src/server/api` with the same
+# settings as the Leptos PostUrl codec (server_fn depends on serde_qs 0.15).
+serde_qs = "0.15"
 server_fn = { version = "0.8.0", features = [
     "serde-lite",
     "multipart",

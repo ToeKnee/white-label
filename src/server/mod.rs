@@ -5,6 +5,7 @@
 //! uploads, and the Dioxus SSR entry. The Leptos `setup.rs` still serves the
 //! shipped site until cutover.
 
+mod api;
 pub mod current_user;
 
 use anyhow::Context;
@@ -45,8 +46,11 @@ pub async fn build_router(
         .context("could not create/migrate the sessions table")?;
 
     let mut router = dioxus::server::router(skeleton_app)
+        // Ported `/api/*` endpoints (see `api` module); merged before the
+        // layers below so handlers get the session and `Db` extensions.
+        .merge(api::api_routes())
         .layer(SessionManagerLayer::new(session_store))
-        // Handlers and server fns reach the pool via `Db` (Phase 2).
+        // Handlers and server fns reach the pool via `Db`.
         .layer(axum::Extension(Db(pool)));
 
     // Uploaded files, mounted after the session stack so static hits skip
@@ -74,25 +78,27 @@ fn skeleton_app() -> dioxus::prelude::Element {
     }
 }
 
+/// `dioxus::server::router` reads (and serves) a `public` dir next to
+/// the executable unless `DIOXUS_PUBLIC_PATH` overrides it. Create an
+/// empty one for the test binary so the router can build; `target/`
+/// is disposable, so leaving it behind is fine.
+#[cfg(test)]
+pub(crate) fn ensure_exe_public_dir() {
+    let public_dir = std::env::current_exe()
+        .expect("test binary path")
+        .parent()
+        .expect("target deps dir")
+        .join("public");
+    std::fs::create_dir_all(public_dir).expect("empty public dir for the dioxus router");
+}
+
 #[cfg(test)]
 mod tests {
     use axum_test::TestServer;
     use sqlx::PgPool;
 
+    use super::ensure_exe_public_dir;
     use crate::server::build_router;
-
-    /// `dioxus::server::router` reads (and serves) a `public` dir next to
-    /// the executable unless `DIOXUS_PUBLIC_PATH` overrides it. Create an
-    /// empty one for the test binary so the router can build; `target/`
-    /// is disposable, so leaving it behind is fine.
-    fn ensure_exe_public_dir() {
-        let public_dir = std::env::current_exe()
-            .expect("test binary path")
-            .parent()
-            .expect("target deps dir")
-            .join("public");
-        std::fs::create_dir_all(public_dir).expect("empty public dir for the dioxus router");
-    }
 
     /// Build the real router and wrap it for in-process HTTP.
     async fn test_server(pool: PgPool, upload_path: Option<std::path::PathBuf>) -> TestServer {

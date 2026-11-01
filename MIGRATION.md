@@ -202,6 +202,21 @@ Exit: the six items above all work (or a documented fallback exists for 4). Pick
 - Keep auth/permission checks (`Auth`/`Rights` validator from the auth example can replace some ad-hoc checks — improvement, not required).
 - ✅ Exit: axum-test coverage per endpoint (happy + error cases, per project test policy); services reuse existing tests.
 
+**Phase 2 progress (branch `dioxus`, in progress):**
+
+- Slice 1 landed: **auth (6) + artist (6) = 12/38 endpoints** under `src/server/api/` (`mod.rs` + `auth.rs` + `artist.rs`), merged into `build_router()` before the session/`Db` layers. 18 axum-test wire tests (`cargo test --features server -- server::api`); full suite is 348 lib + 2 doctests under `--features server`.
+- Wire protocol (read off the vendored `server_fn` 0.8.6 / `server_fn_macro` 0.8.7 sources — the app's `#[server]` fns all use the default `Http<PostUrl, Json>`):
+  | leg | format |
+  | --- | --- |
+  | request | `POST /api/<endpoint>`, body = `serde_qs` form-encoding of the macro-generated args struct (`Login { username, password, remember }` → `username=…&password=…`); server decodes with `serde_qs::Config::new(5, false)`, content-type unchecked |
+  | success | `200 application/json`, body = JSON of the `Ok` value (`Option` → `null`) |
+  | error | body `"<Variant>|<message>"` + `serverfnerror: <path>` header; Leptos answers 500 for everything, client splits the body at the first `|` |
+  Handlers are plain axum `post()`s — **not** dioxus `#[server]` handlers, which speak a different (multipart-ish, different error framing) protocol. Handlers reuse the args structs the `#[server]` macro emits in `crate::routes` (the derives exist regardless of features), so the two servers cannot drift.
+- Deliberate upgrade: error **status** now comes from `AppError::status()` (400/401/403/404/500) instead of Leptos' blanket 500; body and header stay byte-identical for the old client. Decode failures emit `Args|<serde_qs message>` @ 400, matching the codec's own variant.
+- Findings: services need **both** `admin` and `label_owner` tokens for artist writes (fixtures must grant both); `Artist::update` re-slugifies from the name, so post-rename requests must address the new slug; `remember=true` approximates Leptos' 30-day cookie via `session.set_expiry(OnInactivity(30d))`; `artists_releases` deliberately no longer flattens every service failure to "Could not retrieve releases" (auth failures keep their real messages).
+- Follow-up within Phase 2: refine `AppError::Internal` sites that should be `NotFound` (e.g. `get_artist` on a missing slug currently answers 500; tests assert today's behaviour deliberately), and the deferred `cfg(feature = "ssr")` → `server` sweep.
+- Remaining 26 endpoints by group: page ×5, release ×7, track ×6, links ×2, menu, record_label — then the two special codecs: `files/upload_file` (multipart: the args struct has **no** serde derives — must read `server_fn/src/codec/multipart.rs` before that slice) and `files/file_progress`.
+
 ### Phase 3 — App shell + routing (2–3 days)
 
 - `Route` enum mirroring the current table (public, auth, admin nested layouts via `#[layout]`); header/footer layouts; `NotFound` fallback; `redirect()` helper on `use_navigator`.

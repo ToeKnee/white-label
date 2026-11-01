@@ -5793,6 +5793,8 @@ dependencies = [
  "reactive_stores_macro",
  "regex",
  "serde",
+ "serde_json",
+ "serde_qs",
  "server_fn",
  "sqlx",
  "tempfile",

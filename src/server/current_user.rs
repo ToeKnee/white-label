@@ -35,6 +35,38 @@ pub const USER_ID_SESSION_KEY: &str = "user_id";
 #[derive(Clone, Debug)]
 pub struct Db(pub sqlx::PgPool);
 
+/// Rejection when the `Extension(Db)` layer isn't installed — a server
+/// misconfiguration, never something a client can cause.
+#[derive(Debug)]
+pub struct DbUnavailable;
+
+impl axum::response::IntoResponse for DbUnavailable {
+    fn into_response(self) -> axum::response::Response {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "database pool unavailable (server misconfiguration)",
+        )
+            .into_response()
+    }
+}
+
+impl<S> FromRequestParts<S> for Db
+where
+    S: Send + Sync,
+{
+    type Rejection = DbUnavailable;
+
+    // The other extractor impls below are genuinely async; this one stays
+    // `async fn` for consistency even though it only reads extensions.
+    #[expect(
+        clippy::unused_async_trait_impl,
+        reason = "stays async fn to match the other FromRequestParts impls"
+    )]
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts.extensions.get::<Self>().cloned().ok_or(DbUnavailable)
+    }
+}
+
 /// The logged-in user for a request, if the session names one and that user
 /// still exists.
 ///
