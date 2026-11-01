@@ -30,7 +30,7 @@ pub fn SocialMediaServiceEdit(
         <div class="flex flex-wrap gap-4 justify-between">
             <For
                 each=move || active_social_media_services.get()
-                key=|social_media_service| (social_media_service.platform.clone())
+                key=|social_media_service| social_media_service.platform.clone()
                 let(social_media_service)
             >
                 <div class="shadow-sm card bg-accent text-base-content">
@@ -72,7 +72,7 @@ pub fn SocialMediaServiceEdit(
             </For>
             <For
                 each=move || other_social_media_services.get()
-                key=|platform| (platform.to_string())
+                key=|platform| platform.to_string()
                 let(platform)
             >
                 <div class="shadow-sm card bg-secondary text-base-content">

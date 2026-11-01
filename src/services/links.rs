@@ -481,7 +481,7 @@ mod tests {
             assert_eq!(music_services.len(), 2);
             assert!(music_services.contains(&service1));
             assert!(music_services.contains(&service2));
-            assert!(social_media_services.is_empty());
+            assert_eq!(social_media_services, [] as [SocialMediaService; 0]);
         }
     }
 
@@ -512,7 +512,7 @@ mod tests {
             social_media_services,
         }) = result
         {
-            assert!(music_services.is_empty());
+            assert_eq!(music_services, [] as [MusicService; 0]);
             assert_eq!(social_media_services.len(), 2);
             assert!(social_media_services.contains(&service1));
             assert!(social_media_services.contains(&service2));
@@ -573,7 +573,7 @@ mod tests {
             social_media_services,
         }) = result
         {
-            assert!(music_services.is_empty());
+            assert_eq!(music_services, [] as [MusicService; 0]);
             assert_eq!(social_media_services.len(), 2);
             assert!(
                 social_media_services
@@ -619,7 +619,7 @@ mod tests {
                     .iter()
                     .any(|s| s.platform == Platform::AppleMusic)
             );
-            assert!(social_media_services.is_empty());
+            assert_eq!(social_media_services, [] as [SocialMediaService; 0]);
         }
     }
 
@@ -888,7 +888,7 @@ mod tests {
         let music_services = MusicService::list_by_artist(&pool, artist.id)
             .await
             .unwrap();
-        assert!(music_services.is_empty());
+        assert_eq!(music_services, [] as [MusicService; 0]);
     }
 
     #[sqlx::test]
@@ -913,6 +913,6 @@ mod tests {
         let social_media_services = SocialMediaService::list_by_artist(&pool, artist.id)
             .await
             .unwrap();
-        assert!(social_media_services.is_empty());
+        assert_eq!(social_media_services, [] as [SocialMediaService; 0]);
     }
 }

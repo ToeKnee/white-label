@@ -44,10 +44,7 @@ pub fn UpcomingRelease() -> impl IntoView {
     set_interval(move || now.set(chrono::Utc::now()), Duration::from_secs(1));
 
     Effect::new(move || {
-        let release_date = release
-            .get()
-            .release_date
-            .map_or_else(chrono::Utc::now, |date| date);
+        let release_date = release.get().release_date.unwrap_or_else(chrono::Utc::now);
         let diff = release_date - now.get();
         count_down.set(Countdown {
             days: diff.num_days(),

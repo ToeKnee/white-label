@@ -30,7 +30,7 @@ pub fn MusicServiceEdit(
         <div class="flex flex-wrap gap-4 justify-between">
             <For
                 each=move || active_music_services.get()
-                key=|music_service| (music_service.platform.clone())
+                key=|music_service| music_service.platform.clone()
                 let(music_service)
             >
                 <div class="shadow-sm card bg-accent">
@@ -72,7 +72,7 @@ pub fn MusicServiceEdit(
             </For>
             <For
                 each=move || other_music_services.get()
-                key=|platform| (platform.to_string())
+                key=|platform| platform.to_string()
                 let(platform)
             >
                 <div class="shadow-sm card bg-secondary">

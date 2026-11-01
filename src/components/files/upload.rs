@@ -58,7 +58,7 @@ pub fn FileUploadWithProgress(
                 // chunks, each with more text in it
                 // so we've padded them with newspace, and will split them out here
                 // each value is the latest total, so we'll just take the last one.
-                let len = match len.split('\n').filter(|n| !n.is_empty()).next_back() {
+                let len = match len.split('\n').rfind(|n| !n.is_empty()) {
                     Some(len) => match len.parse::<usize>() {
                         Ok(len) => len,
                         Err(e) => {

@@ -82,7 +82,7 @@ pub fn WhiteLabel() -> impl IntoView {
     provide_context(Store::new(GlobalState::default()));
 
     let (user, set_user) = signal(User::default());
-    let user_resource = Resource::new(move || (user.get()), move |_| get_user());
+    let user_resource = Resource::new(move || user.get(), move |_| get_user());
     provide_context(UserContext(user, set_user));
 
     let formatter = move |text: String| text;
