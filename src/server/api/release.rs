@@ -211,7 +211,7 @@ mod tests {
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
-    async fn get_releases_missing_artist_is_internal(pool: PgPool) {
+    async fn get_releases_missing_artist_is_not_found(pool: PgPool) {
         let server = api_server(pool).await;
 
         let response = post_args(
@@ -223,7 +223,7 @@ mod tests {
         )
         .await;
 
-        response.assert_status_internal_server_error();
+        response.assert_status_not_found();
         assert_eq!(response.header("serverfnerror"), PATH_GET_RELEASES);
         assert!(response.text().starts_with("ServerError|"));
     }

@@ -242,18 +242,26 @@ impl Track {
     /// If the track cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
-        let track = sqlx::query_as::<_, Self>("SELECT * FROM tracks WHERE slug = $1")
-            .bind(slug.clone())
-            .fetch_one(pool)
-            .await;
+        Self::find_by_slug(pool, slug.clone())
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Could not find track with slug {slug}."))
+    }
 
-        match track {
-            Ok(track) => Ok(track),
-            Err(e) => {
+    /// Look up a track by slug, `Ok(None)` when no row matches — lets
+    /// callers tell a missing track (404) from a database failure (500).
+    ///
+    /// # Errors
+    /// If the database query fails, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn find_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM tracks WHERE slug = $1")
+            .bind(&slug)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
                 tracing::error!("{e}");
-                Err(anyhow::anyhow!("Could not find track with slug {slug}."))
-            }
-        }
+                anyhow::anyhow!("Could not find track with slug {slug}.")
+            })
     }
 
     /// Get specific track by artist and record label and slug

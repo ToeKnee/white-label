@@ -26,14 +26,25 @@ pub async fn get_page_service(
 ) -> Result<PageResult, AppError> {
     let include_hidden = user.is_some_and(|user| user.permissions.contains("label_owner"));
     Ok(PageResult {
-        page: Page::get_by_slug(pool, slug, include_hidden)
-            .await
-            .map_err(|e| {
-                let err = format!("Error while getting page: {e:?}");
-                tracing::error!("{err}");
-                AppError::internal(e)
-            })?,
+        page: find_page_by_slug(pool, &slug, include_hidden).await?,
     })
+}
+
+/// `Page::find_by_slug` wired onto the service error ladder: a missing
+/// row is a 404 with the model's message, a database failure stays a 500.
+async fn find_page_by_slug(
+    pool: &PgPool,
+    slug: &str,
+    include_hidden: bool,
+) -> Result<Page, AppError> {
+    Page::find_by_slug(pool, slug.to_string(), include_hidden)
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting page: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("Could not find page with slug {slug}.")))
 }
 
 /// Restore a soft deleted page
@@ -61,13 +72,7 @@ pub async fn restore_page_service(
     }
     let include_hidden = true; // We have already checked permissions, so we can include hidden pages
 
-    let mut page = Page::get_by_slug(pool, slug, include_hidden)
-        .await
-        .map_err(|e| {
-            let err = format!("Error while getting page: {e:?}");
-            tracing::error!("{err}");
-            AppError::internal(e)
-        })?;
+    let mut page = find_page_by_slug(pool, &slug, include_hidden).await?;
     page.deleted_at = None;
     page.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring page: {e:?}");
@@ -147,13 +152,7 @@ pub async fn update_page_service(
     }
     let include_hidden = true; // We have already checked permissions, so we can include hidden pages
 
-    let mut page = Page::get_by_slug(pool, page_form.slug, include_hidden)
-        .await
-        .map_err(|e| {
-            let err = format!("Error while getting page: {e:?}");
-            tracing::error!("{err}");
-            AppError::internal(e)
-        })?;
+    let mut page = find_page_by_slug(pool, &page_form.slug, include_hidden).await?;
     page.name = page_form.name;
     page.description = page_form.description;
     page.body = page_form.body;
@@ -193,13 +192,7 @@ pub async fn delete_page_service(
     }
     let include_hidden = true; // We have already checked permissions, so we can include hidden pages
 
-    let page = Page::get_by_slug(pool, slug, include_hidden)
-        .await
-        .map_err(|e| {
-            let err = format!("Error while getting page: {e:?}");
-            tracing::error!("{err}");
-            AppError::internal(e)
-        })?;
+    let page = find_page_by_slug(pool, &slug, include_hidden).await?;
 
     Ok(PageResult {
         page: page.delete(pool).await.map_err(|e| {

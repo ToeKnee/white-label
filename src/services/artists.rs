@@ -29,11 +29,16 @@ pub async fn get_releases_for_artist_service(
     }
     let include_hidden = user.is_some_and(|user| user.permissions.contains("label_owner"));
 
-    let artist = Artist::get_by_id(pool, artist_id).await.map_err(|x| {
+    let artist = Artist::find_by_id(pool, artist_id).await.map_err(|x| {
         let err = format!("Error while getting artist {artist_id}: {x:?}");
         tracing::error!("{err}");
         AppError::internal("Could not retrieve artist, try again later")
     })?;
+    let Some(artist) = artist else {
+        return Err(AppError::NotFound(
+            "Could not retrieve artist, try again later".into(),
+        ));
+    };
 
     Release::list_by_artist_and_record_label(pool, artist.id, artist.label_id, include_hidden)
         .await

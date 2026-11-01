@@ -160,20 +160,32 @@ impl Artist {
     /// If the artist cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
+        Self::find_by_id(pool, id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Could not find artist with id {}.", id))
+    }
+
+    /// Look up an artist by id, `Ok(None)` when no row matches — lets
+    /// callers tell a missing artist (404) from a database failure (500).
+    ///
+    /// # Errors
+    /// If the database query fails, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn find_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Option<Self>> {
         let row = sqlx::query("SELECT * FROM artists WHERE id = $1")
             .bind(id)
-            .fetch_one(pool)
-            .await;
-
-        let row = match row {
-            Ok(row) => row,
-            Err(e) => {
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
                 tracing::error!("{e}");
-                return Err(anyhow::anyhow!("Could not find artist with id {}.", id));
-            }
+                anyhow::anyhow!("Could not find artist with id {}.", id)
+            })?;
+
+        let Some(row) = row else {
+            return Ok(None);
         };
 
-        Ok(Self {
+        Ok(Some(Self {
             id: row.get("id"),
             name: row.get("name"),
             slug: row.get("slug"),
@@ -185,7 +197,7 @@ impl Artist {
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             deleted_at: row.get("deleted_at"),
-        })
+        }))
     }
 
     /// Get artist by slug
@@ -201,18 +213,26 @@ impl Artist {
     /// If the artist cannot be found, return an error
     #[cfg(feature = "ssr")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
-        let artist = sqlx::query_as::<_, Self>("SELECT * FROM artists WHERE slug = $1")
-            .bind(slug.clone())
-            .fetch_one(pool)
-            .await;
+        Self::find_by_slug(pool, slug.clone())
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Could not find artist with slug {}.", slug))
+    }
 
-        match artist {
-            Ok(row) => Ok(row),
-            Err(e) => {
+    /// Look up an artist by slug, `Ok(None)` when no row matches — lets
+    /// callers tell a missing artist (404) from a database failure (500).
+    ///
+    /// # Errors
+    /// If the database query fails, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn find_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM artists WHERE slug = $1")
+            .bind(&slug)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
                 tracing::error!("{e}");
-                Err(anyhow::anyhow!("Could not find artist with slug {}.", slug))
-            }
-        }
+                anyhow::anyhow!("Could not find artist with slug {}.", slug)
+            })
     }
 
     /// List artist by record label

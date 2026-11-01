@@ -26,8 +26,15 @@ pub async fn get_links_service(
     pool: &PgPool,
     artist_slug: String,
 ) -> Result<LinksResult, AppError> {
-    let artist = match Artist::get_by_slug(pool, artist_slug).await {
-        Ok(artist) => artist,
+    let artist = match Artist::find_by_slug(pool, artist_slug.clone()).await {
+        Ok(Some(artist)) => artist,
+        // A missing artist keeps the old "Artist not found: …" text but
+        // now answers 404; database failures stay 500.
+        Ok(None) => {
+            return Err(AppError::NotFound(format!(
+                "Artist not found: Could not find artist with slug {artist_slug}."
+            )));
+        }
         Err(e) => return Err(AppError::internal(format!("Artist not found: {e}"))),
     };
 
@@ -67,8 +74,14 @@ pub async fn update_links_service(
         Err(e) => return Err(e),
     }
 
-    let artist = match Artist::get_by_slug(pool, form.artist_slug.clone()).await {
-        Ok(artist) => artist,
+    let artist = match Artist::find_by_slug(pool, form.artist_slug.clone()).await {
+        Ok(Some(artist)) => artist,
+        Ok(None) => {
+            return Err(AppError::NotFound(format!(
+                "Artist not found: Could not find artist with slug {}.",
+                form.artist_slug
+            )));
+        }
         Err(e) => return Err(AppError::internal(format!("Artist not found: {e}"))),
     };
 

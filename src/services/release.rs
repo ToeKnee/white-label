@@ -7,6 +7,20 @@ use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 use crate::models::{artist::Artist, auth::User, release::Release};
 use crate::routes::release::{ReleaseResult, ReleasesResult};
 
+/// `Release::find_by_slug` wired onto the service error ladder: a missing
+/// row is a 404 with the model's message, a database failure stays a 500.
+#[cfg(feature = "ssr")]
+async fn find_release_by_slug(pool: &PgPool, slug: &str) -> Result<Release, AppError> {
+    Release::find_by_slug(pool, slug.to_string())
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting release by slug: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("Could not find release with slug {slug}.")))
+}
+
 /// Get the next scheduled release, optionally filtered by artist slug.
 ///
 /// # Arguments
@@ -76,8 +90,15 @@ pub async fn get_releases_service(
     user: Option<&User>,
     slug: String,
 ) -> Result<ReleasesResult, AppError> {
-    let artist = match Artist::get_by_slug(pool, slug).await {
-        Ok(artist) => artist,
+    let artist = match Artist::find_by_slug(pool, slug.clone()).await {
+        Ok(Some(artist)) => artist,
+        // Missing artist answers 404 with the model's message; database
+        // failures stay 500.
+        Ok(None) => {
+            return Err(AppError::NotFound(format!(
+                "Could not find artist with slug {slug}."
+            )));
+        }
         Err(e) => {
             let err = format!("Error while getting artist: {e:?}");
             tracing::error!("get_releases_service {err}");
@@ -268,11 +289,7 @@ pub async fn update_release_service(
         Err(e) => return Err(e),
     }
 
-    let mut release = Release::get_by_slug(pool, form.slug).await.map_err(|e| {
-        let err = format!("Error while getting release by slug: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    let mut release = find_release_by_slug(pool, &form.slug).await?;
 
     release.name = form.name;
     release.description = form.description;
@@ -339,11 +356,7 @@ pub async fn delete_release_service(
         Err(e) => return Err(e),
     }
 
-    let release = Release::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting release: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    let release = find_release_by_slug(pool, &slug).await?;
 
     Ok(ReleaseResult {
         release: release.delete(pool).await.map_err(|e| {
@@ -388,11 +401,7 @@ pub async fn restore_release_service(
         Err(e) => return Err(e),
     }
 
-    let mut release = Release::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting release: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    let mut release = find_release_by_slug(pool, &slug).await?;
     release.deleted_at = None;
     release.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring release: {e:?}");

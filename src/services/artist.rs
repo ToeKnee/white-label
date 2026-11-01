@@ -20,12 +20,21 @@ use crate::routes::artist::ArtistResult;
 /// If the artist cannot be found, return an error
 pub async fn get_artist_service(pool: &PgPool, slug: String) -> Result<ArtistResult, AppError> {
     Ok(ArtistResult {
-        artist: Artist::get_by_slug(pool, slug).await.map_err(|e| {
+        artist: find_artist_by_slug(pool, &slug).await?,
+    })
+}
+
+/// `Artist::find_by_slug` wired onto the service error ladder: a missing
+/// row is a 404 with the model's message, a database failure stays a 500.
+async fn find_artist_by_slug(pool: &PgPool, slug: &str) -> Result<Artist, AppError> {
+    Artist::find_by_slug(pool, slug.to_string())
+        .await
+        .map_err(|e| {
             let err = format!("Error while getting artist: {e:?}");
             tracing::error!("{err}");
             AppError::internal(e)
-        })?,
-    })
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("Could not find artist with slug {slug}.")))
 }
 
 /// Create a new artist
@@ -96,13 +105,7 @@ pub async fn update_artist_service(
         Err(e) => return Err(e),
     }
 
-    let mut artist = Artist::get_by_slug(pool, artist_form.slug)
-        .await
-        .map_err(|e| {
-            let err = format!("Error while getting artist: {e:?}");
-            tracing::error!("{err}");
-            AppError::internal(e)
-        })?;
+    let mut artist = find_artist_by_slug(pool, &artist_form.slug).await?;
     artist.name = artist_form.name;
     artist.description = artist_form.description;
     artist.website = artist_form.website;
@@ -141,11 +144,7 @@ pub async fn delete_artist_service(
         Err(e) => return Err(e),
     }
 
-    let artist = Artist::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting artist: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    let artist = find_artist_by_slug(pool, &slug).await?;
 
     Ok(ArtistResult {
         artist: artist.delete(pool).await.map_err(|e| {
@@ -180,11 +179,7 @@ pub async fn restore_artist_service(
         Err(e) => return Err(e),
     }
 
-    let mut artist = Artist::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting artist: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    let mut artist = find_artist_by_slug(pool, &slug).await?;
     artist.deleted_at = None;
     artist.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring artist: {e:?}");

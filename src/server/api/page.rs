@@ -149,9 +149,9 @@ mod tests {
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
-    async fn get_page_missing_is_internal(pool: PgPool) {
-        // Today's behaviour: the model's not-found error surfaces as a 500
-        // `ServerError|…`. Refining this to a 404 NotFound is follow-up.
+    async fn get_page_missing_is_not_found(pool: PgPool) {
+        // A missing (or visibility-filtered) page answers 404 with the
+        // model's message; body unchanged from the Leptos route.
         let server = api_server(pool).await;
 
         let response = post_args(
@@ -163,7 +163,7 @@ mod tests {
         )
         .await;
 
-        response.assert_status_internal_server_error();
+        response.assert_status_not_found();
         assert_eq!(response.header("serverfnerror"), PATH_GET_PAGE);
         assert!(response.text().starts_with("ServerError|"));
         assert!(response.text().contains("missing-page"));
@@ -208,7 +208,7 @@ mod tests {
         // Anonymous sessions only see published, undeleted pages.
         let anonymous = api_server(pool).await;
         let hidden = post_args(&anonymous, PATH_GET_PAGE, &get_args).await;
-        hidden.assert_status_internal_server_error();
+        hidden.assert_status_not_found();
         assert!(hidden.text().starts_with("ServerError|"));
 
         let visible = post_args(&owner, PATH_GET_PAGE, &get_args).await;
@@ -358,7 +358,7 @@ mod tests {
             },
         )
         .await;
-        after_delete.assert_status_internal_server_error();
+        after_delete.assert_status_not_found();
 
         // …while the owner can restore it.
         let restored = post_args(
@@ -381,7 +381,7 @@ mod tests {
             },
         )
         .await;
-        after_restore.assert_status_internal_server_error();
+        after_restore.assert_status_not_found();
         // Restoring only clears `deleted_at`; the page stays unpublished
         // (published_at is still NULL), so it remains hidden from the
         // anonymous session.

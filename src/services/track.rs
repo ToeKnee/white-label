@@ -7,6 +7,46 @@ use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
 use crate::models::{artist::Artist, auth::User, release::Release, track::Track};
 use crate::routes::track::{TrackResult, TracksResult};
 
+/// `Artist::find_by_slug` wired onto the service error ladder: a missing
+/// row is a 404 with the model's message, a database failure stays a 500.
+#[cfg(feature = "ssr")]
+async fn lookup_artist(pool: &PgPool, slug: String) -> Result<Artist, AppError> {
+    Artist::find_by_slug(pool, slug.clone())
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting artist: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("Could not find artist with slug {slug}.")))
+}
+
+/// `Release::find_by_slug` wired onto the service error ladder, as above.
+#[cfg(feature = "ssr")]
+async fn lookup_release(pool: &PgPool, slug: String) -> Result<Release, AppError> {
+    Release::find_by_slug(pool, slug.clone())
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting release: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("Could not find release with slug {slug}.")))
+}
+
+/// `Track::find_by_slug` wired onto the service error ladder, as above.
+#[cfg(feature = "ssr")]
+async fn find_track_by_slug(pool: &PgPool, slug: &str) -> Result<Track, AppError> {
+    Track::find_by_slug(pool, slug.to_string())
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting track: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("Could not find track with slug {slug}.")))
+}
+
 /// Get an artists tracks
 ///
 /// # Arguments
@@ -30,22 +70,8 @@ pub async fn get_tracks_service(
     artist_slug: String,
     release_slug: String,
 ) -> Result<TracksResult, AppError> {
-    let artist = match Artist::get_by_slug(pool, artist_slug).await {
-        Ok(artist) => artist,
-        Err(e) => {
-            let err = format!("Error while getting artist: {e:?}");
-            tracing::error!("{err}");
-            return Err(AppError::internal(e));
-        }
-    };
-    let release = match Release::get_by_slug(pool, release_slug).await {
-        Ok(release) => release,
-        Err(e) => {
-            let err = format!("Error while getting release: {e:?}");
-            tracing::error!("{err}");
-            return Err(AppError::internal(e));
-        }
-    };
+    let artist = lookup_artist(pool, artist_slug).await?;
+    let release = lookup_release(pool, release_slug).await?;
 
     let include_hidden =
         user.is_some_and(|current_user| current_user.permissions.contains("label_owner"));
@@ -95,22 +121,8 @@ pub async fn get_track_service(
     release_slug: String,
     track_slug: String,
 ) -> Result<TrackResult, AppError> {
-    let artist = match Artist::get_by_slug(pool, artist_slug).await {
-        Ok(artist) => artist,
-        Err(e) => {
-            let err = format!("Error while getting artist: {e:?}");
-            tracing::error!("{err}");
-            return Err(AppError::internal(e));
-        }
-    };
-    let release = match Release::get_by_slug(pool, release_slug).await {
-        Ok(release) => release,
-        Err(e) => {
-            let err = format!("Error while getting release: {e:?}");
-            tracing::error!("{err}");
-            return Err(AppError::internal(e));
-        }
-    };
+    let artist = lookup_artist(pool, artist_slug).await?;
+    let release = lookup_release(pool, release_slug).await?;
 
     let Some(current_user) = user else {
         return Err(AppError::Unauthorized("User not found".into()));
@@ -229,11 +241,7 @@ pub async fn update_track_service(
         Err(e) => return Err(e),
     }
 
-    let mut track = Track::get_by_slug(pool, form.slug).await.map_err(|e| {
-        let err = format!("Error while getting track by slug: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    let mut track = find_track_by_slug(pool, &form.slug).await?;
 
     track.name = form.name;
     track.description = form.description;
@@ -294,11 +302,7 @@ pub async fn delete_track_service(
         Err(e) => return Err(e),
     }
 
-    let track = Track::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting track: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    let track = find_track_by_slug(pool, &slug).await?;
 
     Ok(TrackResult {
         track: track.delete(pool).await.map_err(|e| {
@@ -338,11 +342,7 @@ pub async fn restore_track_service(
         Err(e) => return Err(e),
     }
 
-    let mut track = Track::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting track: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    let mut track = find_track_by_slug(pool, &slug).await?;
     track.deleted_at = None;
     track.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring track: {e:?}");

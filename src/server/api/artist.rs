@@ -175,9 +175,10 @@ mod tests {
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
-    async fn get_artist_missing_is_internal(pool: PgPool) {
-        // Today's behaviour: the model's not-found error surfaces as a 500
-        // `ServerError|…`. Refining this to a 404 NotFound is follow-up.
+    async fn get_artist_missing_is_not_found(pool: PgPool) {
+        // A missing artist answers 404 with the model's message; the body
+        // stays byte-identical to the Leptos route's, only the status was
+        // upgraded from its blanket 500.
         let server = api_server(pool).await;
 
         let response = post_args(
@@ -189,7 +190,7 @@ mod tests {
         )
         .await;
 
-        response.assert_status_internal_server_error();
+        response.assert_status_not_found();
         assert_eq!(response.header("serverfnerror"), PATH_GET_ARTIST);
         assert!(response.text().starts_with("ServerError|"));
         assert!(response.text().contains("missing-artist"));

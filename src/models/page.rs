@@ -159,23 +159,36 @@ impl Page {
         slug: String,
         include_hidden: bool,
     ) -> anyhow::Result<Self> {
+        Self::find_by_slug(pool, slug.clone(), include_hidden)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Could not find page with slug {slug}."))
+    }
+
+    /// Look up a page by slug, `Ok(None)` when no row matches — lets
+    /// callers tell a missing page (404) from a database failure (500).
+    ///
+    /// # Errors
+    /// If the database query fails, return an error
+    #[cfg(feature = "ssr")]
+    pub async fn find_by_slug(
+        pool: &PgPool,
+        slug: String,
+        include_hidden: bool,
+    ) -> anyhow::Result<Option<Self>> {
         let query = if include_hidden {
             "SELECT * FROM pages WHERE slug = $1"
         } else {
             "SELECT * FROM pages WHERE slug = $1 AND deleted_at IS NULL AND published_at < NOW() AND published_at IS NOT NULL"
         };
 
-        match sqlx::query_as::<_, Self>(query)
+        sqlx::query_as::<_, Self>(query)
             .bind(&slug)
-            .fetch_one(pool)
+            .fetch_optional(pool)
             .await
-        {
-            Ok(page) => Ok(page),
-            Err(e) => {
+            .map_err(|e| {
                 tracing::error!("{e}");
-                Err(anyhow::anyhow!("Could not find page with slug {slug}."))
-            }
-        }
+                anyhow::anyhow!("Could not find page with slug {slug}.")
+            })
     }
 
     /// List all pages
