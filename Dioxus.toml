@@ -1,0 +1,12 @@
+# Dioxus CLI config (migration in progress — see MIGRATION.md).
+# The shipped site is still built by cargo-leptos; `dx` is used for the
+# Dioxus port as it lands (Phase 1+).
+
+[application]
+name = "white-label"
+
+[web.app]
+title = "White Label"
+
+[web.watcher]
+watch_path = ["src", "public", "style"]

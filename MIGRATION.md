@@ -180,7 +180,14 @@ Exit: the six items above all work (or a documented fallback exists for 4). Pick
 - Port `setup.rs` to `dioxus::serve` + `dioxus::server::router(app)` with `SessionLayer`/`AuthLayer`/`ServeDir("/uploads")`; factor a `build_router()` so `axum-test` keeps working.
 - Port `axum_session`/`axum_session_auth`/`axum_session_sqlx` to `tower-sessions` + `tower-sessions-sqlx-store` (AGENTS.md preference; main already depends on **both** stacks — consolidate on tower-sessions, see risk 9). There is no `AuthLayer` equivalent in tower-sessions: add a current-user extractor that reads the session record and loads `User` from the DB. Revalidate the spike's layer-order findings against the new stack (the hand-built-axum-under-`dioxus::serve` result transfers regardless of session crate).
 - Port `state.rs` helpers to extractors; keep `database.rs`, `migrations/`, config untouched.
-- ✅ Exit: `cargo test` (354 tests) passes with `ServerFnError` → `HttpError` refactor across `services/`/`routes/`; server binary boots.
+- ✅ Exit: `cargo test` (319 lib tests + 2 doctests) passes with `ServerFnError` → `HttpError` refactor across `services/`/`routes/`; server binary boots.
+
+**Phase 1 progress (branch `dioxus`, 2026-11-01):**
+
+- `Cargo.toml`: optional `dioxus = 0.7.10` (features `fullstack` + `router`, mirroring the spike) added behind a new `server` feature; the Leptos `ssr` stack and `[package.metadata.leptos]` are untouched, so the shipped site still builds via cargo-leptos. **Transitional decision:** `server` implies `ssr` for now because `services/`/`models/` are gated on it and still return `ServerFnError`; decoupling services onto a neutral error type is the first code step of this phase, and the `cfg(feature = "ssr")` → `server` sweep lands with it.
+- Verified: `cargo check` (default), `cargo check --no-default-features --features server`, and `cargo clippy --all-targets --all-features` all compile clean — the dioxus and Leptos dependency trees coexist.
+- Root `Dioxus.toml` added (minimal: name/title/watch paths); npm gained a `css` script (`tailwindcss -i style/tailwind.css -o public/main.css`, new `@tailwindcss/cli` dev-dep — run `npm install` before first use).
+- Still to do: upgrade the `dx` CLI (0.7.6 → 0.7.10 to match the crates), port `setup.rs` to `dioxus::serve` on tower-sessions, introduce the neutral service error type + axum-test-backed `build_router()`.
 
 ### Phase 2 — Server fn parity (4–6 days)
 

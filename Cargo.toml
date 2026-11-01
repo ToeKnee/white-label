@@ -25,6 +25,12 @@ console_error_panic_hook = { version = "0.1", optional = true }
 convert_case = "0.8.0"
 dashmap = { version = "6.1.0", optional = true }
 deunicode = "1.6.0"
+# Dioxus migration (in progress, see MIGRATION.md). Optional: pulled in only
+# by the `server` feature, so the shipped Leptos build is unaffected.
+dioxus = { version = "0.7.10", features = [
+    "fullstack",
+    "router",
+], optional = true }
 dotenvy = "0.15.7"
 futures = "0.3.31"
 getrandom = { version = "0.3.3", optional = true }
@@ -102,6 +108,17 @@ ssr = [
     "leptos_router/ssr",
 ]
 tracing-wasm = ["dep:tracing", "dep:tracing-wasm"]
+# Transitional: `server` still implies the Leptos `ssr` stack because
+# services/models are gated behind it and still return `ServerFnError`.
+# Phase 2 decouples services onto a neutral error type, then the Leptos
+# feature flags go away at cutover.
+server = [
+    "ssr",
+    "dep:dioxus",
+    "dioxus/fullstack",
+    "dioxus/router",
+    "dioxus/server",
+]
 
 # Defines a size-optimized profile for the WASM bundle in release mode
 [profile.wasm-release]
