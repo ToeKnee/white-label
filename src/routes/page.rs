@@ -38,7 +38,9 @@ pub async fn get_page(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    get_page_service(&pool, user, slug).await
+    get_page_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Create a new page.
@@ -59,7 +61,9 @@ pub async fn create_page(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    create_page_service(&pool, user, page_form).await
+    create_page_service(&pool, user, page_form)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Update an existing page.
@@ -80,7 +84,9 @@ pub async fn update_page(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    update_page_service(&pool, user, page_form).await
+    update_page_service(&pool, user, page_form)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Delete a page by its slug.
@@ -101,7 +107,9 @@ pub async fn delete_page(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    delete_page_service(&pool, user, slug).await
+    delete_page_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Restore a deleted page.
@@ -122,5 +130,7 @@ pub async fn restore_page(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    restore_page_service(&pool, user, slug).await
+    restore_page_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }

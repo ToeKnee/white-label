@@ -1,5 +1,5 @@
 //! Services for the tracks routes
-use leptos::prelude::ServerFnError;
+use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
@@ -29,13 +29,13 @@ pub async fn get_tracks_service(
     user: Option<&User>,
     artist_slug: String,
     release_slug: String,
-) -> Result<TracksResult, ServerFnError> {
+) -> Result<TracksResult, AppError> {
     let artist = match Artist::get_by_slug(pool, artist_slug).await {
         Ok(artist) => artist,
         Err(e) => {
             let err = format!("Error while getting artist: {e:?}");
             tracing::error!("{err}");
-            return Err(ServerFnError::new(e));
+            return Err(AppError::internal(e));
         }
     };
     let release = match Release::get_by_slug(pool, release_slug).await {
@@ -43,7 +43,7 @@ pub async fn get_tracks_service(
         Err(e) => {
             let err = format!("Error while getting release: {e:?}");
             tracing::error!("{err}");
-            return Err(ServerFnError::new(e));
+            return Err(AppError::internal(e));
         }
     };
 
@@ -64,7 +64,7 @@ pub async fn get_tracks_service(
             Err(e) => {
                 let err = format!("Error while getting tracks: {e:?}");
                 tracing::error!("{err}");
-                return Err(ServerFnError::new(e));
+                return Err(AppError::internal(e));
             }
         },
     })
@@ -94,13 +94,13 @@ pub async fn get_track_service(
     artist_slug: String,
     release_slug: String,
     track_slug: String,
-) -> Result<TrackResult, ServerFnError> {
+) -> Result<TrackResult, AppError> {
     let artist = match Artist::get_by_slug(pool, artist_slug).await {
         Ok(artist) => artist,
         Err(e) => {
             let err = format!("Error while getting artist: {e:?}");
             tracing::error!("{err}");
-            return Err(ServerFnError::new(e));
+            return Err(AppError::internal(e));
         }
     };
     let release = match Release::get_by_slug(pool, release_slug).await {
@@ -108,12 +108,12 @@ pub async fn get_track_service(
         Err(e) => {
             let err = format!("Error while getting release: {e:?}");
             tracing::error!("{err}");
-            return Err(ServerFnError::new(e));
+            return Err(AppError::internal(e));
         }
     };
 
     let Some(current_user) = user else {
-        return Err(ServerFnError::new("User not found"));
+        return Err(AppError::Unauthorized("User not found".into()));
     };
     let include_hidden = current_user.permissions.contains("label_owner");
 
@@ -129,13 +129,13 @@ pub async fn get_track_service(
     .map_err(|e| {
         let err = format!("Error while getting track: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     let artists = track.get_artists(pool).await.map_err(|e| {
         let err = format!("Error while getting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(TrackResult { track, artists })
@@ -149,7 +149,7 @@ pub async fn get_track_service(
 /// `form`: `CreateTrackForm` - The form to create the track
 ///
 /// # Returns
-/// Result<`TrackResult`, `ServerFnError`> - The created track
+/// Result<`TrackResult`, `AppError`> - The created track
 ///
 /// # Errors
 /// If the name is empty, return an error
@@ -160,7 +160,7 @@ pub async fn create_track_service(
     pool: &PgPool,
     user: Option<&User>,
     form: CreateTrackForm,
-) -> Result<TrackResult, ServerFnError> {
+) -> Result<TrackResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -182,7 +182,7 @@ pub async fn create_track_service(
     .map_err(|e| {
         let err = format!("Error while creating track: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     let artist_ids = form
@@ -193,12 +193,12 @@ pub async fn create_track_service(
     track.set_artists(pool, artist_ids).await.map_err(|e| {
         let err = format!("Error while setting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     let artists = track.get_artists(pool).await.map_err(|e| {
         let err = format!("Error while getting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(TrackResult { track, artists })
@@ -212,7 +212,7 @@ pub async fn create_track_service(
 /// `form`: `CreateTrackForm` - The form to create the track
 ///
 /// # Returns
-/// Result<`TrackResult`, `ServerFnError`> - The created track
+/// Result<`TrackResult`, `AppError`> - The created track
 ///
 /// # Errors
 /// If the name is empty, return an error
@@ -223,7 +223,7 @@ pub async fn update_track_service(
     pool: &PgPool,
     user: Option<&User>,
     form: UpdateTrackForm,
-) -> Result<TrackResult, ServerFnError> {
+) -> Result<TrackResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -232,7 +232,7 @@ pub async fn update_track_service(
     let mut track = Track::get_by_slug(pool, form.slug).await.map_err(|e| {
         let err = format!("Error while getting track by slug: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     track.name = form.name;
@@ -248,7 +248,7 @@ pub async fn update_track_service(
     track = track.update(pool).await.map_err(|e| {
         let err = format!("Error while updating track: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     let artist_ids = form
@@ -259,12 +259,12 @@ pub async fn update_track_service(
     track.set_artists(pool, artist_ids).await.map_err(|e| {
         let err = format!("Error while setting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     let artists = track.get_artists(pool).await.map_err(|e| {
         let err = format!("Error while getting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(TrackResult { track, artists })
@@ -278,7 +278,7 @@ pub async fn update_track_service(
 /// slug: String - The slug of the track
 ///
 /// # Returns
-/// Result<`TrackResult`, `ServerFnError`> - The deleted track
+/// Result<`TrackResult`, `AppError`> - The deleted track
 ///
 /// # Errors
 /// If the track cannot be found, return an error
@@ -288,7 +288,7 @@ pub async fn delete_track_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<TrackResult, ServerFnError> {
+) -> Result<TrackResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -297,19 +297,19 @@ pub async fn delete_track_service(
     let track = Track::get_by_slug(pool, slug).await.map_err(|e| {
         let err = format!("Error while getting track: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(TrackResult {
         track: track.delete(pool).await.map_err(|e| {
             let err = format!("Error while deleting track: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
         artists: track.get_artists(pool).await.map_err(|e| {
             let err = format!("Error while getting artists: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -322,7 +322,7 @@ pub async fn delete_track_service(
 /// slug: String - The slug of the track
 ///
 /// # Returns
-/// Result<`TrackResult`, `ServerFnError`> - The restored track
+/// Result<`TrackResult`, `AppError`> - The restored track
 ///
 /// # Errors
 /// If the track cannot be found, return an error
@@ -332,7 +332,7 @@ pub async fn restore_track_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<TrackResult, ServerFnError> {
+) -> Result<TrackResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -341,13 +341,13 @@ pub async fn restore_track_service(
     let mut track = Track::get_by_slug(pool, slug).await.map_err(|e| {
         let err = format!("Error while getting track: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     track.deleted_at = None;
     track.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring track: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(TrackResult {
@@ -355,7 +355,7 @@ pub async fn restore_track_service(
         artists: track.get_artists(pool).await.map_err(|e| {
             let err = format!("Error while getting artists: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -530,7 +530,7 @@ mod tests {
         assert!(track_result.is_err());
         assert_eq!(
             track_result.unwrap_err().to_string(),
-            "error running server function: Could not find track test-track-1 for release with id 1 and artist with id 1 and record label with id 1."
+            "Could not find track test-track-1 for release with id 1 and artist with id 1 and record label with id 1."
                 .to_string()
         );
     }
@@ -613,7 +613,7 @@ mod tests {
         assert!(track_result.is_err());
         assert_eq!(
             track_result.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -649,7 +649,7 @@ mod tests {
         assert!(track_result.is_err());
         assert_eq!(
             track_result.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -782,7 +782,7 @@ mod tests {
         assert!(delete_result.is_err());
         assert_eq!(
             delete_result.unwrap_err().to_string(),
-            "error running server function: Could not find track with slug not-found.".to_string()
+            "Could not find track with slug not-found.".to_string()
         );
     }
 
@@ -807,7 +807,7 @@ mod tests {
         let delete_result = delete_track_service(&pool, Some(&user), track.slug.clone()).await;
         assert_eq!(
             delete_result.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
 
         let get_result =
@@ -842,7 +842,7 @@ mod tests {
         assert!(restored_track.is_err());
         assert_eq!(
             restored_track.unwrap_err().to_string(),
-            "error running server function: Could not find track with slug missing.".to_string()
+            "Could not find track with slug missing.".to_string()
         );
     }
 
@@ -855,7 +855,7 @@ mod tests {
         assert!(restored_track.is_err());
         assert_eq!(
             restored_track.unwrap_err().to_string(),
-            "error running server function: You must be logged in to view this page.".to_string()
+            "You must be logged in to view this page.".to_string()
         );
     }
 
@@ -870,7 +870,7 @@ mod tests {
         assert!(restored_track.is_err());
         assert_eq!(
             restored_track.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 }

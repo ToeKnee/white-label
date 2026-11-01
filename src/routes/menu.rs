@@ -66,5 +66,5 @@ pub async fn get_admin_menu() -> Result<AdminMenu, ServerFnError> {
 
     let user = auth.current_user.as_ref();
 
-    admin_menu(&pool, user).await
+    admin_menu(&pool, user).await.map_err(ServerFnError::from)
 }

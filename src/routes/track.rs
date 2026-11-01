@@ -50,7 +50,9 @@ pub async fn get_tracks(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    get_tracks_service(&pool, user, artist_slug, release_slug).await
+    get_tracks_service(&pool, user, artist_slug, release_slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Get a specific track by its slug, along with its associated artists and releases.
@@ -77,7 +79,9 @@ pub async fn get_track(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    get_track_service(&pool, user, artist_slug, release_slug, slug).await
+    get_track_service(&pool, user, artist_slug, release_slug, slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Create a new track with the provided form data.
@@ -98,7 +102,9 @@ pub async fn create_track(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    create_track_service(&pool, user, form).await
+    create_track_service(&pool, user, form)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Update an existing track with the provided form data.
@@ -119,7 +125,9 @@ pub async fn update_track(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    update_track_service(&pool, user, form).await
+    update_track_service(&pool, user, form)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Delete a track by its slug.
@@ -139,7 +147,9 @@ pub async fn delete_track(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    delete_track_service(&pool, user, slug).await
+    delete_track_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Restore a deleted track.
@@ -160,5 +170,7 @@ pub async fn restore_track(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    restore_track_service(&pool, user, slug).await
+    restore_track_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }

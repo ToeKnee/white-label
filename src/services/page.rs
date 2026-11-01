@@ -1,5 +1,5 @@
 //! Services for the page routes
-use leptos::prelude::ServerFnError;
+use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
@@ -15,7 +15,7 @@ use crate::routes::page::PageResult;
 /// slug: String - The slug of the page
 ///
 /// # Returns
-/// Result<`PageResult`, `ServerFnError`> - The page
+/// Result<`PageResult`, `AppError`> - The page
 ///
 /// # Errors
 /// If the page cannot be found, return an error
@@ -23,7 +23,7 @@ pub async fn get_page_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<PageResult, ServerFnError> {
+) -> Result<PageResult, AppError> {
     let include_hidden = user.is_some_and(|user| user.permissions.contains("label_owner"));
     Ok(PageResult {
         page: Page::get_by_slug(pool, slug, include_hidden)
@@ -31,7 +31,7 @@ pub async fn get_page_service(
             .map_err(|e| {
                 let err = format!("Error while getting page: {e:?}");
                 tracing::error!("{err}");
-                ServerFnError::new(e)
+                AppError::internal(e)
             })?,
     })
 }
@@ -44,7 +44,7 @@ pub async fn get_page_service(
 /// slug: String - The slug of the page
 ///
 /// # Returns
-/// Result<`PageResult`, `ServerFnError`> - The restored page
+/// Result<`PageResult`, `AppError`> - The restored page
 ///
 /// # Errors
 /// If the page cannot be found, return an error
@@ -54,7 +54,7 @@ pub async fn restore_page_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<PageResult, ServerFnError> {
+) -> Result<PageResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -66,13 +66,13 @@ pub async fn restore_page_service(
         .map_err(|e| {
             let err = format!("Error while getting page: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?;
     page.deleted_at = None;
     page.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring page: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(PageResult { page })
@@ -86,7 +86,7 @@ pub async fn restore_page_service(
 /// `page_form`: `CreatePageForm` - The form to create the page
 ///
 /// # Returns
-/// Result<`PageResult`, `ServerFnError`> - The created page
+/// Result<`PageResult`, `AppError`> - The created page
 ///
 /// # Errors
 /// If the name is empty, return an error
@@ -97,7 +97,7 @@ pub async fn create_page_service(
     pool: &PgPool,
     user: Option<&User>,
     page_form: CreatePageForm,
-) -> Result<PageResult, ServerFnError> {
+) -> Result<PageResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -116,7 +116,7 @@ pub async fn create_page_service(
         .map_err(|e| {
             let err = format!("Error while creating page: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -129,7 +129,7 @@ pub async fn create_page_service(
 /// `page_form`: `UpdatePageForm` - The form to update the page
 ///
 /// # Returns
-/// Result<`PageResult`, `ServerFnError`> - The updated page
+/// Result<`PageResult`, `AppError`> - The updated page
 ///
 /// # Errors
 /// If the name is empty, return an error
@@ -140,7 +140,7 @@ pub async fn update_page_service(
     pool: &PgPool,
     user: Option<&User>,
     page_form: UpdatePageForm,
-) -> Result<PageResult, ServerFnError> {
+) -> Result<PageResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -152,7 +152,7 @@ pub async fn update_page_service(
         .map_err(|e| {
             let err = format!("Error while getting page: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?;
     page.name = page_form.name;
     page.description = page_form.description;
@@ -163,7 +163,7 @@ pub async fn update_page_service(
         page: page.update(pool).await.map_err(|e| {
             let err = format!("Error while updating page: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -176,7 +176,7 @@ pub async fn update_page_service(
 /// slug: String - The slug of the page
 ///
 /// # Returns
-/// Result<`PageResult`, `ServerFnError`> - The deleted page
+/// Result<`PageResult`, `AppError`> - The deleted page
 ///
 /// # Errors
 /// If the page cannot be found, return an error
@@ -186,7 +186,7 @@ pub async fn delete_page_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<PageResult, ServerFnError> {
+) -> Result<PageResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -198,14 +198,14 @@ pub async fn delete_page_service(
         .map_err(|e| {
             let err = format!("Error while getting page: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?;
 
     Ok(PageResult {
         page: page.delete(pool).await.map_err(|e| {
             let err = format!("Error while deleting page: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -258,7 +258,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "error running server function: Could not find page with slug missing.".to_string()
+            "Could not find page with slug missing.".to_string()
         );
     }
 
@@ -272,7 +272,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "error running server function: Could not find page with slug missing.".to_string()
+            "Could not find page with slug missing.".to_string()
         );
     }
 
@@ -319,7 +319,7 @@ mod tests {
         assert!(page.is_err());
         assert_eq!(
             page.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -344,7 +344,7 @@ mod tests {
         assert!(page.is_err());
         assert_eq!(
             page.unwrap_err().to_string(),
-            "error running server function: Name is required.".to_string()
+            "Name is required.".to_string()
         );
     }
 
@@ -369,7 +369,7 @@ mod tests {
         assert!(page.is_err());
         assert_eq!(
             page.unwrap_err().to_string(),
-            "error running server function: Name must be less than 255 characters.".to_string()
+            "Name must be less than 255 characters.".to_string()
         );
     }
 
@@ -393,7 +393,7 @@ mod tests {
         assert!(page.is_err());
         assert_eq!(
             page.unwrap_err().to_string(),
-            "error running server function: Record Label with id 0 does not exist.".to_string()
+            "Record Label with id 0 does not exist.".to_string()
         );
     }
 
@@ -442,7 +442,7 @@ mod tests {
         assert!(updated_page.is_err());
         assert_eq!(
             updated_page.unwrap_err().to_string(),
-            "error running server function: Name is required.".to_string()
+            "Name is required.".to_string()
         );
     }
 
@@ -467,7 +467,7 @@ mod tests {
         assert!(updated_page.is_err());
         assert_eq!(
             updated_page.unwrap_err().to_string(),
-            "error running server function: Name must be less than 255 characters.".to_string()
+            "Name must be less than 255 characters.".to_string()
         );
     }
 
@@ -490,7 +490,7 @@ mod tests {
         assert!(updated_page.is_err());
         assert_eq!(
             updated_page.unwrap_err().to_string(),
-            "error running server function: Could not find page with slug missing.".to_string()
+            "Could not find page with slug missing.".to_string()
         );
     }
 
@@ -509,7 +509,7 @@ mod tests {
         assert!(updated_page.is_err());
         assert_eq!(
             updated_page.unwrap_err().to_string(),
-            "error running server function: You must be logged in to view this page.".to_string()
+            "You must be logged in to view this page.".to_string()
         );
     }
 
@@ -531,7 +531,7 @@ mod tests {
         assert!(updated_page.is_err());
         assert_eq!(
             updated_page.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -560,7 +560,7 @@ mod tests {
         assert!(deleted_page.is_err());
         assert_eq!(
             deleted_page.unwrap_err().to_string(),
-            "error running server function: Could not find page with slug missing.".to_string()
+            "Could not find page with slug missing.".to_string()
         );
     }
 
@@ -572,7 +572,7 @@ mod tests {
         assert!(deleted_page.is_err());
         assert_eq!(
             deleted_page.unwrap_err().to_string(),
-            "error running server function: You must be logged in to view this page.".to_string()
+            "You must be logged in to view this page.".to_string()
         );
     }
 
@@ -586,7 +586,7 @@ mod tests {
         assert!(deleted_page.is_err());
         assert_eq!(
             deleted_page.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -617,7 +617,7 @@ mod tests {
         assert!(restored_page.is_err());
         assert_eq!(
             restored_page.unwrap_err().to_string(),
-            "error running server function: Could not find page with slug missing.".to_string()
+            "Could not find page with slug missing.".to_string()
         );
     }
 
@@ -630,7 +630,7 @@ mod tests {
         assert!(restored_page.is_err());
         assert_eq!(
             restored_page.unwrap_err().to_string(),
-            "error running server function: You must be logged in to view this page.".to_string()
+            "You must be logged in to view this page.".to_string()
         );
     }
 
@@ -645,7 +645,7 @@ mod tests {
         assert!(restored_page.is_err());
         assert_eq!(
             restored_page.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 }

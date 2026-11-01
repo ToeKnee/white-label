@@ -1,5 +1,5 @@
 //! This service will handle the menu operations, such as fetching the menu items and their details.
-use leptos::prelude::ServerFnError;
+use crate::error::AppError;
 use sqlx::PgPool;
 
 use crate::models::{
@@ -19,12 +19,12 @@ use crate::services::authentication_helpers::user_with_permissions;
 /// * `user`: An optional reference to the user requesting the menu.
 ///
 /// # Returns
-/// A `Result` containing an `AdminMenu` struct on success, or a `ServerFnError` on failure.
+/// A `Result` containing an `AdminMenu` struct on success, or a `AppError` on failure.
 ///
 /// # Errors
-/// Will return a `ServerFnError` if the user does not have the required permissions.
-/// Will return a `ServerFnError` if there is an issue retrieving any of the data (record label, artists, releases, tracks).
-pub async fn admin_menu(pool: &PgPool, user: Option<&User>) -> Result<AdminMenu, ServerFnError> {
+/// Will return a `AppError` if the user does not have the required permissions.
+/// Will return a `AppError` if there is an issue retrieving any of the data (record label, artists, releases, tracks).
+pub async fn admin_menu(pool: &PgPool, user: Option<&User>) -> Result<AdminMenu, AppError> {
     match user_with_permissions(user, vec!["admin"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -33,14 +33,14 @@ pub async fn admin_menu(pool: &PgPool, user: Option<&User>) -> Result<AdminMenu,
 
     let record_label = RecordLabel::first(pool).await.map_err(|x| {
         tracing::error!("Error while getting record label: {x:?}");
-        ServerFnError::new("Could not retrieve record label, try again later")
+        AppError::internal("Could not retrieve record label, try again later")
     })?;
 
     let artists = Artist::list_by_record_label(pool, record_label.id, include_hidden)
         .await
         .map_err(|x| {
             tracing::error!("Error while getting artists: {x:?}");
-            ServerFnError::new("Could not retrieve artists, try again later")
+            AppError::internal("Could not retrieve artists, try again later")
         })?;
 
     let mut menu_artists = Vec::new();
@@ -54,7 +54,7 @@ pub async fn admin_menu(pool: &PgPool, user: Option<&User>) -> Result<AdminMenu,
         .await
         .map_err(|x| {
             tracing::error!("Error while getting releases: {x:?}");
-            ServerFnError::new("Could not retrieve releases, try again later")
+            AppError::internal("Could not retrieve releases, try again later")
         })?;
 
         let mut menu_releases = Vec::new();
@@ -74,7 +74,7 @@ pub async fn admin_menu(pool: &PgPool, user: Option<&User>) -> Result<AdminMenu,
 
     let pages = Page::list(pool, include_hidden).await.map_err(|x| {
         tracing::error!("Error while getting pages: {x:?}");
-        ServerFnError::new("Could not retrieve pages, try again later")
+        AppError::internal("Could not retrieve pages, try again later")
     })?;
     let menu_pages = pages
         .into_iter()

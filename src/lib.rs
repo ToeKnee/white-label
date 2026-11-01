@@ -23,6 +23,7 @@ pub mod components;
 pub mod config;
 #[cfg(feature = "ssr")]
 pub mod database;
+pub mod error;
 pub mod forms;
 pub mod models;
 pub mod routes;

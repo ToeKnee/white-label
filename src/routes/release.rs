@@ -51,7 +51,9 @@ pub async fn get_releases(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    get_releases_service(&pool, user, artist_slug).await
+    get_releases_service(&pool, user, artist_slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Get the next scheduled release for a specific artist.
@@ -84,7 +86,9 @@ pub async fn get_next_scheduled_release(
         },
         _ => None,
     };
-    get_next_scheduled_release_service(&pool, artist_id, record_label.id).await
+    get_next_scheduled_release_service(&pool, artist_id, record_label.id)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Get a specific release by its slug, along with its associated artists and tracks.
@@ -108,7 +112,9 @@ pub async fn get_release(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    get_release_service(&pool, user, artist_slug, slug).await
+    get_release_service(&pool, user, artist_slug, slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Create a new release with the provided form data.
@@ -129,7 +135,9 @@ pub async fn create_release(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    create_release_service(&pool, user, form).await
+    create_release_service(&pool, user, form)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Update an existing release with the provided form data.
@@ -150,7 +158,9 @@ pub async fn update_release(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    update_release_service(&pool, user, form).await
+    update_release_service(&pool, user, form)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Delete a release by its slug.
@@ -171,7 +181,9 @@ pub async fn delete_release(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    delete_release_service(&pool, user, slug).await
+    delete_release_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Restore a deleted release.
@@ -192,5 +204,7 @@ pub async fn restore_release(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    restore_release_service(&pool, user, slug).await
+    restore_release_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }

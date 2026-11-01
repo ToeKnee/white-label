@@ -1,6 +1,6 @@
 # Migration Plan: Leptos → Dioxus
 
-Status: **research/planning only** — no code changes yet.
+Status: **In Progress** — always record current progression and next steps.
 Goal: one codebase producing the **web app (SSR + hydration)**, a **desktop app**, and **iOS/Android apps**, all talking to the same axum/Postgres backend.
 
 This is not a 1:1 port. Where Leptos and Dioxus differ, we adopt **idiomatic Dioxus** while keeping feature parity and the same rendered look (Tailwind + daisyUI markup is kept essentially unchanged, so the UI stays visually identical).
@@ -189,7 +189,9 @@ Exit: the six items above all work (or a documented fallback exists for 4). Pick
 - Root `Dioxus.toml` added (minimal: name/title/watch paths); npm gained a `css` script (`tailwindcss -i style/tailwind.css -o public/main.css`, new `@tailwindcss/cli` dev-dep — run `npm install` before first use).
 - `dioxus-server` bin target (`required-features = ["server"]`) + `src/server/`: `build_router()` wires the app pool (`create_pool`, incl. migrations), `tower-sessions` `PostgresStore` under its own `sessions` table (the Leptos app keeps `axum_sessions` during the overlap — one re-login at cutover), `Extension(Db)` plus the `CurrentUser` extractor (the `AuthSession` replacement, with `login`/`logout` session helpers in `src/server/current_user.rs`), the `/uploads` mount, and a placeholder SSR root. Smoke-tested: `/` 200, `/uploads/<file>` 200, session table migrated cleanly; `cargo doc` and rustfmt clean on the new modules.
 - `dx` CLI aligned with the crates (0.7.10).
-- Still to do: decouple `services/` from `ServerFnError` onto a neutral error type (the Phase 2 refactor's first step), axum-test coverage over `build_router()`, and replace the placeholder root with the real `Route` enum + shell (Phase 3).
+- Decoupled `services/` from `ServerFnError` onto a neutral error type: `src/error.rs` defines `AppError { BadRequest, Unauthorized, Forbidden, NotFound, Internal }(String)` with `status()` (400/401/403/404/500) and `AppError::internal(impl ToString)`. Mapping policy applied: auth failures → `Unauthorized`/`Forbidden`, form validation → `BadRequest`, and sites where a DB failure is indistinguishable from a validation failure (service bodies wrapping `anyhow` model calls with `map_err`) → `Internal` for now; those get refined per endpoint in Phase 2, where dioxus handlers will build `HttpError`s from `AppError::status()`. The `routes/` boundary is unchanged: `ServerFnError`'s blanket `From<E: std::error::Error>` produces the same `ServerError(String)` variant the services constructed by hand, so wire responses are identical — only tail-position returns gained `map_err(ServerFnError::from)`. Because `AppError`'s `Display` is the bare message, service test expectations dropped the `"error running server function: "` prefix (now 322 lib tests + 2 doctests).
+- Deliberately deferred: the `cfg(feature = "ssr")` → `server` sweep (services/models stay `ssr`-gated; `server` implies `ssr` meanwhile) to keep this diff reviewable — it lands with Phase 2's endpoint conversion.
+- Still to do: axum-test coverage over `build_router()`, and replace the placeholder root with the real `Route` enum + shell (Phase 3).
 
 ### Phase 2 — Server fn parity (4–6 days)
 

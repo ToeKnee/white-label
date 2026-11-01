@@ -36,7 +36,9 @@ pub async fn get_links(
     artist_slug: String,
 ) -> Result<LinksResult, ServerFnError> {
     let pool = pool()?;
-    get_links_service(&pool, artist_slug).await
+    get_links_service(&pool, artist_slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Update music services social median links for an artist.
@@ -55,5 +57,7 @@ pub async fn update_links(
     tracing::info!("Updating links for artist: {}", form.artist_slug);
     tracing::info!("From: {:?}", form);
 
-    update_links_service(&pool, user, form).await
+    update_links_service(&pool, user, form)
+        .await
+        .map_err(ServerFnError::from)
 }

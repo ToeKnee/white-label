@@ -36,7 +36,9 @@ pub async fn get_artist(
     slug: String,
 ) -> Result<ArtistResult, ServerFnError> {
     let pool = pool()?;
-    get_artist_service(&pool, slug).await
+    get_artist_service(&pool, slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Create a new artist.
@@ -57,7 +59,9 @@ pub async fn create_artist(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    create_artist_service(&pool, user, artist_form).await
+    create_artist_service(&pool, user, artist_form)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Update an existing artist.
@@ -78,7 +82,9 @@ pub async fn update_artist(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    update_artist_service(&pool, user, artist_form).await
+    update_artist_service(&pool, user, artist_form)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Delete an existing artist.
@@ -99,7 +105,9 @@ pub async fn delete_artist(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    delete_artist_service(&pool, user, slug).await
+    delete_artist_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 /// Restore a deleted artist.
@@ -120,5 +128,7 @@ pub async fn restore_artist(
     let pool = pool()?;
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
-    restore_artist_service(&pool, user, slug).await
+    restore_artist_service(&pool, user, slug)
+        .await
+        .map_err(ServerFnError::from)
 }

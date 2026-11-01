@@ -108,7 +108,7 @@ pub async fn register(
             auth.remember_user(remember.is_some());
             Ok(user)
         }
-        Err(error) => Err(error),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -152,7 +152,7 @@ pub async fn update_user(
 
     let response = update_user_service(&pool, user, user_form).await;
     auth.reload_user().await;
-    response
+    response.map_err(ServerFnError::from)
 }
 
 /// Change the current user's password with the provided form data.
@@ -178,5 +178,7 @@ pub async fn change_password(
     let auth = auth().await?;
     let user = auth.current_user.as_ref();
 
-    change_password_service(&pool, user, password_form).await
+    change_password_service(&pool, user, password_form)
+        .await
+        .map_err(ServerFnError::from)
 }

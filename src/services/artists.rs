@@ -1,5 +1,5 @@
 //! Services that act on multiple artists at a time
-use leptos::prelude::ServerFnError;
+use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
@@ -14,7 +14,7 @@ use crate::models::{artist::Artist, auth::User};
 /// `artist_id`: `i64` - The artist id
 ///
 /// # Returns
-/// Result<`ArtistResult`, `ServerFnError`> - The artist
+/// Result<`ArtistResult`, `AppError`> - The artist
 ///
 /// # Errors
 /// If the artist cannot be found, return an error
@@ -22,7 +22,7 @@ pub async fn get_releases_for_artist_service(
     pool: &PgPool,
     user: Option<&User>,
     artist_id: i64,
-) -> Result<Vec<Release>, ServerFnError> {
+) -> Result<Vec<Release>, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -32,7 +32,7 @@ pub async fn get_releases_for_artist_service(
     let artist = Artist::get_by_id(pool, artist_id).await.map_err(|x| {
         let err = format!("Error while getting artist {artist_id}: {x:?}");
         tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve artist, try again later")
+        AppError::internal("Could not retrieve artist, try again later")
     })?;
 
     Release::list_by_artist_and_record_label(pool, artist.id, artist.label_id, include_hidden)
@@ -43,7 +43,7 @@ pub async fn get_releases_for_artist_service(
                 artist.name
             );
             tracing::error!("{err}");
-            ServerFnError::new("Could not retrieve releases, try again later")
+            AppError::internal("Could not retrieve releases, try again later")
         })
 }
 

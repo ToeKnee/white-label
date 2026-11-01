@@ -2,7 +2,7 @@
 //!
 //! This module contains helper functions for authentication
 //! It will make your life a lot easier for handling authentication and authorisation
-use leptos::prelude::ServerFnError;
+use crate::error::AppError;
 
 use crate::models::auth::User;
 
@@ -13,7 +13,7 @@ use crate::models::auth::User;
 /// permissions: Vec<&str> - The permissions required
 ///
 /// # Returns
-/// Result<User, `ServerFnError`> - The user with the required permissions
+/// Result<User, `AppError`> - The user with the required permissions
 ///
 /// # Errors
 /// If the user is not authenticated, return an error
@@ -22,16 +22,16 @@ use crate::models::auth::User;
 pub fn user_with_permissions(
     user: Option<&User>,
     permissions: Vec<&str>,
-) -> Result<User, ServerFnError> {
+) -> Result<User, AppError> {
     let Some(user) = user else {
         tracing::error!("User not supplied");
-        return Err(ServerFnError::new("User not supplied."));
+        return Err(AppError::Unauthorized("User not supplied.".into()));
     };
     // Check if the user is authenticated
     // If the user is not authenticated, return an error
     if !user.is_authenticated() {
-        return Err(ServerFnError::new(
-            "You must be logged in to view this page.",
+        return Err(AppError::Unauthorized(
+            "You must be logged in to view this page.".into(),
         ));
     }
 
@@ -40,7 +40,7 @@ pub fn user_with_permissions(
     for permission in permissions {
         if !user.permissions.contains(permission) {
             tracing::error!("User does not have the required permission {permission}");
-            return Err(ServerFnError::new("You do not have permission."));
+            return Err(AppError::Forbidden("You do not have permission.".into()));
         }
     }
 
@@ -50,8 +50,8 @@ pub fn user_with_permissions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::AppError;
     use crate::models::{auth::User, test_helpers::create_test_user_with_permissions};
-    use leptos::prelude::ServerFnError;
     use sqlx::PgPool;
 
     #[sqlx::test]
@@ -70,7 +70,10 @@ mod tests {
         let permissions = vec![];
 
         let result = user_with_permissions(None, permissions);
-        assert_eq!(result, Err(ServerFnError::new("User not supplied.")));
+        assert_eq!(
+            result,
+            Err(AppError::Unauthorized("User not supplied.".into()))
+        );
     }
 
     #[test]
@@ -81,8 +84,8 @@ mod tests {
         let result = user_with_permissions(Some(&user), permissions);
         assert_eq!(
             result,
-            Err(ServerFnError::new(
-                "You must be logged in to view this page."
+            Err(AppError::Unauthorized(
+                "You must be logged in to view this page.".into()
             ))
         );
     }
@@ -108,7 +111,7 @@ mod tests {
         let result = user_with_permissions(Some(&user), permissions);
         assert_eq!(
             result,
-            Err(ServerFnError::new("You do not have permission."))
+            Err(AppError::Forbidden("You do not have permission.".into()))
         );
     }
 }
