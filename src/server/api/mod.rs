@@ -22,6 +22,7 @@
 
 mod artist;
 mod auth;
+mod page;
 
 use axum::Router;
 use axum::response::{IntoResponse, Response};
@@ -49,6 +50,12 @@ pub fn api_routes() -> Router {
         .route("/api/delete_artist", post(artist::delete_artist))
         .route("/api/restore_artist", post(artist::restore_artist))
         .route("/api/artists_releases", post(artist::artists_releases))
+        // Pages (routes/page.rs)
+        .route("/api/get_page", post(page::get_page))
+        .route("/api/create_page", post(page::create_page))
+        .route("/api/update_page", post(page::update_page))
+        .route("/api/delete_page", post(page::delete_page))
+        .route("/api/restore_page", post(page::restore_page))
 }
 
 /// A failure rendered in the Leptos server-fn error wire format:
