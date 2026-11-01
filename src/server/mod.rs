@@ -21,6 +21,30 @@ use crate::server::current_user::Db;
 /// log in again once at cutover).
 const SESSION_TABLE: &str = "sessions";
 
+/// Uploads directory (`UPLOAD_PATH`), exposed to API handlers as a request
+/// extension.
+///
+/// `None` when the server has no uploads dir. The Leptos route read the
+/// env var inside the handler — passing it through the router instead
+/// keeps the value injectable for tests.
+#[derive(Clone, Debug)]
+pub struct UploadRoot(Option<std::path::PathBuf>);
+
+impl UploadRoot {
+    /// Wrap the uploads directory (if the server has one).
+    #[must_use]
+    pub const fn new(path: Option<std::path::PathBuf>) -> Self {
+        Self(path)
+    }
+
+    /// The root as a path string, for `{root}/{sub}/{file}` joins done the
+    /// same string-concatenation way the Leptos routes do.
+    #[must_use]
+    pub fn root(&self) -> Option<String> {
+        self.0.as_ref().map(|path| path.display().to_string())
+    }
+}
+
 /// Build the Dioxus server's router (database, sessions, uploads, Dioxus
 /// SSR). Factored out from serving so `axum-test` can drive it without
 /// binding a socket (Phase 2 exit criteria).
@@ -51,7 +75,9 @@ pub async fn build_router(
         .merge(api::api_routes())
         .layer(SessionManagerLayer::new(session_store))
         // Handlers and server fns reach the pool via `Db`.
-        .layer(axum::Extension(Db(pool)));
+        .layer(axum::Extension(Db(pool)))
+        // The upload endpoints (`api::files`) resolve their root here.
+        .layer(axum::Extension(UploadRoot::new(upload_path.clone())));
 
     // Uploaded files, mounted after the session stack so static hits skip
     // the database — same treatment as the Leptos app's `/uploads`.

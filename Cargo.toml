@@ -61,6 +61,9 @@ serde_json = "1"
 # Decodes server-fn request bodies in `src/server/api` with the same
 # settings as the Leptos PostUrl codec (server_fn depends on serde_qs 0.15).
 serde_qs = "0.15"
+# Parses `multipart/form-data` upload bodies in `src/server/api/files`
+# (already in the tree via server_fn's `multipart` feature; MIT).
+multer = "3"
 server_fn = { version = "0.8.0", features = [
     "serde-lite",
     "multipart",

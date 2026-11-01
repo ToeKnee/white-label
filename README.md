@@ -7,10 +7,11 @@
 ## Migration checkpoint (branch `dioxus`)
 
 A Dioxus server skeleton (Phases 1–2 of MIGRATION.md) lives in `src/server/`
-and boots as a second binary; it now also serves 37 of the 39 ported `/api/*`
-endpoints (all but the two file-upload specials) in the Leptos server-fn wire
-format, so the shipped Leptos UI can call it during the overlap. The shipped
-site stays on Leptos (`cargo leptos watch`) until cutover:
+and boots as a second binary; it now serves **all 39** `/api/*` endpoints
+(including the multipart `upload_file` and streaming `file_progress`) in the
+Leptos server-fn wire format, so the shipped Leptos UI can call it during
+the overlap. The shipped site stays on Leptos (`cargo leptos watch`) until
+cutover:
 
 ```bash
 npm install && npm run css   # tailwind + daisyUI -> public/main.css
@@ -27,7 +28,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 381 lib tests, includes src/server/ tests
+cargo test --features server   # 387 lib tests, includes src/server/ tests
 cargo test --features server -- server::api   # just the API wire tests
 ```
 

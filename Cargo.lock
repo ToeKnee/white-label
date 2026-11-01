@@ -5786,6 +5786,7 @@ dependencies = [
  "leptos_meta",
  "leptos_router",
  "markdown",
+ "multer",
  "once_cell",
  "password-auth",
  "rand 0.9.2",

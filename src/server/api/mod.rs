@@ -22,6 +22,7 @@
 
 mod artist;
 mod auth;
+mod files;
 mod links;
 mod menu;
 mod page;
@@ -98,11 +99,15 @@ pub fn api_routes() -> Router {
         .route("/api/update_release", post(release::update_release))
         .route("/api/delete_release", post(release::delete_release))
         .route("/api/restore_release", post(release::restore_release))
+        // Files (routes/files/upload.rs) — the two special codecs.
+        .route("/api/upload_file", post(files::upload_file))
+        .route("/api/file_progress", post(files::file_progress))
 }
 
 /// A failure rendered in the Leptos server-fn error wire format:
 /// `"<Variant>|<message>"`, plus the `serverfnerror: <endpoint>` header the
 /// Leptos handlers set.
+#[derive(Debug)]
 pub struct WireError {
     endpoint: &'static str,
     status: axum::http::StatusCode,
@@ -192,6 +197,23 @@ pub mod test_support {
     pub async fn api_server(pool: PgPool) -> TestServer {
         crate::server::ensure_exe_public_dir();
         let router = build_router(pool, None)
+            .await
+            .expect("router should build against the test pool");
+        let config = TestServerConfig {
+            save_cookies: true,
+            ..TestServerConfig::default()
+        };
+        TestServer::new_with_config(router, config).expect("axum-test should wrap the router")
+    }
+
+    /// Like [`api_server`], but with an uploads root (for the upload
+    /// endpoints, which resolve it through `UploadRoot`).
+    pub async fn api_server_with_uploads(
+        pool: &PgPool,
+        upload_root: std::path::PathBuf,
+    ) -> TestServer {
+        crate::server::ensure_exe_public_dir();
+        let router = build_router(pool.clone(), Some(upload_root))
             .await
             .expect("router should build against the test pool");
         let config = TestServerConfig {
