@@ -4,6 +4,21 @@
 > Dioxus (web + desktop + iOS/Android from one codebase) is in [MIGRATION.md](MIGRATION.md).
 > Until the migration lands, all notes below describe the Leptos setup.
 
+## Migration checkpoint (branch `dioxus`)
+
+A Dioxus server skeleton (Phase 1 of MIGRATION.md) lives in `src/server/` and
+boots as a second binary; the shipped site stays on Leptos (`cargo leptos
+watch`) until cutover:
+
+```bash
+npm install && npm run css   # tailwind + daisyUI -> public/main.css
+cargo run --no-default-features --features server --bin dioxus-server
+```
+
+`IP`/`PORT` override the bind address. The `dx` CLI is pinned to the dioxus
+crate version (currently 0.7.10); `dx serve` replaces the `cargo run` above
+once Dioxus UI work (Phase 2+) lands.
+
 ## Running the project
 
 ```bash

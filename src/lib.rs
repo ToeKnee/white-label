@@ -26,6 +26,8 @@ pub mod database;
 pub mod forms;
 pub mod models;
 pub mod routes;
+#[cfg(feature = "server")]
+pub mod server;
 #[cfg(feature = "ssr")]
 pub mod services;
 #[cfg(feature = "ssr")]

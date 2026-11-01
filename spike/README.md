@@ -148,8 +148,7 @@ require sqlx 0.9, which the app is not on.
 - `asset!("/assets/main.css")` in a debug server build emits an absolute
   filesystem href — fine for `dx serve`/release (embedded), but a bare
   `cargo run` won't serve the CSS (hence the empty `DIOXUS_PUBLIC_PATH` trick).
-- dx CLI installed is 0.7.6 while crates are 0.7.10 — gates were run with
-  cargo, not dx; upgrade dx before Phase 1 UI work.
+- dx CLI and the dioxus crates are aligned (0.7.10, upgraded November 2026); Phase 0 gates were run with cargo, not dx.
 
 Authenticated upload/progress was gated with a throwaway `label_owner` user
 seeded directly into the dev DB (bcrypt hash insert; user deleted afterwards —
