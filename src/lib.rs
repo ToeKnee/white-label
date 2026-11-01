@@ -2,6 +2,10 @@
 //!
 //! White Label is a web application for managing record labels, artists and releases.
 
+#![recursion_limit = "256"]
+// Deeply nested `view!` trees (the ErrorBoundary in app.rs wrapping
+// components/artist/home.rs) overflow rustc 1.99's default recursion budget
+// when compiling the lib-test target; this is rustc's own suggested remedy.
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
