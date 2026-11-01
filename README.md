@@ -7,10 +7,10 @@
 ## Migration checkpoint (branch `dioxus`)
 
 A Dioxus server skeleton (Phases 1–2 of MIGRATION.md) lives in `src/server/`
-and boots as a second binary; it now also serves the 22 ported `/api/*`
-endpoints (auth, artist, page, record_label and admin menu) in the Leptos
-server-fn wire format, so the shipped Leptos UI can call it during the
-overlap. The shipped site stays on Leptos (`cargo leptos watch`) until
+and boots as a second binary; it now also serves 30 of the 39 ported `/api/*`
+endpoints (auth, artist, page, record_label, admin menu, links and track) in
+the Leptos server-fn wire format, so the shipped Leptos UI can call it during
+the overlap. The shipped site stays on Leptos (`cargo leptos watch`) until
 cutover:
 
 ```bash
@@ -28,7 +28,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 365 lib tests, includes src/server/ tests
+cargo test --features server   # 374 lib tests, includes src/server/ tests
 cargo test --features server -- server::api   # just the API wire tests
 ```
 

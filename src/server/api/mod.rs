@@ -22,9 +22,11 @@
 
 mod artist;
 mod auth;
+mod links;
 mod menu;
 mod page;
 mod record_label;
+mod track;
 
 use axum::Router;
 use axum::response::{IntoResponse, Response};
@@ -74,6 +76,16 @@ pub fn api_routes() -> Router {
         )
         // Admin menu (routes/menu.rs)
         .route("/api/admin_menu", post(menu::admin_menu))
+        // Artist links (routes/links.rs)
+        .route("/api/get_links", post(links::get_links))
+        .route("/api/update_links", post(links::update_links))
+        // Tracks (routes/track.rs)
+        .route("/api/get_tracks", post(track::get_tracks))
+        .route("/api/get_track", post(track::get_track))
+        .route("/api/create_track", post(track::create_track))
+        .route("/api/update_track", post(track::update_track))
+        .route("/api/delete_track", post(track::delete_track))
+        .route("/api/restore_track", post(track::restore_track))
 }
 
 /// A failure rendered in the Leptos server-fn error wire format:
