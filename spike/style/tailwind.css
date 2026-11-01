@@ -1,0 +1,20 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@plugin "daisyui" {
+    themes:
+        lofi --default,
+        black --prefersdark;
+}
+
+@plugin "daisyui/theme" {
+    name: "black";
+    prefersdark: true;
+    --color-primary: #2f596d;
+    --color-secondary: #5e99ae;
+    --color-secondary-content: #141618;
+    --color-accent: #9dc3cf;
+    --color-accent-content: #141618;
+    --color-neutral: #b3b8bb;
+    --color-neutral-content: #141618;
+    --color-info: #b13840;
+}
