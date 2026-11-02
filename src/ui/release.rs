@@ -7,7 +7,7 @@
 //! Leptos `redirect` calls did): an unknown artist falls back to the
 //! artists index, an unknown release to that artist's page. The
 //! navigation is issued with `use_navigator().replace` while the body
-//! still renders [`Loading`]; the router re-renders the new route (SSR
+//! still renders `Loading`; the router re-renders the new route (SSR
 //! converges on it, verified by the tests in `crate::server`).
 
 use dioxus::prelude::*;

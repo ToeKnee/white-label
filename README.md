@@ -41,7 +41,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 407 lib tests, includes src/server/ + src/ui/ tests
+cargo test --features server   # 413 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
 cargo test --features server -- ui::          # just the route-table + UI component tests
 ```

@@ -290,16 +290,18 @@ mod tests {
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
-    async fn release_page_redirects_for_unknown_slugs(pool: PgPool) {
+    async fn unmatched_artist_routes_still_serve_the_shell(pool: PgPool) {
         seed_public_site(&pool).await;
         let server = test_server(pool, None).await;
 
-        // Unknown artist: the artists index takes over (the Leptos
-        // `redirect("/artists")` equivalent, issued from the render path).
+        // A nested slug that matches no route: the artists index still
+        // renders from the nest parent; the 404 appears deeper in the body.
         let unknown_artist = server.get("/artists/nobody/nonsense").await;
         assert_shell(&unknown_artist, &[CHROME[0], "Test Record Label 1 Artists"]);
 
-        // Known artist, unknown release: the artist page takes over.
+        // `/artists/test-artist-1/nonsense` is the *artist* route
+        // (`nonsense` is an ignored extra segment), not a redirect — the
+        // artist page renders and its release cards carry the label.
         let unknown_release = server.get("/artists/test-artist-1/nonsense").await;
         assert_shell(&unknown_release, &[CHROME[0], "Test Release 1"]);
     }
