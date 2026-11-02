@@ -1,9 +1,9 @@
-//! Dioxus server side of the migration (see MIGRATION.md, Phase 1).
+//! Dioxus server side of the migration (see MIGRATION.md, Phases 1–3).
 //!
 //! Assembles the axum router that `dioxus::serve` wraps: the app database
 //! pool as a request extension, `tower-sessions` backed by Postgres, static
-//! uploads, and the Dioxus SSR entry. The Leptos `setup.rs` still serves the
-//! shipped site until cutover.
+//! uploads, the `/api/*` port and the Dioxus SSR app (`crate::ui`). The
+//! Leptos `setup.rs` still serves the shipped site until cutover.
 
 mod api;
 pub mod current_user;
@@ -69,7 +69,7 @@ pub async fn build_router(
         .await
         .context("could not create/migrate the sessions table")?;
 
-    let mut router = dioxus::server::router(skeleton_app)
+    let mut router = dioxus::server::router(crate::ui::App)
         // Ported `/api/*` endpoints (see `api` module); merged before the
         // layers below so handlers get the session and `Db` extensions.
         .merge(api::api_routes())
@@ -88,22 +88,6 @@ pub async fn build_router(
     Ok(router)
 }
 
-/// Placeholder SSR root. The real router, layouts and components arrive in
-/// Phases 2–4; this only proves the Dioxus SSR + session stack boots.
-fn skeleton_app() -> dioxus::prelude::Element {
-    use dioxus::prelude::*;
-    rsx! {
-        // Dioxus `serve` wraps this in the document shell itself — no
-        // `html`/`head`/`body` tags in rsx.
-        main {
-            h1 { "Dioxus server skeleton" }
-            p {
-                "Sessions, uploads and the database pool are live. The UI still runs on Leptos — see MIGRATION.md, Phases 2-4."
-            }
-        }
-    }
-}
-
 /// `dioxus::server::router` reads (and serves) a `public` dir next to
 /// the executable unless `DIOXUS_PUBLIC_PATH` overrides it. Create an
 /// empty one for the test binary so the router can build; `target/`
@@ -120,7 +104,7 @@ pub(crate) fn ensure_exe_public_dir() {
 
 #[cfg(test)]
 mod tests {
-    use axum_test::TestServer;
+    use axum_test::{TestResponse, TestServer};
     use sqlx::PgPool;
 
     use super::ensure_exe_public_dir;
@@ -135,21 +119,141 @@ mod tests {
         TestServer::new(router).expect("axum-test should wrap the router")
     }
 
+    /// Assert the response is 200 and its SSR body contains every marker.
+    fn assert_shell(response: &TestResponse, markers: &[&str]) {
+        response.assert_status_ok();
+        let body = response.text();
+        for marker in markers {
+            assert!(
+                body.contains(marker),
+                "SSR body missing `{marker}`:\n{body}"
+            );
+        }
+    }
+
+    /// The navbar/footer chrome every route renders around the page body.
+    const CHROME: &[&str] = &[
+        "navbar bg-primary text-primary-content",
+        "footer bg-neutral text-neutral-content",
+    ];
+
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
-    async fn root_serves_the_dioxus_skeleton(pool: PgPool) {
+    async fn root_serves_the_shell_and_head(pool: PgPool) {
         let server = test_server(pool, None).await;
 
         let response = server.get("/").await;
 
-        response.assert_status_ok();
-        assert!(
-            response.text().contains("Dioxus server skeleton"),
-            "the SSR root should render the skeleton app"
+        assert_shell(
+            &response,
+            &[
+                CHROME[0],
+                CHROME[1],
+                "</main>",
+                "Record label home",
+                "Register",
+                "Login",
+                "<title>White Label</title>",
+                "href=\"/main.css\"",
+                "width=device-width, initial-scale=1",
+            ],
         );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn every_route_serves_its_page(pool: PgPool) {
+        let server = test_server(pool, None).await;
+
+        // (path, marker) — the marker is the placeholder page's h1 text.
+        let routes = [
+            ("/", "Record label home"),
+            ("/artists", "Artists"),
+            ("/artists/jimi", "Artist"),
+            ("/artists/jimi/axis", "Release"),
+            ("/pages/about-us", "Page"),
+            ("/login", "Log in"),
+            ("/register", "Register"),
+            ("/logout", "Log out"),
+            ("/profile", "Edit profile"),
+            ("/profile/change-password", "Change password"),
+            ("/admin", "Admin dashboard"),
+            ("/admin/label", "Edit label"),
+            ("/admin/artist", "Create artist"),
+            ("/admin/page", "Create page"),
+            ("/admin/page/terms-of-use", "Edit page"),
+        ];
+        for (path, marker) in routes {
+            let response = server.get(path).await;
+            assert_shell(&response, &[CHROME[0], CHROME[1], marker]);
+        }
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn nested_admin_layouts_render_outside_in(pool: PgPool) {
+        let server = test_server(pool, None).await;
+
+        let response = server.get("/admin/artist/jimi").await;
+
+        // AppShell chrome, AdminRoot wrapper, AdminArtistRoot tabs, and the
+        // page itself — with the slug prop reaching the child component.
+        assert_shell(
+            &response,
+            &[
+                CHROME[0],
+                CHROME[1],
+                "tabs tabs-border",
+                "href=\"/admin/artist/jimi/releases\"",
+                "tab tab-active",
+                "slug: jimi",
+            ],
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn deep_nested_routes_and_trailing_slashes_serve(pool: PgPool) {
+        let server = test_server(pool, None).await;
+
+        let deep = server
+            .get("/admin/artist/jimi/release/axis/track/castles")
+            .await;
+        assert_shell(&deep, &["Edit track", "track: castles"]);
+
+        // The exact `"x"`/`"x/"` route pairs the Leptos table needed are one
+        // variant here (MIGRATION.md risk 4).
+        let slashed = server.get("/admin/artist/jimi/").await;
+        assert_shell(&slashed, &["Edit artist", "slug: jimi"]);
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn unmatched_paths_render_the_not_found_page(pool: PgPool) {
+        let server = test_server(pool, None).await;
+
+        let response = server.get("/totally/bogus/path").await;
+
+        // The catch-all still renders inside the shell, like the Leptos
+        // `Routes fallback` did; the 404 *page* is served with 200 there
+        // too. Apostrophes in text are HTML-escaped by the renderer, hence
+        // the apostrophe-free marker.
+        assert_shell(&response, &[CHROME[0], "find what you were looking for!"]);
     }
 
     #[sqlx::test]

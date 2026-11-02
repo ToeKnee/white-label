@@ -36,6 +36,10 @@ pub mod setup;
 #[cfg(feature = "ssr")]
 pub mod state;
 pub mod store;
+/// Dioxus UI port (MIGRATION.md Phase 3+). Rides the `server` feature until
+/// the client targets get their own feature gates in Phases 6-7.
+#[cfg(feature = "server")]
+pub mod ui;
 pub mod utils;
 
 #[cfg(feature = "hydrate")]

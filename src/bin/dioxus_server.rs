@@ -1,8 +1,6 @@
-//! Dioxus migration server (Phase 1 skeleton — see MIGRATION.md).
-//!
-//! Boots Dioxus SSR with `tower-sessions` and the app pool
-//! (`white_label::server`). The shipped site is still the default bin
-//! (`src/main.rs`, Leptos) until cutover.
+//! Dioxus migration server (MIGRATION.md Phases 1–3: router, API port and
+//! the `crate::ui` app shell with placeholder pages). The shipped site is
+//! still the default bin (`src/main.rs`, Leptos) until cutover.
 //!
 //! Run manually:
 //!
