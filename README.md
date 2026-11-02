@@ -6,21 +6,34 @@
 
 ## Migration checkpoint (branch `dioxus`)
 
-A Dioxus server skeleton (Phases 1–2 of MIGRATION.md) lives in `src/server/`
-and boots as a second binary; it now serves **all 39** `/api/*` endpoints
-(including the multipart `upload_file` and streaming `file_progress`) in the
-Leptos server-fn wire format, so the shipped Leptos UI can call it during
-the overlap. The shipped site stays on Leptos (`cargo leptos watch`) until
-cutover:
+The Dioxus port (Phases 1–3 of MIGRATION.md) lives in `src/server/` (axum
+router: sessions, uploads, current-user extractor, and **all 39** `/api/*`
+endpoints — including multipart `upload_file` and streaming `file_progress`
+— in the Leptos server-fn wire format, so the shipped Leptos UI can call it
+during the overlap) and `src/ui/` (route table, layouts, header/footer
+chrome, placeholder pages). It boots as a second binary while the shipped
+site stays on Leptos (`cargo leptos watch`):
 
 ```bash
 npm install && npm run css   # tailwind + daisyUI -> public/main.css
 cargo run --no-default-features --features server --bin dioxus-server
 ```
 
-`IP`/`PORT` override the bind address. The `dx` CLI is pinned to the dioxus
-crate version (currently 0.7.10); `dx serve` replaces the `cargo run` above
-once Dioxus UI work (Phase 2+) lands.
+`IP`/`PORT` override the bind address; `DIOXUS_PUBLIC_PATH=public` makes the
+server serve `public/main.css`, the favicon and the images (dioxus mounts
+each top-level public-dir file at its own path). The `dx` CLI is pinned to
+the dioxus crate version (currently 0.7.10); `dx serve` replaces the
+`cargo run` above once the Phase 4 slices need client hydration.
+
+The Phase 3 runtime gate does the same thing with curl spot checks and a
+chromium navigation smoke test (dev DB, port 8127):
+
+```bash
+sh end2end/run-dioxus-gate.sh
+```
+
+(`end2end`'s Playwright is 1.44.1; run `npx playwright install chromium` in
+`end2end/` once if the `chromium-1117` browser build is missing.)
 
 The `server`-gated modules (router assembly, sessions, current-user
 extractor, ported API endpoints) have their own tests, but plain `cargo test`
@@ -28,8 +41,9 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 387 lib tests, includes src/server/ tests
+cargo test --features server   # 397 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
+cargo test --features server -- ui::          # just the route-table tests
 ```
 
 ## Running the project
