@@ -17,10 +17,11 @@ use dioxus::prelude::*;
 use super::placeholders::{
     AdminArtistRoot, AdminRoot, ArtistPage, ArtistsPage, ChangePassword, CreateArtist, CreatePage,
     CreateRelease, CreateTrack, Dashboard, EditArtist, EditArtistImages, EditArtistLinks,
-    EditLabel, EditPage, EditProfile, EditRelease, EditTrack, Login, Logout, NotFound, PageDetails,
+    EditLabel, EditPage, EditProfile, EditRelease, EditTrack, Login, Logout, PageDetails,
     RecordLabelHome, Register, ReleasePage, Releases, Tracks,
 };
 use super::shell::AppShell;
+use super::utils::NotFound;
 
 /// Every page in the application.
 ///

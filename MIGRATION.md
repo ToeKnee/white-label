@@ -250,6 +250,16 @@ Exit: the six items above all work (or a documented fallback exists for 4). Pick
 5. admin artist/release/track CRUD (deepest nesting) — 4–6 days
    During this phase keep daisyUI markup 1:1 for rendering similarity; convert `ActionForm` sites to the form/action idiom as we go.
 
+**Phase 4 progress (branch `dioxus`):**
+
+- **Slice 1 — utils/shared ✅** (2026-11-02): `src/ui/utils.rs` now carries the real `ErrorPage`, `NotFound` (moved out of `placeholders`), `Loading`, `InlineError`, `ServerErrors`, `Success`, `StatusBadge` and the `authenticated_or_redirect`/`permission_or_redirect` guards.
+  - `ServerErrors` takes the app's own `AppError` — its `Display` is already the bare message, so the Leptos `ServerFnError`-string + `split_at_colon` trimming dance disappears. `Success`/`InlineError`/`Loading` keep the daisy alert/spinner markup 1:1.
+  - `StatusBadge`'s decision table extracted to a pure `badge_for(deleted_at, published_at)` (deleted wins; future `published_at > now` → "Coming Soon"; no date → "Draft"; past date → no badge) and unit-tested directly plus through the rendered markup.
+  - Guards take `Route` (not URL strings) and go through `ui::redirect`; the original's odd permission condition — **active users pass without the permission token** — is kept deliberately (documented at the fn).
+  - New test pattern for presentational pieces: 10 unit tests render components through `dioxus::ssr::render_element` and assert the emitted daisy markup (the re-export rides dioxus' `ssr` feature, which `fullstack` already enables). Renderer quirks re-confirmed: apostrophes come back `&#39;`-escaped.
+  - Port gotchas: dioxus rsx wants snake_case HTML attrs (`stroke_width`, `view_box`); component prop builders need a concrete `String` (not `"x".into()` — E0283 ambiguity with `leptos`/`axum`/`sqlx` string conversions).
+  - ✅ Gate: 23 `ui::`/`server::tests` pass (routes 6 + utils 10 + SSR 7), Playwright shell gate re-run 4/4 — the 404 browser check now exercises the real component; clippy/fmt/doc clean. Full suite with `--features server` is now 407 lib + 2 doc.
+
 ### Phase 5 — Uploads & progress (2–3 days)
 
 Port `FileUploadWithProgress` onto `FileData`/`FileStream` (this removes the `web_sys` interop), reuse `config/upload.rs` unchanged. ✅ Exit: upload with progress bar end-to-end, size limit enforced.

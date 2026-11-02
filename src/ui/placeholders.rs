@@ -290,29 +290,3 @@ pub fn CreatePage() -> Element {
 pub fn EditPage(slug: String) -> Element {
     admin_page("Edit page", Some(&format!("slug: {slug}")))
 }
-
-// ---------------------------------------------------------------------------
-// Fallback
-// ---------------------------------------------------------------------------
-
-/// The 404 page for unmatched paths — the dioxus equivalent of the Leptos
-/// `Routes fallback=NotFound`, with the daisy hero from
-/// `components::utils::not_found`.
-#[component]
-pub fn NotFound(segments: Vec<String>) -> Element {
-    // The catch-all swallows every unmatched path; make it visible to ops.
-    tracing::debug!("no route matched: /{}", segments.join("/"));
-    rsx! {
-        article { class: "my-6 md:container md:mx-auto prose",
-            div { class: "min-h-screen hero bg-base-200",
-                div { class: "text-center hero-content",
-                    div { class: "max-w-md",
-                        h1 { class: "text-5xl font-bold", "Oh No..." }
-                        p { class: "py-6", "Sorry, we couldn't find what you were looking for!" }
-                        p { class: "py-6", "Maybe it's hiding." }
-                    }
-                }
-            }
-        }
-    }
-}

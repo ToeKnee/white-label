@@ -23,6 +23,9 @@ pub mod placeholders;
 pub mod routes;
 /// The app root: reactive contexts, document head, and the page shell.
 pub mod shell;
+/// Shared presentational pieces (alerts, badges, spinner, error/404 heroes)
+/// and the auth redirect guards — Phase 4 slice 1 of the component port.
+pub mod utils;
 
 pub use routes::Route;
 pub use routes::redirect;
