@@ -14,12 +14,15 @@
 
 use dioxus::prelude::*;
 
+use super::artist::{ArtistPage, ArtistsPage};
+use super::page::PageDetails;
 use super::placeholders::{
-    AdminArtistRoot, AdminRoot, ArtistPage, ArtistsPage, ChangePassword, CreateArtist, CreatePage,
-    CreateRelease, CreateTrack, Dashboard, EditArtist, EditArtistImages, EditArtistLinks,
-    EditLabel, EditPage, EditProfile, EditRelease, EditTrack, Login, Logout, PageDetails,
-    RecordLabelHome, Register, ReleasePage, Releases, Tracks,
+    AdminArtistRoot, AdminRoot, ChangePassword, CreateArtist, CreatePage, CreateRelease,
+    CreateTrack, Dashboard, EditArtist, EditArtistImages, EditArtistLinks, EditLabel, EditPage,
+    EditProfile, EditRelease, EditTrack, Login, Logout, Register, Releases, Tracks,
 };
+use super::record_label::RecordLabelHome;
+use super::release::ReleasePage;
 use super::shell::AppShell;
 use super::utils::NotFound;
 

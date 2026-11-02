@@ -108,6 +108,11 @@ mod tests {
     use sqlx::PgPool;
 
     use super::ensure_exe_public_dir;
+    use crate::models::test_helpers::{
+        create_test_artist, create_test_page, create_test_record_label, create_test_release,
+        create_test_track, create_test_user_with_permissions,
+    };
+    use crate::server::api::test_support::{api_server, post_args};
     use crate::server::build_router;
 
     /// Build the real router and wrap it for in-process HTTP.
@@ -147,16 +152,18 @@ mod tests {
 
         let response = server.get("/").await;
 
+        // An empty database leaves the home page with empty label fields
+        // (the fetches fail as they did for the Leptos store default), so
+        // this test pins the shell and head elements only; seeded content
+        // and titles are asserted in `public_pages_render_seeded_content`.
         assert_shell(
             &response,
             &[
                 CHROME[0],
                 CHROME[1],
                 "</main>",
-                "Record label home",
                 "Register",
                 "Login",
-                "<title>White Label</title>",
                 "href=\"/main.css\"",
                 "width=device-width, initial-scale=1",
             ],
@@ -172,12 +179,9 @@ mod tests {
         let server = test_server(pool, None).await;
 
         // (path, marker) — the marker is the placeholder page's h1 text.
+        // The public pages render seeded data instead (see the tests
+        // below); only the still-stubbed auth/admin routes are listed here.
         let routes = [
-            ("/", "Record label home"),
-            ("/artists", "Artists"),
-            ("/artists/jimi", "Artist"),
-            ("/artists/jimi/axis", "Release"),
-            ("/pages/about-us", "Page"),
             ("/login", "Log in"),
             ("/register", "Register"),
             ("/logout", "Log out"),
@@ -193,6 +197,176 @@ mod tests {
             let response = server.get(path).await;
             assert_shell(&response, &[CHROME[0], CHROME[1], marker]);
         }
+    }
+
+    /// Seed one of every entity a public page renders: label 1, its
+    /// published artist 1 (with release 1 and track 1) and page 1.
+    async fn seed_public_site(pool: &PgPool) {
+        let label = create_test_record_label(pool, 1)
+            .await
+            .expect("label fixture");
+        let artist = create_test_artist(pool, 1, Some(label.clone()))
+            .await
+            .expect("artist fixture");
+        let release = create_test_release(pool, 1, Some(artist.clone()))
+            .await
+            .expect("release fixture");
+        create_test_track(pool, 1, Some(release), Some(artist))
+            .await
+            .expect("track fixture");
+        create_test_page(pool, 1, Some(label))
+            .await
+            .expect("page fixture");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn public_pages_render_seeded_content(pool: PgPool) {
+        seed_public_site(&pool).await;
+        let server = test_server(pool, None).await;
+
+        // Home: the label name as the page title and h1, its markdown
+        // description, and the published artist's card.
+        let home = server.get("/").await;
+        assert_shell(
+            &home,
+            &[
+                CHROME[0],
+                CHROME[1],
+                "<title>Test Record Label 1</title>",
+                "A record label for testing purposes with the id of 1",
+                "Test Artist 1",
+            ],
+        );
+
+        // Artists index: the "{label} Artists" heading and the card.
+        let artists = server.get("/artists").await;
+        assert_shell(
+            &artists,
+            &[CHROME[0], "Test Record Label 1 Artists", "Test Artist 1"],
+        );
+
+        // Artist page: bio text, website link, and the release card.
+        let artist = server.get("/artists/test-artist-1").await;
+        assert_shell(
+            &artist,
+            &[
+                CHROME[0],
+                "A artist for testing purposes with the id of 1",
+                "https://test-artist-1.example.com",
+                "Test Release 1",
+            ],
+        );
+
+        // Release page: description and the track row.
+        let release = server.get("/artists/test-artist-1/test-release-1").await;
+        assert_shell(
+            &release,
+            &[
+                CHROME[0],
+                "A release for testing purposes with the id of 1",
+                "Test Track 1",
+            ],
+        );
+
+        // Marketing page: the page body rendered as markdown (the fixture
+        // body is an `#` heading, so the marker spans the rendered <h1>).
+        let page = server.get("/pages/test-page-1").await;
+        assert_shell(
+            &page,
+            &[
+                CHROME[0],
+                "Test Page 1",
+                ">A page for testing purposes with the id of 1<",
+            ],
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn release_page_redirects_for_unknown_slugs(pool: PgPool) {
+        seed_public_site(&pool).await;
+        let server = test_server(pool, None).await;
+
+        // Unknown artist: the artists index takes over (the Leptos
+        // `redirect("/artists")` equivalent, issued from the render path).
+        let unknown_artist = server.get("/artists/nobody/nonsense").await;
+        assert_shell(&unknown_artist, &[CHROME[0], "Test Record Label 1 Artists"]);
+
+        // Known artist, unknown release: the artist page takes over.
+        let unknown_release = server.get("/artists/test-artist-1/nonsense").await;
+        assert_shell(&unknown_release, &[CHROME[0], "Test Release 1"]);
+    }
+
+    /// The body `POST /api/login` expects (the wire args minus the optional
+    /// `remember` flag).
+    #[derive(serde::Serialize)]
+    struct LoginArgs<'a> {
+        username: &'a str,
+        password: &'a str,
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn label_owner_sessions_see_hidden_artists(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        create_test_artist(&pool, 1, Some(label.clone()))
+            .await
+            .expect("published artist fixture");
+        // A second, unpublished artist — same insert as the fixture helper
+        // but with no `published_at`.
+        sqlx::query("INSERT INTO artists (name, slug, description, website, label_id, published_at) VALUES ($1, $2, $3, $4, $5, $6)")
+            .bind("Hidden Artist")
+            .bind("hidden-artist")
+            .bind("Not published yet")
+            .bind("")
+            .bind(label.id)
+            .bind(Option::<chrono::DateTime<chrono::Utc>>::None)
+            .execute(&pool)
+            .await
+            .expect("hidden artist fixture");
+        create_test_user_with_permissions(&pool, 2, vec!["label_owner"])
+            .await
+            .expect("label_owner user fixture");
+
+        // `save_cookies` carries the login session into the SSR requests —
+        // the extractor side of slice 2's data loading.
+        let server = api_server(pool).await;
+
+        let guest_body = server.get("/artists").await.text();
+        assert!(guest_body.contains("Test Artist 1"), "{guest_body}");
+        assert!(
+            !guest_body.contains("Hidden Artist"),
+            "guests must not see unpublished artists:\n{guest_body}"
+        );
+
+        post_args(
+            &server,
+            "/api/login",
+            &LoginArgs {
+                username: "test-2",
+                password: "password",
+            },
+        )
+        .await
+        .assert_status_ok();
+
+        let owner_body = server.get("/artists").await.text();
+        assert!(
+            owner_body.contains("Hidden Artist"),
+            "label_owner sessions should see unpublished artists:\n{owner_body}"
+        );
     }
 
     #[expect(

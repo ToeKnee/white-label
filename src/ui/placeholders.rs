@@ -5,7 +5,9 @@
 //! that are not ported yet render these stubs. The Phase 4 slices delete
 //! them as their real components land, per group:
 //!
-//! - public/auth pages → Phase 4 slices 2-3
+//! - public pages → done (Phase 4 slice 2: see `record_label`, `artist`,
+//!   `release` and `page`)
+//! - auth pages → slice 3
 //! - admin dashboard/label/pages → slice 4
 //! - admin artist/release/track → slice 5
 
@@ -40,43 +42,6 @@ fn prose_page(title: &str, detail: Option<&str>) -> Element {
 /// Admin placeholder: no wrapper (the `AdminRoot` layout provides it).
 fn admin_page(title: &str, detail: Option<&str>) -> Element {
     page_body(title, detail)
-}
-
-// ---------------------------------------------------------------------------
-// Public site
-// ---------------------------------------------------------------------------
-
-/// Placeholder home page.
-#[component]
-pub fn RecordLabelHome() -> Element {
-    prose_page("Record label home", None)
-}
-
-/// Placeholder artist index.
-#[component]
-pub fn ArtistsPage() -> Element {
-    prose_page("Artists", None)
-}
-
-/// Placeholder artist page.
-#[component]
-pub fn ArtistPage(slug: String) -> Element {
-    prose_page("Artist", Some(&format!("slug: {slug}")))
-}
-
-/// Placeholder release page.
-#[component]
-pub fn ReleasePage(artist_slug: String, release_slug: String) -> Element {
-    prose_page(
-        "Release",
-        Some(&format!("artist: {artist_slug}, release: {release_slug}")),
-    )
-}
-
-/// Placeholder marketing/legal page.
-#[component]
-pub fn PageDetails(slug: String) -> Element {
-    prose_page("Page", Some(&format!("slug: {slug}")))
 }
 
 // ---------------------------------------------------------------------------

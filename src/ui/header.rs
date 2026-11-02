@@ -7,24 +7,41 @@
 use dioxus::prelude::*;
 
 use crate::ui::Route;
-use crate::ui::use_global_state;
+use crate::ui::use_label;
 use crate::ui::use_user;
 
 /// Renders the page header.
 #[component]
 pub fn LabelHeader() -> Element {
-    let state = use_global_state();
     rsx! {
         div { class: "navbar bg-primary text-primary-content",
             div { class: "navbar-start",
-                Link {
-                    to: Route::RecordLabelHome {},
-                    class: "text-xl btn btn-ghost",
-                    "{state.read().record_label.name}"
+                // The brand is the record label's name from the shared
+                // label resource; the fallback keeps the navbar readable
+                // on client builds before the fetch resolves.
+                SuspenseBoundary {
+                    fallback: |_context: SuspenseContext| rsx! {
+                        Link { to: Route::RecordLabelHome {}, class: "text-xl btn btn-ghost", "White Label" }
+                    },
+                    BrandLink {}
                 }
             }
             div { class: "navbar-end", UserMenu {} }
         }
+    }
+}
+
+/// The brand link: the record label's name (empty until a label exists,
+/// as the Leptos store default left it with no label loaded).
+#[component]
+fn BrandLink() -> Element {
+    let label = use_label().suspend()?;
+    let name = match label() {
+        Ok(result) => result.record_label.name,
+        Err(_) => String::new(),
+    };
+    rsx! {
+        Link { to: Route::RecordLabelHome {}, class: "text-xl btn btn-ghost", "{name}" }
     }
 }
 
