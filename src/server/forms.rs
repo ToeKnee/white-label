@@ -1,5 +1,5 @@
 //! Server-side handlers for the app's plain HTML forms (MIGRATION.md
-//! Phase 4 slices 3-4).
+//! Phase 4 slices 3-5).
 //!
 //! The `crate::ui::auth` pages render `<form method="post">` elements that
 //! post to these handlers under the `/auth` namespace — deliberately *not*
@@ -40,6 +40,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use tower_sessions::Session;
 
 use crate::error::AppError;
+use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
 use crate::forms::page::{CreatePageForm, UpdatePageForm};
 use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::server::current_user::{
@@ -60,16 +61,21 @@ pub fn form_routes() -> Router {
         .route("/auth/logout", post(logout))
         .route("/auth/profile", post(update_profile))
         .route("/auth/change-password", post(change_password))
-        // Admin forms (slice 4). These post under the separate
+        // Admin forms (slices 4-5). These post under the separate
         // `/admin/forms` namespace rather than the pages' own paths: the
         // EditPage route `/admin/page/:slug` would swallow POSTs sent to
-        // `/admin/page/<anything>`, and registering methods on page paths
-        // would 405 their SSR GETs (the slice-3 lesson).
+        // `/admin/page/<anything>` (and likewise every dynamic admin GET
+        // path), and registering methods on page paths would 405 their SSR
+        // GETs (the slice-3 lesson).
         .route("/admin/forms/label", post(update_label))
         .route("/admin/forms/page", post(create_page))
         .route("/admin/forms/page/update", post(update_page))
         .route("/admin/forms/page/delete", post(delete_page))
         .route("/admin/forms/page/restore", post(restore_page))
+        .route("/admin/forms/artist", post(create_artist))
+        .route("/admin/forms/artist/update", post(update_artist))
+        .route("/admin/forms/artist/delete", post(delete_artist))
+        .route("/admin/forms/artist/restore", post(restore_artist))
 }
 
 /// Fields of the login form. Every field defaults so a missing one is a
@@ -359,9 +365,9 @@ struct PageUpdateForm {
     local_published_at: String,
 }
 
-/// The hidden slug of the delete/restore forms.
+/// The hidden slug of the delete/restore forms (pages and artists).
 #[derive(Debug, serde::Deserialize)]
-struct PageSlugForm {
+struct SlugForm {
     #[serde(default)]
     slug: String,
 }
@@ -466,7 +472,7 @@ async fn update_page(
 async fn delete_page(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<PageSlugForm>,
+    Form(args): Form<SlugForm>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -486,7 +492,7 @@ async fn delete_page(
 async fn restore_page(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<PageSlugForm>,
+    Form(args): Form<SlugForm>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -498,6 +504,151 @@ async fn restore_page(
         Err(error) => {
             tracing::warn!("page restore form rejected: {error}");
             Redirect::to(&format!("/admin/page/{slug}?bad={}", page_code(&error)))
+        }
+    }
+}
+
+/// Fields of the artist create form (flat names, like the page forms).
+#[derive(Debug, serde::Deserialize)]
+struct ArtistCreateForm {
+    #[serde(default)]
+    label_id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    website: String,
+    /// Hidden full-date field (the stored value).
+    #[serde(default)]
+    published_at: String,
+    /// Visible `datetime-local` value, preferred when present.
+    #[serde(default)]
+    local_published_at: String,
+}
+
+/// Fields of the artist update form: the create fields plus the addressed
+/// slug.
+#[derive(Debug, serde::Deserialize)]
+struct ArtistUpdateForm {
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    website: String,
+    #[serde(default)]
+    published_at: String,
+    #[serde(default)]
+    local_published_at: String,
+}
+
+/// Create an artist. Success 303s to the new artist's profile editor under
+/// the slug the server derived from the name (never echoing the submitted
+/// name), with no `?updated=1`: the Leptos create action redirected
+/// silently into the editor.
+async fn create_artist(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<ArtistCreateForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let form = CreateArtistForm {
+        name: args.name,
+        description: args.description,
+        website: args.website,
+        label_id: args.label_id.parse::<i64>().unwrap_or_default(),
+        published_at: parse_form_date(&args.local_published_at, &args.published_at),
+    };
+    match services::artist::create_artist_service(&pool, current_user.as_ref(), form).await {
+        Ok(result) => Redirect::to(&format!("/admin/artist/{}", result.artist.slug)),
+        Err(error) => {
+            tracing::warn!("artist create form rejected: {error}");
+            Redirect::to(&format!("/admin/artist?bad={}", artist_code(&error)))
+        }
+    }
+}
+
+/// Update an artist's profile (name, description, website and publish
+/// date).
+async fn update_artist(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<ArtistUpdateForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    // Keep the requested slug for the failure redirect (the service takes
+    // the form by value).
+    let addressed_slug = args.slug.clone();
+    let form = UpdateArtistForm {
+        slug: args.slug,
+        name: args.name,
+        description: args.description,
+        website: args.website,
+        published_at: parse_form_date(&args.local_published_at, &args.published_at),
+    };
+    match services::artist::update_artist_service(&pool, current_user.as_ref(), form).await {
+        // `Artist::update` re-slugifies from the name; redirect to the
+        // editor's *current* slug, like the Leptos action's redirect did.
+        Ok(result) => Redirect::to(&format!("/admin/artist/{}?updated=1", result.artist.slug)),
+        Err(error) => {
+            tracing::warn!("artist update form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}?bad={}",
+                addressed_slug,
+                artist_code(&error)
+            ))
+        }
+    }
+}
+
+/// Soft-delete an artist. The editor reloads with `?updated=1`; its
+/// refetch shows the Restore button in place of Delete.
+async fn delete_artist(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<SlugForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let slug = args.slug;
+    match services::artist::delete_artist_service(&pool, current_user.as_ref(), slug.clone()).await
+    {
+        Ok(result) => Redirect::to(&format!("/admin/artist/{}?updated=1", result.artist.slug)),
+        Err(error) => {
+            tracing::warn!("artist delete form rejected: {error}");
+            Redirect::to(&format!("/admin/artist/{slug}?bad={}", artist_code(&error)))
+        }
+    }
+}
+
+/// Restore a soft-deleted artist.
+async fn restore_artist(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<SlugForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let slug = args.slug;
+    match services::artist::restore_artist_service(&pool, current_user.as_ref(), slug.clone()).await
+    {
+        Ok(result) => Redirect::to(&format!("/admin/artist/{}?updated=1", result.artist.slug)),
+        Err(error) => {
+            tracing::warn!("artist restore form rejected: {error}");
+            Redirect::to(&format!("/admin/artist/{slug}?bad={}", artist_code(&error)))
         }
     }
 }
@@ -546,6 +697,20 @@ fn page_code(error: &AppError) -> &'static str {
         AppError::Internal(message) if message.contains("Description must be less than") => {
             "desc_length"
         }
+        _ => "server",
+    }
+}
+
+/// The artist services require both `admin` and `label_owner`, so a
+/// `label_owner`-only session reaches the form and then gets this
+/// `forbidden` code on submit (parity with the Leptos editors).
+fn artist_code(error: &AppError) -> &'static str {
+    match error {
+        AppError::Forbidden(_) => "forbidden",
+        AppError::Internal(message) if message.contains("Name is required.") => "name_required",
+        AppError::Internal(message) if message.contains("Name must be less than") => "name_length",
+        AppError::Internal(message) if message.contains("Slug must be unique") => "slug_taken",
+        AppError::Internal(message) if message.contains("Record Label with id") => "no_label",
         _ => "server",
     }
 }

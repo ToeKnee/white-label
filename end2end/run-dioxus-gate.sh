@@ -44,6 +44,25 @@ curl -sS -o /dev/null -w "e2e seed status=%{http_code}\n" \
   --data-urlencode "password_confirmation=password" \
   "$base/auth/register"
 
+echo "== seed the e2e-tabs artist fixture (idempotent) =="
+# The nested-admin-tabs Playwright test edits this artist through the real
+# profile editor, so the row must exist (`name` and `slug` are both UNIQUE,
+# so re-running is a no-op). The row hangs off the first label; the profile
+# editor loads artists by slug, not by label.
+if [ -f "$ROOT/.env" ]; then
+    . "$ROOT/.env"
+fi
+if [ -n "${DATABASE_URL:-}" ]; then
+    psql "$DATABASE_URL" -c "INSERT INTO artists (name, slug, description, website, label_id, published_at)
+        SELECT 'E2E Tabs Artist', 'e2e-tabs', 'Gate fixture artist', 'https://e2e-tabs.example.com',
+               id, now()
+        FROM labels ORDER BY id LIMIT 1
+        ON CONFLICT (slug) DO NOTHING;" >/dev/null \
+        || echo "WARNING: could not seed the e2e-tabs artist (is psql installed?)"
+else
+    echo "WARNING: DATABASE_URL not set; skipping the e2e-tabs seed"
+fi
+
 echo "== admin session checks =="
 # The admin pages need a user with the `admin` permission, which the
 # register handler can't grant. Seed `e2e-admin` once (register it here,
@@ -76,6 +95,9 @@ if [ "$admin_ok" -eq 1 ]; then
     # The nested tab layout only renders behind the admin gate.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/jimi/releases"
     grep -c 'tabs tabs-border' "$OUT/nested.html"
+    # (slice 5a) The artist create page serves the real form handlers.
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_create.html" "$base/admin/artist"
+    grep -c 'action="/admin/forms/artist"' "$OUT/artist_create.html"
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.

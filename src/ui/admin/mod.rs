@@ -21,11 +21,13 @@
 //!   empty submenus, create links), exactly where the Leptos component kept
 //!   its `AdminMenu::default()`.
 
+pub mod artist;
 pub mod dashboard;
 pub mod label;
 pub mod pages;
 
 // Re-exported so the route table can import them from `ui::admin`.
+pub use artist::{CreateArtist, EditArtist};
 pub use dashboard::Dashboard;
 pub use label::EditLabel;
 pub use pages::{CreatePage, EditPage};

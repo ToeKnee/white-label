@@ -254,13 +254,14 @@ mod tests {
         // (slice 4) The `AdminRoot` layout gates every admin route: guests
         // get the login page rendered in place of the guarded route (the
         // slice-3 pattern; the redirect swaps the route out of the SSR
-        // render, so the admin menu never appears). The placeholder
-        // artist/release/track pages behind the gate are asserted with an
-        // admin session below.
+        // render, so the admin menu never appears). The seeded artist
+        // profile (slice 5a) is asserted with an admin session below, as
+        // are the placeholder release/track pages.
         let routes = [
             "/admin",
             "/admin/label",
             "/admin/artist",
+            "/admin/artist/jimi",
             "/admin/page",
             "/admin/page/terms-of-use",
             "/admin/artist/jimi/releases",
@@ -967,6 +968,10 @@ mod tests {
             "/admin/forms/page/update",
             "/admin/forms/page/delete",
             "/admin/forms/page/restore",
+            "/admin/forms/artist",
+            "/admin/forms/artist/update",
+            "/admin/forms/artist/delete",
+            "/admin/forms/artist/restore",
         ];
         for path in paths {
             let response = post_form(&server, path, &[]).await;
@@ -1226,26 +1231,254 @@ mod tests {
         assert_eq!(location(&response), "/admin/page?bad=forbidden");
     }
 
+    // --- Artist profile forms (MIGRATION.md Phase 4 slice 5a) ----------
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn artist_profile_flows_for_a_label_owner(pool: PgPool) {
+        create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        // The create page renders the empty form with the label stamped in.
+        let create_page = server.get("/admin/artist").await;
+        assert_shell(
+            &create_page,
+            &[
+                "Create Artist",
+                "action=\"/admin/forms/artist\"",
+                "name=\"label_id\" value=\"1\"",
+            ],
+        );
+
+        // Create 303s into the editor under the slug derived from the name —
+        // the Leptos action's silent redirect (no `?updated=1`).
+        let created = post_form(
+            &server,
+            "/admin/forms/artist",
+            &[
+                ("label_id", "1"),
+                ("name", "Jimi Solo"),
+                ("description", "Playing around."),
+                ("website", "https://jimi.example.com"),
+                ("local_published_at", "2026-03-01T09:30"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&created), "/admin/artist/jimi-solo");
+
+        // The profile editor shows the stored values inside the tab layout.
+        let editor = server.get("/admin/artist/jimi-solo").await;
+        assert_shell(
+            &editor,
+            &[
+                "Jimi Solo Profile",
+                "action=\"/admin/forms/artist/update\"",
+                "value=\"Jimi Solo\"",
+                "value=\"2026-03-01T09:30\"",
+                "Timezone +0000 (UTC)",
+                "tab tab-active",
+            ],
+        );
+
+        // Renaming re-slugifies (like `Page::update` did in slice 4): the
+        // redirect carries the *new* slug with the success code.
+        let renamed = post_form(
+            &server,
+            "/admin/forms/artist/update",
+            &[
+                ("slug", "jimi-solo"),
+                ("name", "Renamed Artist"),
+                ("description", "Playing around."),
+                ("website", "https://jimi.example.com"),
+                ("local_published_at", "2026-03-01T09:30"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&renamed), "/admin/artist/renamed-artist?updated=1");
+        // GET the redirect target as a browser would, query included, so
+        // the success alert renders.
+        let editor = server.get("/admin/artist/renamed-artist?updated=1").await;
+        assert_shell(
+            &editor,
+            &[
+                "Renamed Artist Profile",
+                "Renamed Artist Updated!",
+                "value=\"Renamed Artist\"",
+            ],
+        );
+
+        // Delete swaps the row button to Restore (the JS-free reload that
+        // replaces the Leptos dialog flow). `get_artist` answers by slug
+        // without a visibility filter, so the soft-deleted row still loads.
+        let deleted = post_form(
+            &server,
+            "/admin/forms/artist/delete",
+            &[("slug", "renamed-artist")],
+        )
+        .await;
+        assert_eq!(location(&deleted), "/admin/artist/renamed-artist?updated=1");
+        let body = server.get("/admin/artist/renamed-artist").await.text();
+        assert!(
+            body.contains("btn btn-secondary") && !body.contains("btn btn-error"),
+            "the deleted artist should show Restore, not Delete:\n{body}"
+        );
+
+        // Restore swaps the row button back.
+        let restored = post_form(
+            &server,
+            "/admin/forms/artist/restore",
+            &[("slug", "renamed-artist")],
+        )
+        .await;
+        assert_eq!(
+            location(&restored),
+            "/admin/artist/renamed-artist?updated=1"
+        );
+        let body = server.get("/admin/artist/renamed-artist").await.text();
+        assert!(
+            body.contains("btn btn-error") && !body.contains("btn btn-secondary"),
+            "the restored artist should show Delete, not Restore:\n{body}"
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn artist_form_failures_carry_fixed_codes(pool: PgPool) {
+        create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        create_test_user_with_permissions(&pool, 2, vec!["label_owner"])
+            .await
+            .expect("label_owner-only user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        // An empty name steers back to the create page with the fixed code
+        // (the submitted value is never echoed), and the alert renders.
+        let response = post_form(
+            &server,
+            "/admin/forms/artist",
+            &[("label_id", "1"), ("name", "")],
+        )
+        .await;
+        assert_eq!(location(&response), "/admin/artist?bad=name_required");
+        let body = server.get("/admin/artist?bad=name_required").await.text();
+        assert!(
+            body.contains("Name is required."),
+            "the create page should show the fixed alert:\n{body}"
+        );
+
+        // Two artists with the same name collide on the derived slug.
+        let first = post_form(
+            &server,
+            "/admin/forms/artist",
+            &[("label_id", "1"), ("name", "Dupe Artist")],
+        )
+        .await;
+        assert_eq!(location(&first), "/admin/artist/dupe-artist");
+        let dupe = post_form(
+            &server,
+            "/admin/forms/artist",
+            &[("label_id", "1"), ("name", "Dupe Artist")],
+        )
+        .await;
+        assert_eq!(location(&dupe), "/admin/artist?bad=slug_taken");
+
+        // An unknown slug on delete gets the generic code; only the Location
+        // is asserted (the editor at that slug renders NotFound inline).
+        let response = post_form(
+            &server,
+            "/admin/forms/artist/delete",
+            &[("slug", "no-such-artist")],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/no-such-artist?bad=server"
+        );
+
+        // The artist services require admin *and* label_owner (the Leptos
+        // services did too): an owner without admin gets the create page
+        // served, then the service forbids the submit.
+        login_as(&server, 2).await;
+        let response = post_form(
+            &server,
+            "/admin/forms/artist",
+            &[("label_id", "1"), ("name", "Owner Without Admin")],
+        )
+        .await;
+        assert_eq!(location(&response), "/admin/artist?bad=forbidden");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn missing_artist_editor_lands_on_not_found(pool: PgPool) {
+        // The profile editor's fetch failure must not land back on the
+        // create page: an inline SSR redirect re-parses its Display string,
+        // so the NotFound target must be a URL no route matches (a bare
+        // "/admin/artist" re-parses as CreateArtist; any other slug
+        // re-opens this editor). See `EditArtistBody`.
+        create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        let response = server.get("/admin/artist/no-such-slug").await;
+        assert_shell(&response, &["Oh No...", CHROME[0], CHROME[1]]);
+        let body = response.text();
+        // Neither the create form nor the editor may render in its place.
+        assert!(
+            !body.contains("action=\"/admin/forms/artist\""),
+            "must not fall back to the create page:\n{body}"
+        );
+        assert!(!body.contains("tabs tabs-border"), "no tab layout:\n{body}");
+    }
+
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
     async fn nested_admin_layouts_render_outside_in(pool: PgPool) {
-        // Slice 4 gates the layout, so the nested-route checks now run with
-        // an admin session (the tab layout itself is still the placeholder
-        // until slice 5).
-        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+        // Slice 5a made the profile editor real, so this check now runs with
+        // an admin + label_owner session and a seeded artist (the tab layout
+        // is `AdminArtistRoot`, still in `ui::placeholders`).
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
             .await
-            .expect("admin user");
+            .expect("admin + label_owner user");
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
         let server = api_server(pool).await;
         login_as(&server, 1).await;
 
-        let response = server.get("/admin/artist/jimi").await;
+        let response = server.get("/admin/artist/test-artist-1").await;
 
         // AppShell chrome, AdminRoot menu + article wrapper,
-        // AdminArtistRoot tabs, and the page itself — with the slug prop
-        // reaching the child component.
+        // AdminArtistRoot tabs, and the real profile editor — with the slug
+        // prop reaching the child component through the seeded values.
         assert_shell(
             &response,
             &[
@@ -1253,9 +1486,10 @@ mod tests {
                 CHROME[1],
                 "w-56 menu bg-base-200 rounded-box",
                 "tabs tabs-border",
-                "href=\"/admin/artist/jimi/releases\"",
+                "href=\"/admin/artist/test-artist-1/releases\"",
                 "tab tab-active",
-                "slug: jimi",
+                "Test Artist 1 Profile",
+                "value=\"Test Artist 1\"",
             ],
         );
     }
@@ -1266,21 +1500,33 @@ mod tests {
     )]
     #[sqlx::test]
     async fn deep_nested_routes_and_trailing_slashes_serve(pool: PgPool) {
-        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
             .await
-            .expect("admin user");
+            .expect("admin + label_owner user");
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
         let server = api_server(pool).await;
         login_as(&server, 1).await;
 
+        // Track editors are still placeholders until slice 5c, so the deep
+        // URL can address slugs that were never seeded.
         let deep = server
             .get("/admin/artist/jimi/release/axis/track/castles")
             .await;
         assert_shell(&deep, &["Edit track", "track: castles"]);
 
         // The exact `"x"`/`"x/"` route pairs the Leptos table needed are one
-        // variant here (MIGRATION.md risk 4).
-        let slashed = server.get("/admin/artist/jimi/").await;
-        assert_shell(&slashed, &["Edit artist", "slug: jimi"]);
+        // variant here (MIGRATION.md risk 4); the trailing-slash profile URL
+        // now serves the real editor.
+        let slashed = server.get("/admin/artist/test-artist-1/").await;
+        assert_shell(
+            &slashed,
+            &["Test Artist 1 Profile", "value=\"Test Artist 1\""],
+        );
     }
 
     #[expect(

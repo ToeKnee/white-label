@@ -10,7 +10,9 @@
 //! - auth pages → done (Phase 4 slice 3: see `auth`)
 //! - admin dashboard/label/pages and the `AdminRoot` layout → done
 //!   (Phase 4 slice 4: see `admin`)
-//! - admin artist/release/track → slice 5
+//! - admin artist profile (`CreateArtist`/`EditArtist`) → done
+//!   (Phase 4 slice 5a: see `admin::artist`)
+//! - admin artist links/images, releases and tracks → slice 5
 
 use dioxus::prelude::*;
 
@@ -47,9 +49,23 @@ fn admin_page(title: &str, detail: Option<&str>) -> Element {
 /// is a plain comparison of the current route — Phase 5 may refine it.
 #[component]
 pub fn AdminArtistRoot(artist_slug: String) -> Element {
-    let current = use_route::<Route>();
+    // Query codes carried by the profile editor (`?updated=1`, `?bad=`)
+    // must not un-highlight its tab, so the comparison value drops them.
+    let current = match use_route::<Route>() {
+        Route::EditArtist {
+            artist_slug: ref slug,
+            ..
+        } => Route::EditArtist {
+            artist_slug: slug.clone(),
+            updated: None,
+            bad: None,
+        },
+        other => other,
+    };
     let profile = Route::EditArtist {
         artist_slug: artist_slug.clone(),
+        updated: None,
+        bad: None,
     };
     let releases = Route::Releases {
         artist_slug: artist_slug.clone(),
@@ -96,18 +112,6 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
         }
         Outlet::<Route> {}
     }
-}
-
-/// Placeholder artist creation form.
-#[component]
-pub fn CreateArtist() -> Element {
-    admin_page("Create artist", None)
-}
-
-/// Placeholder artist editor.
-#[component]
-pub fn EditArtist(artist_slug: String) -> Element {
-    admin_page("Edit artist", Some(&format!("slug: {artist_slug}")))
 }
 
 /// Placeholder artist links editor.

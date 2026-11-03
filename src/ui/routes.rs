@@ -14,13 +14,15 @@
 
 use dioxus::prelude::*;
 
-use super::admin::{AdminRoot, CreatePage, Dashboard, EditLabel, EditPage};
+use super::admin::{
+    AdminRoot, CreateArtist, CreatePage, Dashboard, EditArtist, EditLabel, EditPage,
+};
 use super::artist::{ArtistPage, ArtistsPage};
 use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
 use super::page::PageDetails;
 use super::placeholders::{
-    AdminArtistRoot, CreateArtist, CreateRelease, CreateTrack, EditArtist, EditArtistImages,
-    EditArtistLinks, EditRelease, EditTrack, Releases, Tracks,
+    AdminArtistRoot, CreateRelease, CreateTrack, EditArtistImages, EditArtistLinks, EditRelease,
+    EditTrack, Releases, Tracks,
 };
 use super::record_label::RecordLabelHome;
 use super::release::ReleasePage;
@@ -121,18 +123,29 @@ pub enum Route {
     /// path, so every variant inside carries it as a prop — the layout
     /// receives it too (which is how `AdminArtistRoot` renders its tabs).
     /// `CreateArtist` lives outside the nest: it has no slug to carry.
-    #[route("/admin/artist")]
-    CreateArtist {},
+    /// `bad` carries a fixed code from a failed create (the form posts to
+    /// `/admin/forms/artist`).
+    #[route("/admin/artist?:bad")]
+    CreateArtist {
+        /// Error code from a failed create.
+        bad: Option<String>,
+    },
     #[nest("/admin/artist/:artist_slug")]
     /// Artist editor tabs (profile/releases/links/images) wrapping the
     /// per-artist routes below.
     #[layout(AdminArtistRoot)]
     /// Edit an artist's details. Canonical URL ends with a slash
     /// (`/admin/artist/jimi/`); the form without one still parses.
-    #[route("/")]
+    /// `updated`/`bad` carry the profile form's codes (posts to
+    /// `/admin/forms/artist/*`; see `crate::server::forms`).
+    #[route("/?:updated&:bad")]
     EditArtist {
         /// The artist slug.
         artist_slug: String,
+        /// Set when the artist has just been saved/deleted/restored.
+        updated: Option<String>,
+        /// Error code from a failed save/delete/restore.
+        bad: Option<String>,
     },
     /// Edit an artist's external links.
     #[route("/links")]
@@ -341,11 +354,13 @@ mod tests {
                 bad: None
             }
         );
-        assert_eq!(parse("/admin/artist"), Route::CreateArtist {});
+        assert_eq!(parse("/admin/artist"), Route::CreateArtist { bad: None });
         assert_eq!(
             parse("/admin/artist/jimi"),
             Route::EditArtist {
-                artist_slug: "jimi".into()
+                artist_slug: "jimi".into(),
+                updated: None,
+                bad: None,
             }
         );
         assert_eq!(
@@ -417,6 +432,30 @@ mod tests {
     #[test]
     fn admin_routes_carry_query_codes() {
         assert_eq!(
+            parse("/admin/artist?bad=name_required"),
+            Route::CreateArtist {
+                bad: Some("name_required".into())
+            }
+        );
+        // The nest base carries the slug, the child route the codes: both
+        // the canonical trailing-slash form and the short form parse.
+        assert_eq!(
+            parse("/admin/artist/jimi?updated=1"),
+            Route::EditArtist {
+                artist_slug: "jimi".into(),
+                updated: Some("1".into()),
+                bad: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/?bad=slug_taken"),
+            Route::EditArtist {
+                artist_slug: "jimi".into(),
+                updated: None,
+                bad: Some("slug_taken".into()),
+            }
+        );
+        assert_eq!(
             parse("/admin/label?updated=1"),
             Route::EditLabel {
                 updated: Some("1".into()),
@@ -469,7 +508,9 @@ mod tests {
         assert_eq!(
             parse("/admin/artist/jimi/"),
             Route::EditArtist {
-                artist_slug: "jimi".into()
+                artist_slug: "jimi".into(),
+                updated: None,
+                bad: None,
             }
         );
         assert_eq!(
@@ -505,9 +546,17 @@ mod tests {
                 slug: "cookies".into(),
             },
             // The nest-base route renders its canonical trailing slash and
-            // still parses back (the quirk recorded in the Phase 0 spike).
+            // still parses back (the quirk recorded in the Phase 0 spike);
+            // the short form with the profile form's codes round-trips too.
             Route::EditArtist {
                 artist_slug: "jimi".into(),
+                updated: None,
+                bad: None,
+            },
+            Route::EditArtist {
+                artist_slug: "jimi".into(),
+                updated: Some("1".into()),
+                bad: None,
             },
             Route::EditTrack {
                 artist_slug: "jimi".into(),
