@@ -11,6 +11,12 @@
 //! targets (web wasm, desktop, mobile) get their own feature gates in
 //! Phases 6-7.
 
+/// Admin section (dashboard, label/page editors, `AdminRoot` layout with
+/// its side menu and admin gate).
+///
+/// Phase 4 slice 4; the admin form posts land on `crate::server::forms`
+/// handlers under `/admin/forms/*`.
+pub mod admin;
 /// Artist index and artist page, plus the shared artist card.
 pub mod artist;
 /// Auth pages (login/register/logout/profile/change-password).

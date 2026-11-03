@@ -1,11 +1,11 @@
 //! Record-label endpoints ported from `routes/record_label.rs` (see the
-//! `api` module docs for the wire protocol). These routes had no service
-//! layer — the model calls and flattened error messages live here, matching
-//! the Leptos code byte for byte.
+//! `api` module docs for the wire protocol). The reads keep their inline
+//! model calls (flattened error messages matching the Leptos code byte for
+//! byte); the update runs through `services::record_label`, shared with the
+//! Dioxus `EditLabel` form handler in `server::forms`.
 
 use axum::response::Response;
 
-use crate::error::AppError;
 use crate::models::record_label::RecordLabel;
 use crate::routes::record_label::{
     GetLabelArtists, GetLabelPages, GetRecordLabel, LabelArtistResult, LabelPageResult,
@@ -13,6 +13,7 @@ use crate::routes::record_label::{
 };
 use crate::server::api::{WireError, decode_args, json_response};
 use crate::server::current_user::{CurrentUser, Db};
+use crate::services;
 
 const PATH_RECORD_LABEL: &str = "/api/record_label";
 const PATH_RECORD_LABEL_ARTISTS: &str = "/api/record_label_artists";
@@ -103,6 +104,9 @@ pub async fn get_label_pages(
 }
 
 /// Update the label's name, description and ISRC base (`label_owner` only).
+/// The checks and messages live in [`services::record_label`] (shared with
+/// the `forms` `EditLabel` handler); `from_app_error` keeps the statuses and
+/// `ServerError|<message>` bodies the Leptos client expects.
 pub async fn update_record_label(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
@@ -110,39 +114,16 @@ pub async fn update_record_label(
 ) -> Result<Response, WireError> {
     let args = decode_args::<UpdateRecordLabel>(PATH_UPDATE_RECORD_LABEL, &body)?;
 
-    let current_user = current_user.as_ref().ok_or_else(|| {
-        WireError::from_app_error(
-            PATH_UPDATE_RECORD_LABEL,
-            &AppError::Unauthorized("You must be logged in to update a label".into()),
-        )
-    })?;
-    if !current_user.permissions.contains("label_owner") {
-        return Err(WireError::from_app_error(
-            PATH_UPDATE_RECORD_LABEL,
-            &AppError::Forbidden("You do not have permission to update a label".into()),
-        ));
-    }
-
-    let mut record_label = RecordLabel::get_by_id(&pool, args.id)
-        .await
-        .map_err(|error| {
-            tracing::error!("update_record_label: {error:?}");
-            WireError::internal(
-                PATH_UPDATE_RECORD_LABEL,
-                "Could not retrieve label, try again later",
-            )
-        })?;
-
-    record_label.name = args.name;
-    record_label.description = args.description;
-    record_label.isrc_base = args.isrc_base;
-    let record_label = record_label.update(&pool).await.map_err(|error| {
-        tracing::error!("update_record_label: {error}");
-        WireError::internal(
-            PATH_UPDATE_RECORD_LABEL,
-            "Could not update label, try again later",
-        )
-    })?;
+    let record_label = services::record_label::update_record_label(
+        &pool,
+        current_user.as_ref(),
+        args.id,
+        args.name,
+        args.description,
+        args.isrc_base,
+    )
+    .await
+    .map_err(|error| WireError::from_app_error(PATH_UPDATE_RECORD_LABEL, &error))?;
 
     json_response(PATH_UPDATE_RECORD_LABEL, &LabelResult { record_label })
 }

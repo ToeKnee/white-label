@@ -1,4 +1,4 @@
-//! Placeholder pages and admin layouts for the route table
+//! Placeholder pages and the artist-tab layout for the route table
 //! (MIGRATION.md Phase 3).
 //!
 //! Every route variant needs a component by the end of Phase 3, so pages
@@ -8,7 +8,8 @@
 //! - public pages → done (Phase 4 slice 2: see `record_label`, `artist`,
 //!   `release` and `page`)
 //! - auth pages → done (Phase 4 slice 3: see `auth`)
-//! - admin dashboard/label/pages → slice 4
+//! - admin dashboard/label/pages and the `AdminRoot` layout → done
+//!   (Phase 4 slice 4: see `admin`)
 //! - admin artist/release/track → slice 5
 
 use dioxus::prelude::*;
@@ -35,25 +36,8 @@ fn admin_page(title: &str, detail: Option<&str>) -> Element {
 }
 
 // ---------------------------------------------------------------------------
-// Admin section
+// Admin section (the `AdminRoot` layout is real since slice 4: `ui::admin`)
 // ---------------------------------------------------------------------------
-
-/// Admin chrome placeholder (Leptos: `components::admin::root::AdminRoot`).
-///
-/// Deliberately minimal until the Phase 4 slices: the admin side menu and
-/// the "must have the admin permission, else redirect to /login" gate are
-/// ported then. Until then every admin page below shows placeholder markup,
-/// and the data endpoints underneath stay permission-checked server-side.
-#[component]
-pub fn AdminRoot() -> Element {
-    rsx! {
-        div { class: "flex",
-            article { class: "my-6 md:container md:mx-auto prose",
-                Outlet::<Route> {}
-            }
-        }
-    }
-}
 
 /// Artist editor tabs layout (Leptos: `components::admin::artist::root`).
 ///
@@ -112,18 +96,6 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
         }
         Outlet::<Route> {}
     }
-}
-
-/// Placeholder dashboard.
-#[component]
-pub fn Dashboard() -> Element {
-    admin_page("Admin dashboard", None)
-}
-
-/// Placeholder record-label editor.
-#[component]
-pub fn EditLabel() -> Element {
-    admin_page("Edit label", None)
 }
 
 /// Placeholder artist creation form.
@@ -198,16 +170,4 @@ pub fn EditTrack(artist_slug: String, release_slug: String, track_slug: String) 
             "artist: {artist_slug}, release: {release_slug}, track: {track_slug}"
         )),
     )
-}
-
-/// Placeholder page creation form.
-#[component]
-pub fn CreatePage() -> Element {
-    admin_page("Create page", None)
-}
-
-/// Placeholder page editor.
-#[component]
-pub fn EditPage(slug: String) -> Element {
-    admin_page("Edit page", Some(&format!("slug: {slug}")))
 }

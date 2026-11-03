@@ -1,5 +1,5 @@
-//! Server-side handlers for the auth pages' plain HTML forms (MIGRATION.md
-//! Phase 4 slice 3).
+//! Server-side handlers for the app's plain HTML forms (MIGRATION.md
+//! Phase 4 slices 3-4).
 //!
 //! The `crate::ui::auth` pages render `<form method="post">` elements that
 //! post to these handlers under the `/auth` namespace — deliberately *not*
@@ -36,13 +36,16 @@ use axum::Router;
 use axum::extract::Form;
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::post;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use tower_sessions::Session;
 
 use crate::error::AppError;
+use crate::forms::page::{CreatePageForm, UpdatePageForm};
 use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::server::current_user::{
     CurrentUser, Db, login as record_login, logout as record_logout, remember_session,
 };
+use crate::services;
 use crate::services::user::{
     change_password_service, login_user, register_user_service, update_user_service,
 };
@@ -57,6 +60,16 @@ pub fn form_routes() -> Router {
         .route("/auth/logout", post(logout))
         .route("/auth/profile", post(update_profile))
         .route("/auth/change-password", post(change_password))
+        // Admin forms (slice 4). These post under the separate
+        // `/admin/forms` namespace rather than the pages' own paths: the
+        // EditPage route `/admin/page/:slug` would swallow POSTs sent to
+        // `/admin/page/<anything>`, and registering methods on page paths
+        // would 405 their SSR GETs (the slice-3 lesson).
+        .route("/admin/forms/label", post(update_label))
+        .route("/admin/forms/page", post(create_page))
+        .route("/admin/forms/page/update", post(update_page))
+        .route("/admin/forms/page/delete", post(delete_page))
+        .route("/admin/forms/page/restore", post(restore_page))
 }
 
 /// Fields of the login form. Every field defaults so a missing one is a
@@ -282,5 +295,327 @@ fn change_password_code(error: &AppError) -> &'static str {
         AppError::BadRequest(_) => "mismatch",
         AppError::Unauthorized(message) if message == "Password does not match." => "current",
         _ => "server",
+    }
+}
+
+// --- Admin forms (MIGRATION.md Phase 4 slice 4) --------------------------
+//
+// The dashboard-side editors in `crate::ui::admin` post here; the fixed
+// codes below are mapped to alert text there (`label_message`,
+// `page_message`). Like the auth handlers, guests get steered to the login
+// page and the services re-check the real permissions.
+
+/// Fields of the label editor form. The hidden `id` parses leniently: a
+/// tampered value becomes 0 and the service answers with its fixed retry
+/// message.
+#[derive(Debug, serde::Deserialize)]
+struct LabelForm {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    isrc_base: String,
+}
+
+/// Fields of the page create form. Names are flat (the Leptos
+/// `page_form[...]` prefix encoding is a server-fn struct convention this
+/// plain-form surface does not need).
+#[derive(Debug, serde::Deserialize)]
+struct PageCreateForm {
+    #[serde(default)]
+    label_id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    body: String,
+    /// Hidden full-date field (the stored value).
+    #[serde(default)]
+    published_at: String,
+    /// Visible `datetime-local` value, preferred when present.
+    #[serde(default)]
+    local_published_at: String,
+}
+
+/// Fields of the page update form: the create fields plus the addressed
+/// slug.
+#[derive(Debug, serde::Deserialize)]
+struct PageUpdateForm {
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    published_at: String,
+    #[serde(default)]
+    local_published_at: String,
+}
+
+/// The hidden slug of the delete/restore forms.
+#[derive(Debug, serde::Deserialize)]
+struct PageSlugForm {
+    #[serde(default)]
+    slug: String,
+}
+
+/// Save the record label's details (`label_owner` only; the service
+/// enforces it). Success reloads the editor with `?updated=1` so the page
+/// renders the saved values and the success alert.
+async fn update_label(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<LabelForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let id = args.id.parse::<i64>().unwrap_or_default();
+    match services::record_label::update_record_label(
+        &pool,
+        current_user.as_ref(),
+        id,
+        args.name,
+        args.description,
+        args.isrc_base,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to("/admin/label?updated=1"),
+        Err(error) => {
+            tracing::warn!("label form rejected: {error}");
+            Redirect::to(&format!("/admin/label?bad={}", label_code(&error)))
+        }
+    }
+}
+
+/// Create a marketing/legal page. Success 303s to the new page's editor
+/// under the slug the server derived from the name (URL-safe by
+/// construction, and never echoing the submitted name).
+async fn create_page(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<PageCreateForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let form = CreatePageForm {
+        name: args.name,
+        description: args.description,
+        body: args.body,
+        label_id: args.label_id.parse::<i64>().unwrap_or_default(),
+        published_at: parse_form_date(&args.local_published_at, &args.published_at),
+    };
+    match services::page::create_page_service(&pool, current_user.as_ref(), form).await {
+        Ok(result) => Redirect::to(&format!("/admin/page/{}", result.page.slug)),
+        Err(error) => {
+            tracing::warn!("page create form rejected: {error}");
+            Redirect::to(&format!("/admin/page?bad={}", page_code(&error)))
+        }
+    }
+}
+
+/// Update a page (name, description, body and publish date).
+async fn update_page(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<PageUpdateForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    // Keep the requested slug for the failure redirect (the service takes
+    // the form by value).
+    let addressed_slug = args.slug.clone();
+    let form = UpdatePageForm {
+        slug: args.slug,
+        name: args.name,
+        description: args.description,
+        body: args.body,
+        published_at: parse_form_date(&args.local_published_at, &args.published_at),
+    };
+    match services::page::update_page_service(&pool, current_user.as_ref(), form).await {
+        // `update` can re-slugify; redirect to the editor's *current* slug
+        // like the Leptos action's result did.
+        Ok(result) => Redirect::to(&format!("/admin/page/{}?updated=1", result.page.slug)),
+        Err(error) => {
+            tracing::warn!("page update form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/page/{}?bad={}",
+                addressed_slug,
+                page_code(&error)
+            ))
+        }
+    }
+}
+
+/// Soft-delete a page. The editor reloads with `?updated=1`; its refetch
+/// shows the Restore button in place of Delete (the state swap the Leptos
+/// dialog produced in place).
+async fn delete_page(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<PageSlugForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let slug = args.slug;
+    match services::page::delete_page_service(&pool, current_user.as_ref(), slug.clone()).await {
+        Ok(result) => Redirect::to(&format!("/admin/page/{}?updated=1", result.page.slug)),
+        Err(error) => {
+            tracing::warn!("page delete form rejected: {error}");
+            Redirect::to(&format!("/admin/page/{slug}?bad={}", page_code(&error)))
+        }
+    }
+}
+
+/// Restore a soft-deleted page.
+async fn restore_page(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<PageSlugForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let slug = args.slug;
+    match services::page::restore_page_service(&pool, current_user.as_ref(), slug.clone()).await {
+        Ok(result) => Redirect::to(&format!("/admin/page/{}?updated=1", result.page.slug)),
+        Err(error) => {
+            tracing::warn!("page restore form rejected: {error}");
+            Redirect::to(&format!("/admin/page/{slug}?bad={}", page_code(&error)))
+        }
+    }
+}
+
+/// Resolve a `DateField` submission: a submitted `datetime-local` value
+/// wins (interpreted as UTC — the browser's zone is not applied; see
+/// `ui::admin::pages`), else the hidden full-date field, else no date.
+fn parse_form_date(local: &str, hidden: &str) -> Option<DateTime<Utc>> {
+    if !local.is_empty() {
+        // `datetime-local` sends minute precision; some browsers append
+        // seconds (or fractions).
+        for format in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"] {
+            if let Ok(naive) = NaiveDateTime::parse_from_str(local, format) {
+                return Some(naive.and_utc());
+            }
+        }
+    }
+    if !hidden.is_empty() {
+        // The hidden field carries `DateTime<Utc>`'s Display form.
+        if let Ok(when) = DateTime::parse_from_rfc3339(hidden) {
+            return Some(when.to_utc());
+        }
+    }
+    None
+}
+
+// The fixed codes `crate::ui::admin` maps onto alert text; service and
+// model-validation messages are fixed strings, so comparing them is
+// stable. Unrecognised failures get the generic `server` code.
+
+const fn label_code(error: &AppError) -> &'static str {
+    match error {
+        AppError::Forbidden(_) => "forbidden",
+        _ => "server",
+    }
+}
+
+fn page_code(error: &AppError) -> &'static str {
+    match error {
+        AppError::Forbidden(_) => "forbidden",
+        // Model validation failures surface wrapped as `Internal` with
+        // their fixed messages.
+        AppError::Internal(message) if message.contains("Name is required.") => "name_required",
+        AppError::Internal(message) if message.contains("Name must be less than") => "name_length",
+        AppError::Internal(message) if message.contains("Slug must be unique") => "slug_taken",
+        AppError::Internal(message) if message.contains("Description must be less than") => {
+            "desc_length"
+        }
+        _ => "server",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{TimeZone, Utc};
+
+    use super::{label_code, page_code, parse_form_date};
+    use crate::error::AppError;
+
+    #[test]
+    fn form_date_prefers_the_local_input() {
+        let parsed =
+            parse_form_date("2026-03-01T09:30", "2020-01-01T00:00:00+00:00").expect("date");
+        assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 3, 1, 9, 30, 0).unwrap());
+    }
+
+    #[test]
+    fn form_date_accepts_seconds_in_the_local_input() {
+        let parsed = parse_form_date("2026-03-01T09:30:15", "").expect("date");
+        assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 3, 1, 9, 30, 15).unwrap());
+    }
+
+    #[test]
+    fn form_date_falls_back_to_the_hidden_field() {
+        let parsed = parse_form_date("", "2026-02-15T12:00:00+00:00").expect("date");
+        assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 2, 15, 12, 0, 0).unwrap());
+        // An unparseable local value also falls through.
+        let parsed = parse_form_date("not-a-date", "2026-02-15T12:00:00+00:00").expect("date");
+        assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 2, 15, 12, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn form_date_empty_both_means_no_date() {
+        assert!(parse_form_date("", "").is_none());
+        assert!(parse_form_date("garbage", "garbage").is_none());
+    }
+
+    #[test]
+    fn label_codes_map_service_errors() {
+        assert_eq!(label_code(&AppError::Forbidden("nope".into())), "forbidden");
+        assert_eq!(label_code(&AppError::Internal("db".into())), "server");
+        assert_eq!(label_code(&AppError::NotFound("gone".into())), "server");
+    }
+
+    #[test]
+    fn page_codes_map_validation_and_permission_errors() {
+        assert_eq!(page_code(&AppError::Forbidden("nope".into())), "forbidden");
+        assert_eq!(
+            page_code(&AppError::Internal("Name is required.".into())),
+            "name_required"
+        );
+        assert_eq!(
+            page_code(&AppError::Internal(
+                "Name must be less than 255 characters.".into()
+            )),
+            "name_length"
+        );
+        assert_eq!(
+            page_code(&AppError::Internal("Slug must be unique.".into())),
+            "slug_taken"
+        );
+        assert_eq!(
+            page_code(&AppError::Internal(
+                "Description must be less than 255 characters.".into()
+            )),
+            "desc_length"
+        );
+        assert_eq!(page_code(&AppError::Internal("boom".into())), "server");
+        assert_eq!(page_code(&AppError::Unauthorized("gone".into())), "server");
     }
 }

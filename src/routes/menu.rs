@@ -9,7 +9,8 @@ use crate::services::menu::admin_menu;
 use crate::state::{auth, pool};
 
 /// `AdminMenu` struct contains nested details to generate an admin menu.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
+/// `PartialEq` for the Dioxus admin menu components (`ui::admin`).
+#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug, Eq, PartialEq)]
 pub struct AdminMenu {
     /// The record label associated with the admin menu.
     pub record_label: RecordLabel,
@@ -23,7 +24,7 @@ pub struct AdminMenu {
 
 /// `MenuArtist` struct contains details about an artist and their releases for the admin menu.
 /// This struct is used to generate a sub-menu for each artist in the admin menu.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug, Eq, PartialEq)]
 pub struct MenuArtist {
     /// The artist associated with the sub-menu.
     pub artist: Artist,
@@ -35,7 +36,7 @@ pub struct MenuArtist {
 
 /// `MenuRelease` struct contains details about a release and its tracks for the admin menu.
 /// This struct is used to generate a sub-menu for each release in the artist's sub-menu.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug, Eq, PartialEq)]
 pub struct MenuRelease {
     /// The release associated with the sub-menu.
     pub release: Release,
@@ -44,7 +45,7 @@ pub struct MenuRelease {
 }
 
 /// `MenuPage` struct contains details about a page for the admin menu.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug, Eq, PartialEq)]
 pub struct MenuPage {
     /// The page associated with the menu.
     pub page: Page,

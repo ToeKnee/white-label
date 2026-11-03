@@ -14,13 +14,13 @@
 
 use dioxus::prelude::*;
 
+use super::admin::{AdminRoot, CreatePage, Dashboard, EditLabel, EditPage};
 use super::artist::{ArtistPage, ArtistsPage};
 use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
 use super::page::PageDetails;
 use super::placeholders::{
-    AdminArtistRoot, AdminRoot, CreateArtist, CreatePage, CreateRelease, CreateTrack, Dashboard,
-    EditArtist, EditArtistImages, EditArtistLinks, EditLabel, EditPage, EditRelease, EditTrack,
-    Releases, Tracks,
+    AdminArtistRoot, CreateArtist, CreateRelease, CreateTrack, EditArtist, EditArtistImages,
+    EditArtistLinks, EditRelease, EditTrack, Releases, Tracks,
 };
 use super::record_label::RecordLabelHome;
 use super::release::ReleasePage;
@@ -107,9 +107,16 @@ pub enum Route {
     /// Admin dashboard.
     #[route("/admin")]
     Dashboard {},
-    /// Edit the record label's details.
-    #[route("/admin/label")]
-    EditLabel {},
+    /// Edit the record label's details. `updated` and `bad` carry fixed
+    /// codes from the label form's redirect (posts to
+    /// `/admin/forms/label`; see `crate::server::forms`).
+    #[route("/admin/label?:updated&:bad")]
+    EditLabel {
+        /// Set when the label has just been saved.
+        updated: Option<String>,
+        /// Error code from a failed save.
+        bad: Option<String>,
+    },
     /// Artist management under `/admin/artist`. The slug sits in the nest
     /// path, so every variant inside carries it as a prop — the layout
     /// receives it too (which is how `AdminArtistRoot` renders its tabs).
@@ -187,14 +194,24 @@ pub enum Route {
     },
     #[end_layout]
     #[end_nest]
-    /// Create a marketing/legal page.
-    #[route("/admin/page")]
-    CreatePage {},
-    /// Edit a marketing/legal page.
-    #[route("/admin/page/:slug")]
+    /// Create a marketing/legal page. `bad` carries a fixed code from a
+    /// failed create (the form posts to `/admin/forms/page`).
+    #[route("/admin/page?:bad")]
+    CreatePage {
+        /// Error code from a failed create.
+        bad: Option<String>,
+    },
+    /// Edit a marketing/legal page. `updated` and `bad` carry fixed codes
+    /// from the update/delete/restore redirects (the forms post under
+    /// `/admin/forms/page/*`).
+    #[route("/admin/page/:slug?:updated&:bad")]
     EditPage {
         /// The page slug.
         slug: String,
+        /// Set when the page has just been saved, deleted or restored.
+        updated: Option<String>,
+        /// Error code from a failed save/delete/restore.
+        bad: Option<String>,
     },
     #[end_layout]
     /// Catch-all 404 page (the Leptos `Routes fallback`).
@@ -317,7 +334,13 @@ mod tests {
     #[test]
     fn admin_routes_parse() {
         assert_eq!(parse("/admin"), Route::Dashboard {});
-        assert_eq!(parse("/admin/label"), Route::EditLabel {});
+        assert_eq!(
+            parse("/admin/label"),
+            Route::EditLabel {
+                updated: None,
+                bad: None
+            }
+        );
         assert_eq!(parse("/admin/artist"), Route::CreateArtist {});
         assert_eq!(
             parse("/admin/artist/jimi"),
@@ -378,11 +401,55 @@ mod tests {
                 track_slug: "castles".into(),
             }
         );
-        assert_eq!(parse("/admin/page"), Route::CreatePage {});
+        assert_eq!(parse("/admin/page"), Route::CreatePage { bad: None });
         assert_eq!(
             parse("/admin/page/terms-of-use"),
             Route::EditPage {
-                slug: "terms-of-use".into()
+                slug: "terms-of-use".into(),
+                updated: None,
+                bad: None,
+            }
+        );
+    }
+
+    /// The admin forms 303 back to these pages with fixed status codes in
+    /// the query string (the auth-code pattern from slice 3).
+    #[test]
+    fn admin_routes_carry_query_codes() {
+        assert_eq!(
+            parse("/admin/label?updated=1"),
+            Route::EditLabel {
+                updated: Some("1".into()),
+                bad: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/label?bad=forbidden"),
+            Route::EditLabel {
+                updated: None,
+                bad: Some("forbidden".into()),
+            }
+        );
+        assert_eq!(
+            parse("/admin/page?bad=name_required"),
+            Route::CreatePage {
+                bad: Some("name_required".into())
+            }
+        );
+        assert_eq!(
+            parse("/admin/page/terms-of-use?updated=1"),
+            Route::EditPage {
+                slug: "terms-of-use".into(),
+                updated: Some("1".into()),
+                bad: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/page/terms-of-use?bad=slug_taken"),
+            Route::EditPage {
+                slug: "terms-of-use".into(),
+                updated: None,
+                bad: Some("slug_taken".into()),
             }
         );
     }

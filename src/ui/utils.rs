@@ -192,15 +192,23 @@ pub fn authenticated_or_redirect(user: Option<&User>, to: Route) {
     }
 }
 
-/// Guards a page: redirects to `to` unless the user passes the permission
-/// check.
+/// Whether `user` passes the permission check — the condition behind
+/// [`permission_or_redirect`], kept separate so page components can render
+/// their loading state while the guard redirects.
 ///
 /// The condition is kept intentionally identical to the Leptos original: an
 /// *active* user passes even without the permission token, so this is closer
-/// to "redirect guests" than a strict permission gate.
+/// to "redirect guests" than a strict permission gate. Server-side handlers
+/// and services enforce the real permission checks.
+#[must_use]
+pub fn permission_allows(user: Option<&User>, permission: &str) -> bool {
+    user.is_some_and(|user| user.is_active() || user.permissions.contains(permission))
+}
+
+/// Guards a page: redirects to `to` unless the user passes the permission
+/// check ([`permission_allows`]).
 pub fn permission_or_redirect(user: Option<&User>, permission: &str, to: Route) {
-    let passes = user.is_some_and(|user| user.is_active() || user.permissions.contains(permission));
-    if !passes {
+    if !permission_allows(user, permission) {
         redirect(to);
     }
 }

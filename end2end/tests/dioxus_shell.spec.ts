@@ -3,14 +3,18 @@ import { expect, test } from "@playwright/test";
 /**
  * Dioxus shell navigation smoke test (see MIGRATION.md Phases 3-4). Run against
  * a live Dioxus server via `end2end/run-dioxus-gate.sh`; override the target
- * with DIOXUS_URL. The public site (home, artists, artist, release, page) and
- * the auth pages (login/register/logout/profile) are real since slices 2-3 and
- * are rendered server-side from the gate's database, so these assertions read
- * the label and artist names from the page instead of hardcoding fixture data.
- * The gate seeds an `e2e-dioxus`/`password` account through the app's own
- * register handler (idempotent across runs). Admin pages are still
- * placeholders until their slice lands, so those checks cover the chrome,
- * route resolution and Link hrefs only.
+ * with DIOXUS_URL. The public site (home, artists, artist, release, page),
+ * the auth pages (login/register/logout/profile) and the admin section
+ * (gate, dashboard, label/page editors) are real since slices 2-4 and are
+ * rendered server-side from the gate's database, so these assertions read
+ * the label and artist names from the page instead of hardcoding fixture
+ * data. The gate seeds an `e2e-dioxus`/`password` account through the app's
+ * own register handler (idempotent across runs); admin tests need an
+ * `e2e-admin` account seeded with the admin/label_owner permissions
+ * out-of-band and are skipped unless the gate reports `E2E_ADMIN_OK`.
+ * Artist/release/track admin pages are still
+ * placeholders until slice 5, so those checks cover the chrome, route
+ * resolution and Link hrefs only.
  * There is no wasm bundle yet, so clicks are full page loads (hydration smoke
  * coverage comes once the client targets land, Phases 4-7).
  */
@@ -27,6 +31,26 @@ const labelName = async (page: import("@playwright/test").Page) => {
   await expect(brandLink(page)).not.toHaveText("");
   return (await brandLink(page).innerText()).trim();
 };
+
+/** Log in through the login form; success 303s home with the user menu. */
+const loginAs = async (page: import("@playwright/test").Page, username: string) => {
+  await page.goto(`${base}/login`);
+  await page.fill('input[name="username"]', username);
+  await page.fill('input[name="password"]', "password");
+  await page.getByRole("button", { name: "Login" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator(".navbar summary")).toContainText(username);
+};
+
+/**
+ * Gate for the admin-browser tests. `e2e-admin` (admin + label_owner) can
+ * only be seeded out-of-band — the app's register handler grants no
+ * permissions — so `run-dioxus-gate.sh` exports `E2E_ADMIN_OK=1` when the
+ * account works; without it these tests skip (the Rust SSR tests in
+ * `crate::server` cover the same flows in-process).
+ */
+const requireAdmin = () =>
+  test.skip(process.env.E2E_ADMIN_OK !== "1", "needs e2e-admin seeded; see run-dioxus-gate.sh");
 
 test("home renders the shell: navbar, main, footer", async ({ page }) => {
   await page.goto(`${base}/`);
@@ -103,6 +127,14 @@ test("a guest visiting a guarded page is served the login page", async ({ page }
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
 });
 
+test("a guest visiting an admin page is served the login page too", async ({ page }) => {
+  // The slice-4 `AdminRoot` gate uses the same pattern; the admin menu
+  // never renders for guests.
+  await page.goto(`${base}/admin`);
+  await expect(h1(page)).toHaveText("Login");
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+});
+
 test("the artists index lists the public artists", async ({ page }) => {
   await page.goto(`${base}/`);
   const label = await labelName(page);
@@ -159,6 +191,9 @@ test("an unknown release slug under a known artist shows 404", async ({ page }) 
 });
 
 test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
   await page.goto(`${base}/admin/artist/jimi`);
   await expect(h1(page)).toHaveText("Edit artist");
   // The tabs are `role="tab"` links rendered by the AdminArtistRoot layout.
@@ -168,6 +203,62 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
   await expect(page).toHaveURL(/\/admin\/artist\/jimi\/releases\/?$/);
   await expect(h1(page)).toHaveText("Releases");
   await expect(page.getByRole("tab", { name: "Releases" })).toHaveClass(/tab-active/);
+});
+
+test("the admin dashboard renders cards and the side menu", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // The navbar exposes the Admin link only for `admin` sessions.
+  await page.locator(".navbar summary").click();
+  await page.getByRole("link", { name: "Admin" }).click();
+  await expect(page).toHaveURL(/\/admin\/?$/);
+  await expect(page).toHaveTitle("Admin Dashboard");
+
+  // Side menu (served with URLs built by the admin_menu service) and the
+  // dashboard card row.
+  await expect(page.locator("ul.menu").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
+  const label = await labelName(page);
+  await expect(page.getByRole("heading", { level: 2, name: "Artists" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Pages" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Social Tips!" })).toBeVisible();
+  // The label card names the label (label_owner session).
+  await expect(page.getByText(label).first()).toBeVisible();
+});
+
+test("page create, update, delete and restore round-trip", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // Create through the dashboard's Add button and the create form; the
+  // server 303s to the new page's editor under the slug it derived.
+  const stamp = Date.now();
+  await page.goto(`${base}/admin/page`);
+  await page.fill('input[name="name"]', `e2e Page ${stamp}`);
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/page/e2e-page-${stamp}$`));
+  await expect(h1(page)).toHaveText(`Edit e2e Page ${stamp}`);
+
+  // Update with a rename: `update` re-slugifies, and the 303 lands on the
+  // new slug carrying ?updated=1 plus the success alert.
+  await page.fill('input[name="name"]', `e2e Renamed ${stamp}`);
+  await page.getByRole("button", { name: "Update" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/page/e2e-renamed-${stamp}\\?updated=1$`));
+  await expect(page.getByText(`e2e Renamed ${stamp} Updated!`)).toBeVisible();
+
+  // Delete/Restore are JS-free form buttons (no dialog): the row's Delete
+  // posts, and the reload swaps in Restore.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page).toHaveURL(/updated=1$/);
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+
+  // Leave the fixture soft-deleted so reruns don't pile up live pages.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
 });
 
 test("unknown paths show the 404 page inside the shell", async ({ page }) => {

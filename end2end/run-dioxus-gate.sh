@@ -44,14 +44,51 @@ curl -sS -o /dev/null -w "e2e seed status=%{http_code}\n" \
   --data-urlencode "password_confirmation=password" \
   "$base/auth/register"
 
+echo "== admin session checks =="
+# The admin pages need a user with the `admin` permission, which the
+# register handler can't grant. Seed `e2e-admin` once (register it here,
+# then add the permissions in psql):
+#   psql "$DATABASE_URL" -c "INSERT INTO user_permissions (user_id, token)
+#     SELECT id, 'admin' FROM users WHERE username='e2e-admin'
+#       AND NOT EXISTS (SELECT 1 FROM user_permissions p2 WHERE p2.user_id = users.id AND p2.token='admin');"
+#   ... and the same with 'label_owner' for the label/page editors.
+# Until then the admin browser checks are skipped (the Rust SSR tests in
+# crate::server cover the same flows in-process).
+admin_ok=0
+curl -sS -o /dev/null -w "e2e-admin seed status=%{http_code}\n" \
+  --data-urlencode "username=e2e-admin" \
+  --data-urlencode "email=e2e-admin@example.com" \
+  --data-urlencode "password=password" \
+  --data-urlencode "password_confirmation=password" \
+  "$base/auth/register"
+if curl -sS -c "$OUT/admin-cookies.txt" -o /dev/null \
+     --data-urlencode "username=e2e-admin" \
+     --data-urlencode "password=password" \
+     "$base/auth/login" && \
+   curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/admin_dashboard.html" "$base/admin" && \
+   grep -q 'card-title\">Artists' "$OUT/admin_dashboard.html"; then
+    admin_ok=1
+fi
+if [ "$admin_ok" -eq 1 ]; then
+    echo "admin session active (e2e-admin)"
+    grep -c 'Admin Dashboard' "$OUT/admin_dashboard.html"
+    grep -c 'w-56 menu bg-base-200 rounded-box' "$OUT/admin_dashboard.html"
+    # The nested tab layout only renders behind the admin gate.
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/jimi/releases"
+    grep -c 'tabs tabs-border' "$OUT/nested.html"
+else
+    echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
+    # Guest view of a guarded admin route: the login page replaces it.
+    curl -sS -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/jimi/releases"
+    grep -c 'action="/auth/login"' "$OUT/nested.html"
+fi
+
 echo "== curl spot checks =="
 curl -sS -o "$OUT/home.html" -w "home status=%{http_code}\n" "$base/"
 grep -c 'navbar bg-primary text-primary-content' "$OUT/home.html"
 grep -c 'footer bg-neutral text-neutral-content' "$OUT/home.html"
 grep -c 'href="/main.css"' "$OUT/home.html"
 curl -sS -o /dev/null -w "main.css status=%{http_code}\n" "$base/main.css"
-curl -sS -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/jimi/releases"
-grep -c 'tabs tabs-border' "$OUT/nested.html"
 curl -sS -o "$OUT/guest_profile.html" -w "guest profile status=%{http_code}\n" "$base/profile"
 grep -c 'action="/auth/login"' "$OUT/guest_profile.html"
 curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \
@@ -61,7 +98,11 @@ curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \
 
 echo "== playwright navigation smoke (chromium) =="
 cd "$ROOT/end2end" || exit 1
-DIOXUS_URL="$base" npx playwright test tests/dioxus_shell.spec.ts --project=chromium --reporter=list
+if [ "$admin_ok" -eq 1 ]; then
+    E2E_ADMIN_OK=1 DIOXUS_URL="$base" npx playwright test tests/dioxus_shell.spec.ts --project=chromium --reporter=list
+else
+    DIOXUS_URL="$base" npx playwright test tests/dioxus_shell.spec.ts --project=chromium --reporter=list
+fi
 status=$?
 
 if [ "$status" -ne 0 ]; then

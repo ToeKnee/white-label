@@ -248,23 +248,34 @@ mod tests {
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
-    async fn every_route_serves_its_page(pool: PgPool) {
+    async fn guests_visiting_admin_routes_get_the_login_form(pool: PgPool) {
         let server = test_server(pool, None).await;
 
-        // (path, marker) — the marker is the placeholder page's h1 text.
-        // The public and auth pages render real content now (slice 2/3;
-        // see the tests below); only the still-stubbed admin routes are
-        // listed here.
+        // (slice 4) The `AdminRoot` layout gates every admin route: guests
+        // get the login page rendered in place of the guarded route (the
+        // slice-3 pattern; the redirect swaps the route out of the SSR
+        // render, so the admin menu never appears). The placeholder
+        // artist/release/track pages behind the gate are asserted with an
+        // admin session below.
         let routes = [
-            ("/admin", "Admin dashboard"),
-            ("/admin/label", "Edit label"),
-            ("/admin/artist", "Create artist"),
-            ("/admin/page", "Create page"),
-            ("/admin/page/terms-of-use", "Edit page"),
+            "/admin",
+            "/admin/label",
+            "/admin/artist",
+            "/admin/page",
+            "/admin/page/terms-of-use",
+            "/admin/artist/jimi/releases",
         ];
-        for (path, marker) in routes {
+        for path in routes {
             let response = server.get(path).await;
-            assert_shell(&response, &[CHROME[0], CHROME[1], marker]);
+            assert_shell(
+                &response,
+                &[
+                    CHROME[0],
+                    CHROME[1],
+                    "<h1>Login</h1>",
+                    "action=\"/auth/login\"",
+                ],
+            );
         }
     }
 
@@ -808,23 +819,439 @@ mod tests {
         assert_eq!(location(&fresh), "/");
     }
 
+    // --- Admin pages and forms (MIGRATION.md Phase 4 slice 4) ----------
+
+    /// Log `test-<n>` (password "password") into an `api_server` jar.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    async fn login_as(server: &axum_test::TestServer, n: u32) {
+        post_args(
+            server,
+            "/api/login",
+            &LoginArgs {
+                username: &format!("test-{n}"),
+                password: "password",
+            },
+        )
+        .await
+        .assert_status_ok();
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn signed_in_non_admins_get_the_login_form(pool: PgPool) {
+        create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["user"])
+            .await
+            .expect("non-admin user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        let response = server.get("/admin").await;
+        assert_shell(
+            &response,
+            &[CHROME[0], "<h1>Login</h1>", "action=\"/auth/login\""],
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn dashboard_renders_cards_and_menu_for_an_owner(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        let artist = create_test_artist(&pool, 1, Some(label.clone()))
+            .await
+            .expect("artist");
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .expect("release");
+        create_test_page(&pool, 1, Some(label.clone()))
+            .await
+            .expect("page");
+        // Move the release into the future so the countdown card renders.
+        sqlx::query("UPDATE releases SET release_date = now() + interval '3 days' WHERE id = $1")
+            .bind(release.id)
+            .execute(&pool)
+            .await
+            .expect("future release");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin+label_owner user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        let body = server.get("/admin").await.text();
+        for marker in [
+            CHROME[0],
+            "<title>Admin Dashboard</title>",
+            // Card headings.
+            "card-title\">Artists",
+            "card-title\">Pages",
+            "Social Tips!",
+            "Mailing list",
+            // Seeded rows.
+            "Test Artist 1",
+            "Test Page 1",
+            // The label card and its Edit link (label_owner sessions only).
+            "Test Record Label 1",
+            "href=\"/admin/label\"",
+            // The upcoming-release countdown card (values are daisy CSS
+            // custom properties).
+            "Upcoming Release — Test Release 1",
+            "--value:",
+            // The side menu: label, artist submenu and page link.
+            "w-56 menu bg-base-200 rounded-box",
+            "href=\"/admin\"",
+            "href=\"/admin/artist/test-artist-1\"",
+            "All Releases",
+            "Test Release 1",
+            "href=\"/admin/page/test-page-1\"",
+            "Create Artist",
+            "Create Page",
+        ] {
+            assert!(
+                body.contains(marker),
+                "SSR body missing `{marker}`:\n{body}"
+            );
+        }
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn no_upcoming_release_hides_the_countdown(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist");
+        create_test_release(&pool, 1, Some(artist))
+            .await
+            .expect("past-dated release");
+        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+            .await
+            .expect("admin user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        let body = server.get("/admin").await.text();
+        assert!(body.contains("card-title\">Artists"), "{body}");
+        assert!(
+            !body.contains("Upcoming Release"),
+            "a past release should not render the countdown:\n{body}"
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn guest_label_and_page_forms_redirect_to_login(pool: PgPool) {
+        let server = test_server(pool, None).await;
+
+        let paths = [
+            "/admin/forms/label",
+            "/admin/forms/page",
+            "/admin/forms/page/update",
+            "/admin/forms/page/delete",
+            "/admin/forms/page/restore",
+        ];
+        for path in paths {
+            let response = post_form(&server, path, &[]).await;
+            assert_eq!(
+                response.status_code(),
+                axum::http::StatusCode::SEE_OTHER,
+                "{path} should 303"
+            );
+            assert_eq!(location(&response), "/login", "{path} guest target");
+        }
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn label_form_round_trip_for_a_label_owner(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin+label_owner user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        let response = post_form(
+            &server,
+            "/admin/forms/label",
+            &[
+                ("id", &label.id.to_string()),
+                ("name", "Renamed Label"),
+                ("description", "new story"),
+                ("isrc_base", "US ABC 1"),
+            ],
+        )
+        .await;
+        assert_eq!(response.status_code(), axum::http::StatusCode::SEE_OTHER);
+        assert_eq!(location(&response), "/admin/label?updated=1");
+
+        // The reload shows the saved values, the success alert, and the
+        // ISRC explainer.
+        let body = server.get("/admin/label?updated=1").await.text();
+        for marker in [
+            CHROME[0],
+            "Edit Renamed Label Details",
+            "Renamed Label Updated!",
+            "value=\"Renamed Label\"",
+            "What is an ISRC code?",
+        ] {
+            assert!(
+                body.contains(marker),
+                "SSR body missing `{marker}`:\n{body}"
+            );
+        }
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn label_form_is_forbidden_without_label_owner(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        // `admin` alone is not enough; the check is `label_owner`.
+        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+            .await
+            .expect("admin-only user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        let response = post_form(
+            &server,
+            "/admin/forms/label",
+            &[("id", &label.id.to_string()), ("name", "Hijacked Label")],
+        )
+        .await;
+        assert_eq!(response.status_code(), axum::http::StatusCode::SEE_OTHER);
+        assert_eq!(location(&response), "/admin/label?bad=forbidden");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn page_form_flows_for_a_label_owner(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin+label_owner user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+        let label_id = label.id.to_string();
+
+        // Create: the 303 target is the editor under the server-derived
+        // slug; the page then renders its editor form.
+        let response = post_form(
+            &server,
+            "/admin/forms/page",
+            &[
+                ("label_id", label_id.as_str()),
+                ("name", "My New Page"),
+                ("description", "meta"),
+                ("body", "# hi"),
+                ("local_published_at", "2026-03-01T09:30"),
+            ],
+        )
+        .await;
+        assert_eq!(response.status_code(), axum::http::StatusCode::SEE_OTHER);
+        assert_eq!(location(&response), "/admin/page/my-new-page");
+
+        let body = server.get("/admin/page/my-new-page").await.text();
+        for marker in [
+            CHROME[0],
+            "Edit My New Page",
+            "action=\"/admin/forms/page/update\"",
+            "value=\"2026-03-01T09:30\"", // datetime-local value
+            "Timezone +0000 (UTC)",
+        ] {
+            assert!(
+                body.contains(marker),
+                "SSR body missing `{marker}`:\n{body}"
+            );
+        }
+
+        // Update with a rename: `update` re-slugifies, and the redirect
+        // lands on the new slug carrying ?updated=1.
+        let response = post_form(
+            &server,
+            "/admin/forms/page/update",
+            &[
+                ("slug", "my-new-page"),
+                ("name", "Renamed Page"),
+                ("description", "meta"),
+                ("body", "# hi"),
+            ],
+        )
+        .await;
+        assert_eq!(response.status_code(), axum::http::StatusCode::SEE_OTHER);
+        assert_eq!(location(&response), "/admin/page/renamed-page?updated=1");
+
+        let body = server
+            .get("/admin/page/renamed-page?updated=1")
+            .await
+            .text();
+        assert!(body.contains("Renamed Page Updated!"), "{body}");
+        assert!(body.contains("id=\"page-delete\""), "{body}");
+
+        // Delete swaps the row's Restore control in, then restore swaps
+        // back — both round-trip through 303 + reload.
+        let response = post_form(
+            &server,
+            "/admin/forms/page/delete",
+            &[("slug", "renamed-page")],
+        )
+        .await;
+        assert_eq!(location(&response), "/admin/page/renamed-page?updated=1");
+        let body = server
+            .get("/admin/page/renamed-page?updated=1")
+            .await
+            .text();
+        assert!(body.contains("id=\"page-restore\""), "{body}");
+
+        let response = post_form(
+            &server,
+            "/admin/forms/page/restore",
+            &[("slug", "renamed-page")],
+        )
+        .await;
+        assert_eq!(location(&response), "/admin/page/renamed-page?updated=1");
+        let body = server
+            .get("/admin/page/renamed-page?updated=1")
+            .await
+            .text();
+        assert!(body.contains("id=\"page-delete\""), "{body}");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn page_form_failures_carry_fixed_codes(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin+label_owner user");
+        create_test_page(&pool, 1, Some(label.clone()))
+            .await
+            .expect("page");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+        let label_id = label.id.to_string();
+
+        // Empty name: the validation message's fixed code.
+        let response = post_form(
+            &server,
+            "/admin/forms/page",
+            &[("label_id", label_id.as_str()), ("name", "")],
+        )
+        .await;
+        assert_eq!(location(&response), "/admin/page?bad=name_required");
+        let body = server.get(&location(&response)).await.text();
+        assert!(body.contains("Name is required."), "{body}");
+        assert!(
+            !body.contains("name_required<"),
+            "the code itself must not be echoed:\n{body}"
+        );
+
+        // A new page whose name slugifies onto an existing slug
+        // (test-page-1): the uniqueness validation's fixed code.
+        let response = post_form(
+            &server,
+            "/admin/forms/page",
+            &[("label_id", label_id.as_str()), ("name", "Test Page 1")],
+        )
+        .await;
+        assert_eq!(location(&response), "/admin/page?bad=slug_taken");
+
+        // Deleting an unknown page: the generic code. (The EditPage GET at
+        // that slug falls through to the 404 inline — the alert never
+        // renders there, so only the redirect target is asserted.)
+        let response = post_form(
+            &server,
+            "/admin/forms/page/delete",
+            &[("slug", "no-such-page")],
+        )
+        .await;
+        assert_eq!(location(&response), "/admin/page/no-such-page?bad=server");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn page_create_is_forbidden_for_plain_admins(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+            .await
+            .expect("admin-only user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+        let label_id = label.id.to_string();
+
+        let response = post_form(
+            &server,
+            "/admin/forms/page",
+            &[("label_id", label_id.as_str()), ("name", "Nope")],
+        )
+        .await;
+        assert_eq!(location(&response), "/admin/page?bad=forbidden");
+    }
+
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
     async fn nested_admin_layouts_render_outside_in(pool: PgPool) {
-        let server = test_server(pool, None).await;
+        // Slice 4 gates the layout, so the nested-route checks now run with
+        // an admin session (the tab layout itself is still the placeholder
+        // until slice 5).
+        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+            .await
+            .expect("admin user");
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
 
         let response = server.get("/admin/artist/jimi").await;
 
-        // AppShell chrome, AdminRoot wrapper, AdminArtistRoot tabs, and the
-        // page itself — with the slug prop reaching the child component.
+        // AppShell chrome, AdminRoot menu + article wrapper,
+        // AdminArtistRoot tabs, and the page itself — with the slug prop
+        // reaching the child component.
         assert_shell(
             &response,
             &[
                 CHROME[0],
                 CHROME[1],
+                "w-56 menu bg-base-200 rounded-box",
                 "tabs tabs-border",
                 "href=\"/admin/artist/jimi/releases\"",
                 "tab tab-active",
@@ -839,7 +1266,11 @@ mod tests {
     )]
     #[sqlx::test]
     async fn deep_nested_routes_and_trailing_slashes_serve(pool: PgPool) {
-        let server = test_server(pool, None).await;
+        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+            .await
+            .expect("admin user");
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
 
         let deep = server
             .get("/admin/artist/jimi/release/axis/track/castles")

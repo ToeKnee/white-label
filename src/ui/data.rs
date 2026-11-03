@@ -23,8 +23,9 @@ use crate::models::auth::User;
 use crate::models::record_label::RecordLabel;
 use crate::routes::artist::ArtistResult;
 use crate::routes::links::LinksResult;
+use crate::routes::menu::AdminMenu;
 use crate::routes::page::PageResult;
-use crate::routes::record_label::{LabelArtistResult, LabelResult};
+use crate::routes::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
 use crate::routes::release::{ReleaseResult, ReleasesResult};
 use crate::services;
 
@@ -187,4 +188,79 @@ pub async fn get_page(slug: String) -> core::result::Result<PageResult, HttpErro
 #[get("/api/user", user: crate::server::current_user::CurrentUser)]
 pub async fn get_current_user() -> core::result::Result<Option<User>, HttpError> {
     Ok(user.0)
+}
+
+/// The admin side menu: label, artists with their releases, and pages,
+/// each with its admin URL. `crate::services::menu` requires the `admin`
+/// permission, so guests get a 401 the `AdminMenu` component answers with
+/// its static skeleton.
+///
+/// # Errors
+/// 401/403 when the session is not an admin, 500 with a retry message when
+/// any part of the menu data fails to load.
+#[get("/api/admin_menu",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn get_admin_menu() -> core::result::Result<AdminMenu, HttpError> {
+    match services::menu::admin_menu(&db.0, user.0.as_ref()).await {
+        Ok(menu) => Ok(menu),
+        Err(error) => to_http_error(&error),
+    }
+}
+
+/// The label's pages by label id, for the dashboard's pages table.
+/// Guests only see published, non-deleted pages; `label_owner` sessions
+/// also see hidden ones.
+///
+/// # Errors
+/// 500 with a retry message when the label or pages cannot be loaded.
+#[get("/api/record_label_pages",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn get_label_pages(
+    record_label_id: i64,
+) -> core::result::Result<LabelPageResult, HttpError> {
+    let record_label = match RecordLabel::get_by_id(&db.0, record_label_id).await {
+        Ok(record_label) => record_label,
+        Err(error) => {
+            tracing::error!("get_label_pages: Error while getting label: {error:?}");
+            return HttpError::internal_server_error("Could not retrieve label, try again later");
+        }
+    };
+    let pages = match record_label
+        .pages(&db.0, show_hidden(user.0.as_ref()))
+        .await
+    {
+        Ok(pages) => pages,
+        Err(error) => {
+            tracing::error!("get_label_pages: Error while getting pages: {error:?}");
+            return HttpError::internal_server_error("Could not retrieve pages, try again later");
+        }
+    };
+    Ok(LabelPageResult { pages })
+}
+
+/// The next scheduled release (a future `release_date`), if any — the
+/// dashboard countdown's data. The Leptos caller always passed no artist
+/// filter, so this twin takes none either.
+///
+/// # Errors
+/// 500 with a retry message when the label or release cannot be loaded.
+#[get("/api/get_next_scheduled_release", db: crate::server::current_user::Db)]
+pub async fn get_next_scheduled_release() -> core::result::Result<Option<ReleaseResult>, HttpError>
+{
+    let record_label = match RecordLabel::first(&db.0).await {
+        Ok(record_label) => record_label,
+        Err(error) => {
+            tracing::error!("get_next_scheduled_release: Error while getting label: {error:?}");
+            return HttpError::internal_server_error("Failed to retrieve record label");
+        }
+    };
+    match services::release::get_next_scheduled_release_service(&db.0, None, record_label.id).await
+    {
+        Ok(result) => Ok(result),
+        Err(error) => to_http_error(&error),
+    }
 }
