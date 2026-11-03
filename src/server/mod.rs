@@ -265,6 +265,8 @@ mod tests {
             "/admin/page",
             "/admin/page/terms-of-use",
             "/admin/artist/jimi/releases",
+            "/admin/artist/jimi/releases/new",
+            "/admin/artist/jimi/release/axis",
         ];
         for path in routes {
             let response = server.get(path).await;
@@ -465,6 +467,20 @@ mod tests {
     async fn post_form(server: &TestServer, path: &str, fields: &[(&str, &str)]) -> TestResponse {
         let form: std::collections::BTreeMap<&str, &str> = fields.iter().copied().collect();
         server.post(path).form(&form).await
+    }
+
+    /// Repeat-capable sibling of `post_form`: the release "All Artists"
+    /// checkboxes post the same `artist_ids` key once per checked artist.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; these tests run on one thread via block_on, so Send isn't needed"
+    )]
+    async fn post_form_pairs(
+        server: &TestServer,
+        path: &str,
+        fields: &[(&str, &str)],
+    ) -> TestResponse {
+        server.post(path).form(&fields.to_vec()).await
     }
 
     /// The `Location` header of a redirect, as a string.
@@ -972,6 +988,10 @@ mod tests {
             "/admin/forms/artist/update",
             "/admin/forms/artist/delete",
             "/admin/forms/artist/restore",
+            "/admin/forms/release",
+            "/admin/forms/release/update",
+            "/admin/forms/release/delete",
+            "/admin/forms/release/restore",
         ];
         for path in paths {
             let response = post_form(&server, path, &[]).await;
@@ -1458,6 +1478,302 @@ mod tests {
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
+    async fn release_editor_flows_for_a_label_owner(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        create_test_release(&pool, 1, Some(artist))
+            .await
+            .expect("release fixture");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        // The list shows the seeded release (catalogue number) and its
+        // editor link, plus the Add link.
+        let list = server.get("/admin/artist/test-artist-1/releases").await;
+        assert_shell(
+            &list,
+            &[
+                "Test Artist 1 Releases",
+                "TEST-1",
+                "href=\"/admin/artist/test-artist-1/release/test-release-1\"",
+                "href=\"/admin/artist/test-artist-1/releases/new\"",
+            ],
+        );
+
+        // The create page serves the real form handlers, addressed by the
+        // artist slug in the URL.
+        let create_page = server.get("/admin/artist/test-artist-1/releases/new").await;
+        assert_shell(
+            &create_page,
+            &[
+                "New Release",
+                "action=\"/admin/forms/release\"",
+                "Main Artist",
+                "All Artists",
+            ],
+        );
+
+        // Create 303s silently to the editor under the slug the server
+        // derived from the name (parity with the Leptos create action).
+        let created = post_form_pairs(
+            &server,
+            "/admin/forms/release",
+            &[
+                ("label_id", "1"),
+                ("artist_slug", "test-artist-1"),
+                ("name", "First Album"),
+                ("description", "Liner notes."),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("catalogue_number", "FA-1"),
+                ("local_release_date", "2026-03-01T09:30"),
+                ("local_published_at", "2026-01-01T00:00"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&created),
+            "/admin/artist/test-artist-1/release/first-album"
+        );
+
+        // The editor loads the new row (catalogue value, update action, and
+        // the Delete button since the row is live).
+        let editor = server
+            .get("/admin/artist/test-artist-1/release/first-album")
+            .await;
+        assert_shell(
+            &editor,
+            &[
+                "First Album - Test Artist 1",
+                "action=\"/admin/forms/release/update\"",
+                "value=\"FA-1\"",
+                "btn btn-error",
+            ],
+        );
+
+        // Rename re-slugifies: the 303 lands on the *new* release slug, and
+        // the browser then sees the success alert at that URL.
+        let renamed = post_form_pairs(
+            &server,
+            "/admin/forms/release/update",
+            &[
+                ("slug", "first-album"),
+                ("label_id", "1"),
+                ("artist_slug", "test-artist-1"),
+                ("name", "Renamed Album"),
+                ("description", "Liner notes."),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("catalogue_number", "FA-1"),
+                ("local_published_at", "2026-01-01T00:00"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&renamed),
+            "/admin/artist/test-artist-1/release/renamed-album?updated=1"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/release/renamed-album?updated=1")
+            .await
+            .text();
+        assert!(
+            body.contains("Renamed Album Updated!"),
+            "the editor should show the success alert:\n{body}"
+        );
+
+        // Soft delete swaps Delete for Restore on reload (`label_owner`
+        // sessions see soft-deleted rows through the service's visibility
+        // check); restore swaps it back.
+        let deleted = post_form(
+            &server,
+            "/admin/forms/release/delete",
+            &[("slug", "renamed-album"), ("artist_slug", "test-artist-1")],
+        )
+        .await;
+        assert_eq!(
+            location(&deleted),
+            "/admin/artist/test-artist-1/release/renamed-album?updated=1"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/release/renamed-album?updated=1")
+            .await
+            .text();
+        assert!(
+            body.contains("btn btn-secondary"),
+            "the deleted row should offer Restore:\n{body}"
+        );
+        assert!(
+            !body.contains("btn btn-error"),
+            "no Delete button while soft-deleted:\n{body}"
+        );
+
+        let restored = post_form(
+            &server,
+            "/admin/forms/release/restore",
+            &[("slug", "renamed-album"), ("artist_slug", "test-artist-1")],
+        )
+        .await;
+        assert_eq!(
+            location(&restored),
+            "/admin/artist/test-artist-1/release/renamed-album?updated=1"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/release/renamed-album?updated=1")
+            .await
+            .text();
+        assert!(
+            body.contains("btn btn-error"),
+            "the restored row offers Delete again:\n{body}"
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn release_form_failures_carry_fixed_codes(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        create_test_user_with_permissions(&pool, 2, vec!["label_owner"])
+            .await
+            .expect("label_owner-only user");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        // The fixture's catalogue number (TEST-1) is unique per label, so a
+        // create reusing it must fail.
+        create_test_release(&pool, 1, Some(artist))
+            .await
+            .expect("release fixture");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        // An empty name steers back to the create page with the fixed code.
+        let response = post_form_pairs(
+            &server,
+            "/admin/forms/release",
+            &[
+                ("label_id", "1"),
+                ("artist_slug", "test-artist-1"),
+                ("name", ""),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/releases/new?bad=name_required"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/releases/new?bad=name_required")
+            .await
+            .text();
+        assert!(
+            body.contains("Name is required."),
+            "the create page should show the fixed alert:\n{body}"
+        );
+
+        // The catalogue number must be unique within the label.
+        let dupe = post_form_pairs(
+            &server,
+            "/admin/forms/release",
+            &[
+                ("label_id", "1"),
+                ("artist_slug", "test-artist-1"),
+                ("name", "Dupe Catalogue"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("catalogue_number", "TEST-1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&dupe),
+            "/admin/artist/test-artist-1/releases/new?bad=catalogue_taken"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/releases/new?bad=catalogue_taken")
+            .await
+            .text();
+        assert!(
+            body.contains("Catalogue number must be unique."),
+            "the create page should show the fixed alert:\n{body}"
+        );
+
+        // A primary artist the label does not have gets its own code.
+        let ghost = post_form_pairs(
+            &server,
+            "/admin/forms/release",
+            &[
+                ("label_id", "1"),
+                ("artist_slug", "test-artist-1"),
+                ("name", "Ghost Primary"),
+                ("artist_ids", "999"),
+                ("primary_artist_id", "999"),
+                ("catalogue_number", "GP-1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&ghost),
+            "/admin/artist/test-artist-1/releases/new?bad=no_artist"
+        );
+
+        // An unknown slug on delete gets the generic code; only the
+        // Location is asserted (the editor at that slug renders NotFound).
+        let response = post_form(
+            &server,
+            "/admin/forms/release/delete",
+            &[
+                ("slug", "no-such-release"),
+                ("artist_slug", "test-artist-1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/release/no-such-release?bad=server"
+        );
+
+        // The release services require admin *and* label_owner: an owner
+        // without admin gets the form served, then the service forbids the
+        // submit.
+        login_as(&server, 2).await;
+        let response = post_form_pairs(
+            &server,
+            "/admin/forms/release",
+            &[
+                ("label_id", "1"),
+                ("artist_slug", "test-artist-1"),
+                ("name", "Owner Without Admin"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/releases/new?bad=forbidden"
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
     async fn nested_admin_layouts_render_outside_in(pool: PgPool) {
         // Slice 5a made the profile editor real, so this check now runs with
         // an admin + label_owner session and a seeded artist (the tab layout
@@ -1492,6 +1808,18 @@ mod tests {
                 "value=\"Test Artist 1\"",
             ],
         );
+
+        // Slice 5b: the Releases tab now serves the real list page (the
+        // seeded artist has no releases yet, hence the empty-state row).
+        let releases = server.get("/admin/artist/test-artist-1/releases").await;
+        assert_shell(
+            &releases,
+            &[
+                "tabs tabs-border",
+                "Test Artist 1 Releases",
+                "No releases found.",
+            ],
+        );
     }
 
     #[expect(
@@ -1506,9 +1834,12 @@ mod tests {
         let label = create_test_record_label(&pool, 1)
             .await
             .expect("label fixture");
-        create_test_artist(&pool, 1, Some(label))
+        let artist = create_test_artist(&pool, 1, Some(label))
             .await
             .expect("artist fixture");
+        create_test_release(&pool, 1, Some(artist))
+            .await
+            .expect("release fixture");
         let server = api_server(pool).await;
         login_as(&server, 1).await;
 
@@ -1518,6 +1849,19 @@ mod tests {
             .get("/admin/artist/jimi/release/axis/track/castles")
             .await;
         assert_shell(&deep, &["Edit track", "track: castles"]);
+
+        // Slice 5b made the release editor real: it loads the seeded row
+        // and keeps the placeholder Tracks sidebar alongside it.
+        let release_editor = server
+            .get("/admin/artist/test-artist-1/release/test-release-1")
+            .await;
+        assert_shell(
+            &release_editor,
+            &[
+                "Test Release 1 - Test Artist 1",
+                "artist: test-artist-1, release: test-release-1",
+            ],
+        );
 
         // The exact `"x"`/`"x/"` route pairs the Leptos table needed are one
         // variant here (MIGRATION.md risk 4); the trailing-slash profile URL

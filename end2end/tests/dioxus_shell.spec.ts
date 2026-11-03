@@ -5,17 +5,17 @@ import { expect, test } from "@playwright/test";
  * a live Dioxus server via `end2end/run-dioxus-gate.sh`; override the target
  * with DIOXUS_URL. The public site (home, artists, artist, release, page),
  * the auth pages (login/register/logout/profile) and the admin section
- * (gate, dashboard, label/page/artist-profile editors) are real since
- * slices 2-5a and are
+ * (gate, dashboard, label/page/artist-profile/release editors) are real since
+ * slices 2-5b and are
  * rendered server-side from the gate's database, so these assertions read
  * the label and artist names from the page instead of hardcoding fixture
  * data. The gate seeds an `e2e-dioxus`/`password` account through the app's
  * own register handler (idempotent across runs); admin tests need an
  * `e2e-admin` account seeded with the admin/label_owner permissions
  * out-of-band and are skipped unless the gate reports `E2E_ADMIN_OK`.
- * The release/track editors and the artist links/images tabs are still
- * placeholders until the rest of slice 5, so those checks cover the chrome,
- * route resolution and Link hrefs only.
+ * The track editor and the artist links/images tabs are still placeholders
+ * until the rest of slice 5, so those checks cover the chrome, route
+ * resolution and Link hrefs only.
  * There is no wasm bundle yet, so clicks are full page loads (hydration smoke
  * coverage comes once the client targets land, Phases 4-7).
  */
@@ -205,7 +205,8 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
 
   await page.getByRole("tab", { name: "Releases" }).click();
   await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/releases\/?$/);
-  await expect(h1(page)).toHaveText("Releases");
+  // Slice 5b made the releases tab real: the list header names the artist.
+  await expect(h1(page)).toHaveText("E2E Tabs Artist Releases");
   await expect(page.getByRole("tab", { name: "Releases" })).toHaveClass(/tab-active/);
 });
 
@@ -296,6 +297,47 @@ test("artist profile create, rename, delete and restore round-trip", async ({ pa
   await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
 
   // Leave the fixture soft-deleted so reruns don't pile up live artists.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+});
+
+test("release create, rename, delete and restore round-trip", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // Create through the releases list Add button; the 303 lands silently on
+  // the release editor under the slug derived from the name (the create
+  // handler carries no ?updated=1, parity with the Leptos action).
+  const stamp = Date.now();
+  await page.goto(`${base}/admin/artist/e2e-tabs/releases`);
+  await page.getByRole("link", { name: "Add" }).click();
+  await expect(h1(page)).toHaveText("New Release");
+  await page.fill('input[name="name"]', `e2e Release ${stamp}`);
+  await page.fill('input[name="catalogue_number"]', `E2E-CAT-${stamp}`);
+  // The primary-artist select and the artist checkbox start on the
+  // addressed artist; leave both defaults.
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/artist/e2e-tabs/release/e2e-release-${stamp}$`));
+  // The editor page has two h1s while the Tracks sidebar is still a
+  // placeholder, so the heading is pinned by name.
+  await expect(page.getByRole("heading", { level: 1, name: `e2e Release ${stamp} - E2E Tabs Artist` })).toBeVisible();
+
+  // Update with a rename: `update` re-slugifies, and the 303 lands on the
+  // new slug carrying ?updated=1 plus the success alert.
+  await page.fill('input[name="name"]', `e2e Renamed ${stamp}`);
+  await page.getByRole("button", { name: "Update" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/artist/e2e-tabs/release/e2e-renamed-${stamp}\\?updated=1$`));
+  await expect(page.getByText(`e2e Renamed ${stamp} Updated!`)).toBeVisible();
+
+  // Delete/Restore use the same JS-free form-association buttons; the
+  // reload swaps Delete for Restore on the row.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+
+  // Leave the fixture soft-deleted so reruns don't pile up live releases.
   await page.getByRole("button", { name: "Delete" }).click();
   await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
 });

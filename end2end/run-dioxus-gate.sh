@@ -92,12 +92,17 @@ if [ "$admin_ok" -eq 1 ]; then
     echo "admin session active (e2e-admin)"
     grep -c 'Admin Dashboard' "$OUT/admin_dashboard.html"
     grep -c 'w-56 menu bg-base-200 rounded-box' "$OUT/admin_dashboard.html"
-    # The nested tab layout only renders behind the admin gate.
-    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/jimi/releases"
+    # The nested tab layout only renders behind the admin gate. The
+    # releases tab is real since slice 5b, so it needs a live artist row
+    # (the seed above); a missing slug would render NotFound instead.
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/e2e-tabs/releases"
     grep -c 'tabs tabs-border' "$OUT/nested.html"
     # (slice 5a) The artist create page serves the real form handlers.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_create.html" "$base/admin/artist"
     grep -c 'action="/admin/forms/artist"' "$OUT/artist_create.html"
+    # (slice 5b) The release create page serves its real form handlers too.
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/release_create.html" "$base/admin/artist/e2e-tabs/releases/new"
+    grep -c 'action="/admin/forms/release"' "$OUT/release_create.html"
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.

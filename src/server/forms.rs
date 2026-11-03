@@ -42,6 +42,7 @@ use tower_sessions::Session;
 use crate::error::AppError;
 use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
 use crate::forms::page::{CreatePageForm, UpdatePageForm};
+use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::server::current_user::{
     CurrentUser, Db, login as record_login, logout as record_logout, remember_session,
@@ -76,6 +77,10 @@ pub fn form_routes() -> Router {
         .route("/admin/forms/artist/update", post(update_artist))
         .route("/admin/forms/artist/delete", post(delete_artist))
         .route("/admin/forms/artist/restore", post(restore_artist))
+        .route("/admin/forms/release", post(create_release))
+        .route("/admin/forms/release/update", post(update_release))
+        .route("/admin/forms/release/delete", post(delete_release))
+        .route("/admin/forms/release/restore", post(restore_release))
 }
 
 /// Fields of the login form. Every field defaults so a missing one is a
@@ -653,6 +658,247 @@ async fn restore_artist(
     }
 }
 
+/// Fields of the release create form (flat names, minus `artist_ids`;
+/// see `split_form_pairs` for why that key is handled separately).
+#[derive(Debug, Default, serde::Deserialize)]
+struct ReleaseCreateFields {
+    #[serde(default)]
+    label_id: String,
+    /// The artist the page URL addresses (redirect targets).
+    #[serde(default)]
+    artist_slug: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    catalogue_number: String,
+    #[serde(default)]
+    primary_artist_id: String,
+    /// Hidden full-date fields (the stored values).
+    #[serde(default)]
+    release_date: String,
+    #[serde(default)]
+    published_at: String,
+    /// Visible `datetime-local` values, preferred when present.
+    #[serde(default)]
+    local_release_date: String,
+    #[serde(default)]
+    local_published_at: String,
+}
+
+/// Fields of the release update form: the create fields plus the addressed
+/// slug.
+#[derive(Debug, Default, serde::Deserialize)]
+struct ReleaseUpdateFields {
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    label_id: String,
+    #[serde(default)]
+    artist_slug: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    catalogue_number: String,
+    #[serde(default)]
+    primary_artist_id: String,
+    #[serde(default)]
+    release_date: String,
+    #[serde(default)]
+    published_at: String,
+    #[serde(default)]
+    local_release_date: String,
+    #[serde(default)]
+    local_published_at: String,
+}
+
+/// Release delete/restore: the release slug plus the artist slug the
+/// redirect targets are built under.
+#[derive(Debug, serde::Deserialize)]
+struct ReleaseSlugForm {
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    artist_slug: String,
+}
+
+/// The raw form pairs, with every value of `key` split out and the rest
+/// rebuilt as a JSON object for a field-by-field `serde_json` pass.
+///
+/// The release (and later track) "All Artists" checkbox groups post
+/// `artist_ids` once per checked artist — plain HTML, no JS. A derived
+/// `Form<T>` struct cannot express that: one occurrence deserializes as a
+/// bare string (wrong type for a `Vec` field) and repeated occurrences trip
+/// serde's duplicate-field check, so the pairs are taken raw instead.
+fn split_form_pairs(pairs: Vec<(String, String)>, key: &str) -> (Vec<String>, serde_json::Value) {
+    let mut values = Vec::new();
+    let mut rest = serde_json::Map::new();
+    for (pair_key, value) in pairs {
+        if pair_key == key {
+            values.push(value);
+        } else {
+            rest.insert(pair_key, serde_json::Value::String(value));
+        }
+    }
+    (values, serde_json::Value::Object(rest))
+}
+
+/// Create a release. Success 303s to the new release's editor under the
+/// slug the server derived from the name, with no `?updated=1` (the Leptos
+/// create action redirected silently), mirroring `create_artist`.
+async fn create_release(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    // A parse failure here means a hand-crafted POST body; falling back to
+    // the default (empty) fields routes it through the service's own
+    // validation (the `name_required` alert) rather than inventing a target.
+    let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
+    let args: ReleaseCreateFields = serde_json::from_value(rest).unwrap_or_default();
+    let form = CreateReleaseForm {
+        artist_ids: artist_ids.join(","),
+        name: args.name,
+        description: args.description,
+        primary_artist_id: args.primary_artist_id.parse::<i64>().unwrap_or_default(),
+        catalogue_number: args.catalogue_number,
+        release_date: parse_form_date(&args.local_release_date, &args.release_date),
+        label_id: args.label_id.parse::<i64>().unwrap_or_default(),
+        published_at: parse_form_date(&args.local_published_at, &args.published_at),
+    };
+    match services::release::create_release_service(&pool, current_user.as_ref(), form).await {
+        Ok(result) => Redirect::to(&format!(
+            "/admin/artist/{}/release/{}",
+            args.artist_slug, result.release.slug
+        )),
+        Err(error) => {
+            tracing::warn!("release create form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}/releases/new?bad={}",
+                args.artist_slug,
+                release_code(&error)
+            ))
+        }
+    }
+}
+
+/// Update a release (name, description, artists, catalogue number and the
+/// two dates).
+async fn update_release(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
+    let args: ReleaseUpdateFields = serde_json::from_value(rest).unwrap_or_default();
+    // Keep the addressed slugs for the failure redirect (the service takes
+    // the form by value).
+    let addressed_slug = args.slug.clone();
+    let addressed_artist = args.artist_slug.clone();
+    let form = UpdateReleaseForm {
+        artist_ids: artist_ids.join(","),
+        slug: args.slug,
+        name: args.name,
+        description: args.description,
+        primary_artist_id: args.primary_artist_id.parse::<i64>().unwrap_or_default(),
+        catalogue_number: args.catalogue_number,
+        release_date: parse_form_date(&args.local_release_date, &args.release_date),
+        label_id: args.label_id.parse::<i64>().unwrap_or_default(),
+        published_at: parse_form_date(&args.local_published_at, &args.published_at),
+    };
+    match services::release::update_release_service(&pool, current_user.as_ref(), form).await {
+        // `Release::update` re-slugifies from the name; redirect to the
+        // editor's *current* slug, like the Leptos action's redirect did.
+        Ok(result) => Redirect::to(&format!(
+            "/admin/artist/{}/release/{}?updated=1",
+            addressed_artist, result.release.slug
+        )),
+        Err(error) => {
+            tracing::warn!("release update form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}/release/{}?bad={}",
+                addressed_artist,
+                addressed_slug,
+                release_code(&error)
+            ))
+        }
+    }
+}
+
+/// Soft-delete a release. The editor reloads with `?updated=1`; its
+/// refetch shows the Restore button in place of Delete.
+async fn delete_release(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<ReleaseSlugForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let slug = args.slug;
+    let artist_slug = args.artist_slug;
+    match services::release::delete_release_service(&pool, current_user.as_ref(), slug.clone())
+        .await
+    {
+        Ok(result) => Redirect::to(&format!(
+            "/admin/artist/{}/release/{}?updated=1",
+            artist_slug, result.release.slug
+        )),
+        Err(error) => {
+            tracing::warn!("release delete form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}/release/{}?bad={}",
+                artist_slug,
+                slug,
+                release_code(&error)
+            ))
+        }
+    }
+}
+
+/// Restore a soft-deleted release.
+async fn restore_release(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<ReleaseSlugForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let slug = args.slug;
+    let artist_slug = args.artist_slug;
+    match services::release::restore_release_service(&pool, current_user.as_ref(), slug.clone())
+        .await
+    {
+        Ok(result) => Redirect::to(&format!(
+            "/admin/artist/{}/release/{}?updated=1",
+            artist_slug, result.release.slug
+        )),
+        Err(error) => {
+            tracing::warn!("release restore form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}/release/{}?bad={}",
+                artist_slug,
+                slug,
+                release_code(&error)
+            ))
+        }
+    }
+}
+
 /// Resolve a `DateField` submission: a submitted `datetime-local` value
 /// wins (interpreted as UTC — the browser's zone is not applied; see
 /// `ui::admin::pages`), else the hidden full-date field, else no date.
@@ -715,18 +961,97 @@ fn artist_code(error: &AppError) -> &'static str {
     }
 }
 
+/// The release services also require both `admin` and `label_owner`; the
+/// extra codes come from `Release::validate` (fixed model messages).
+fn release_code(error: &AppError) -> &'static str {
+    match error {
+        AppError::Forbidden(_) => "forbidden",
+        AppError::Internal(message) if message.contains("Name is required.") => "name_required",
+        AppError::Internal(message) if message.contains("Name must be less than") => "name_length",
+        AppError::Internal(message) if message.contains("Slug must be unique") => "slug_taken",
+        AppError::Internal(message) if message.contains("Record Label with id") => "no_label",
+        AppError::Internal(message) if message.contains("Artist with id") => "no_artist",
+        AppError::Internal(message) if message.contains("Catalogue number must be less than") => {
+            "catalogue_length"
+        }
+        AppError::Internal(message) if message.contains("Catalogue number must be unique") => {
+            "catalogue_taken"
+        }
+        _ => "server",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
 
-    use super::{label_code, page_code, parse_form_date};
+    use super::{label_code, page_code, parse_form_date, release_code, split_form_pairs};
     use crate::error::AppError;
+
+    #[test]
+    fn split_form_pairs_collects_repeated_keys() {
+        let pairs = vec![
+            ("name".to_string(), "A B".to_string()),
+            ("artist_ids".to_string(), "1".to_string()),
+            ("artist_ids".to_string(), "3".to_string()),
+        ];
+        let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
+        assert_eq!(artist_ids, vec!["1".to_string(), "3".to_string()]);
+        assert_eq!(rest["name"], serde_json::Value::String("A B".into()));
+        assert!(rest.get("artist_ids").is_none());
+    }
+
+    #[test]
+    fn split_form_pairs_accepts_a_single_or_absent_key() {
+        let (artist_ids, rest) = split_form_pairs(
+            vec![
+                ("artist_ids".into(), "2".into()),
+                ("slug".into(), "s".into()),
+            ],
+            "artist_ids",
+        );
+        assert_eq!(artist_ids, vec!["2".to_string()]);
+        assert_eq!(rest["slug"], serde_json::Value::String("s".into()));
+
+        let (none, rest) = split_form_pairs(vec![("name".into(), "n".into())], "artist_ids");
+        assert_eq!(none, Vec::<String>::new());
+        assert_eq!(rest["name"], serde_json::Value::String("n".into()));
+    }
 
     #[test]
     fn form_date_prefers_the_local_input() {
         let parsed =
             parse_form_date("2026-03-01T09:30", "2020-01-01T00:00:00+00:00").expect("date");
         assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 3, 1, 9, 30, 0).unwrap());
+    }
+
+    #[test]
+    fn release_codes_map_the_known_failures() {
+        assert_eq!(release_code(&AppError::Forbidden("no".into())), "forbidden");
+        assert_eq!(
+            release_code(&AppError::Internal("Name is required.".into())),
+            "name_required"
+        );
+        assert_eq!(
+            release_code(&AppError::Internal(
+                "Artist with id 3 does not exist.".into()
+            )),
+            "no_artist"
+        );
+        assert_eq!(
+            release_code(&AppError::Internal(
+                "Catalogue number must be unique.".into()
+            )),
+            "catalogue_taken"
+        );
+        assert_eq!(
+            release_code(&AppError::Internal(
+                "Catalogue number must be less than 255 characters.".into()
+            )),
+            "catalogue_length"
+        );
+        // Unknown and not-found failures get the generic code.
+        assert_eq!(release_code(&AppError::NotFound("gone".into())), "server");
     }
 
     #[test]

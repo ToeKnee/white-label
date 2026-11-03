@@ -25,12 +25,14 @@ pub mod artist;
 pub mod dashboard;
 pub mod label;
 pub mod pages;
+pub mod release;
 
 // Re-exported so the route table can import them from `ui::admin`.
 pub use artist::{CreateArtist, EditArtist};
 pub use dashboard::Dashboard;
 pub use label::EditLabel;
 pub use pages::{CreatePage, EditPage};
+pub use release::{CreateRelease, EditRelease, Releases};
 
 use dioxus::prelude::*;
 

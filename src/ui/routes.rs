@@ -15,14 +15,14 @@
 use dioxus::prelude::*;
 
 use super::admin::{
-    AdminRoot, CreateArtist, CreatePage, Dashboard, EditArtist, EditLabel, EditPage,
+    AdminRoot, CreateArtist, CreatePage, CreateRelease, Dashboard, EditArtist, EditLabel, EditPage,
+    EditRelease, Releases,
 };
 use super::artist::{ArtistPage, ArtistsPage};
 use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
 use super::page::PageDetails;
 use super::placeholders::{
-    AdminArtistRoot, CreateRelease, CreateTrack, EditArtistImages, EditArtistLinks, EditRelease,
-    EditTrack, Releases, Tracks,
+    AdminArtistRoot, CreateTrack, EditArtistImages, EditArtistLinks, EditTrack, Tracks,
 };
 use super::record_label::RecordLabelHome;
 use super::release::ReleasePage;
@@ -165,19 +165,27 @@ pub enum Route {
         /// The artist slug.
         artist_slug: String,
     },
-    /// Create a release for an artist.
-    #[route("/releases/new")]
+    /// Create a release for an artist. `bad` carries a fixed code from a
+    /// failed create (the form posts to `/admin/forms/release`).
+    #[route("/releases/new?:bad")]
     CreateRelease {
         /// The artist slug.
         artist_slug: String,
+        /// Error code from a failed create.
+        bad: Option<String>,
     },
-    /// Edit a release.
-    #[route("/release/:release_slug")]
+    /// Edit a release. `updated`/`bad` carry the release form's codes
+    /// (posts to `/admin/forms/release/*`; see `crate::server::forms`).
+    #[route("/release/:release_slug?:updated&:bad")]
     EditRelease {
         /// The artist slug.
         artist_slug: String,
         /// The release slug.
         release_slug: String,
+        /// Set when the release has just been saved/deleted/restored.
+        updated: Option<String>,
+        /// Error code from a failed save/delete/restore.
+        bad: Option<String>,
     },
     /// List a release's tracks.
     #[route("/release/:release_slug/tracks")]
@@ -384,7 +392,8 @@ mod tests {
         assert_eq!(
             parse("/admin/artist/jimi/releases/new"),
             Route::CreateRelease {
-                artist_slug: "jimi".into()
+                artist_slug: "jimi".into(),
+                bad: None,
             }
         );
         assert_eq!(
@@ -392,6 +401,8 @@ mod tests {
             Route::EditRelease {
                 artist_slug: "jimi".into(),
                 release_slug: "axis".into(),
+                updated: None,
+                bad: None,
             }
         );
         assert_eq!(
@@ -476,6 +487,31 @@ mod tests {
             }
         );
         assert_eq!(
+            parse("/admin/artist/jimi/releases/new?bad=slug_taken"),
+            Route::CreateRelease {
+                artist_slug: "jimi".into(),
+                bad: Some("slug_taken".into()),
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/release/axis?updated=1"),
+            Route::EditRelease {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                updated: Some("1".into()),
+                bad: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/release/axis?bad=catalogue_taken"),
+            Route::EditRelease {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                updated: None,
+                bad: Some("catalogue_taken".into()),
+            }
+        );
+        assert_eq!(
             parse("/admin/page/terms-of-use?updated=1"),
             Route::EditPage {
                 slug: "terms-of-use".into(),
@@ -555,6 +591,16 @@ mod tests {
             },
             Route::EditArtist {
                 artist_slug: "jimi".into(),
+                updated: Some("1".into()),
+                bad: None,
+            },
+            Route::CreateRelease {
+                artist_slug: "jimi".into(),
+                bad: Some("forbidden".into()),
+            },
+            Route::EditRelease {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
                 updated: Some("1".into()),
                 bad: None,
             },
