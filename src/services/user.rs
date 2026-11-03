@@ -10,6 +10,50 @@ use crate::models::auth::{User, UserPasshash};
 #[cfg(feature = "ssr")]
 use crate::models::traits::Validate;
 
+/// Check a username/password pair and return the matching user.
+///
+/// Shared by the wire `POST /api/login` handler and the web login form
+/// (`crate::server::forms`) so the two login paths cannot drift apart.
+/// The errors are the same messages both entry points show users today.
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// username: The submitted username
+/// password: The submitted password
+///
+/// # Returns
+/// Result<`User`, `AppError`> - The authenticated user
+///
+/// # Errors
+/// If a field is empty, return `BadRequest`
+/// If the user does not exist, return `Unauthorized`
+/// If the password does not match the stored hash, return `Unauthorized`
+/// If bcrypt itself fails, return `Internal`
+#[cfg(feature = "ssr")]
+pub async fn login_user(
+    pool: &PgPool,
+    username: String,
+    password: String,
+) -> Result<User, AppError> {
+    if username.is_empty() || password.is_empty() {
+        return Err(AppError::BadRequest(
+            "Username and password are required.".into(),
+        ));
+    }
+
+    let Some((user, UserPasshash(expected_passhash))) =
+        User::get_from_username_with_passhash(username, pool).await
+    else {
+        return Err(AppError::Unauthorized("User does not exist.".into()));
+    };
+
+    if !verify(&password, &expected_passhash).map_err(AppError::internal)? {
+        return Err(AppError::Unauthorized("Password does not match.".into()));
+    }
+
+    Ok(user)
+}
+
 /// Register User
 ///
 /// This will register a user with the given username, email and matching passwords
@@ -200,6 +244,50 @@ mod tests {
         use crate::models::{auth::UserPasshash, test_helpers::create_test_user};
 
         use super::*;
+
+        #[sqlx::test]
+        async fn test_login_user(pool: PgPool) {
+            let created = create_test_user(&pool, 1).await.unwrap();
+            // The fixture hashes the word "password".
+            let user = login_user(&pool, "test-1".into(), "password".into())
+                .await
+                .unwrap();
+            assert_eq!(user.id, created.id);
+            assert_eq!(user.username, "test-1");
+        }
+
+        #[sqlx::test]
+        async fn test_login_user_wrong_password(pool: PgPool) {
+            create_test_user(&pool, 1).await.unwrap();
+            let result = login_user(&pool, "test-1".into(), "nope".into()).await;
+            assert_eq!(
+                result.unwrap_err(),
+                AppError::Unauthorized("Password does not match.".into())
+            );
+        }
+
+        #[sqlx::test]
+        async fn test_login_user_unknown_username(pool: PgPool) {
+            let result = login_user(&pool, "nobody".into(), "password".into()).await;
+            assert_eq!(
+                result.unwrap_err(),
+                AppError::Unauthorized("User does not exist.".into())
+            );
+        }
+
+        #[sqlx::test]
+        async fn test_login_user_empty_fields(pool: PgPool) {
+            for (username, password) in [
+                (String::new(), "password".to_string()),
+                ("test-1".to_string(), String::new()),
+            ] {
+                let result = login_user(&pool, username, password).await;
+                assert_eq!(
+                    result.unwrap_err(),
+                    AppError::BadRequest("Username and password are required.".into())
+                );
+            }
+        }
 
         #[sqlx::test]
         async fn test_register_user_service(pool: PgPool) {

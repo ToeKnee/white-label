@@ -174,3 +174,17 @@ pub async fn get_page(slug: String) -> core::result::Result<PageResult, HttpErro
         Err(error) => to_http_error(&error),
     }
 }
+
+/// The signed-in user for this request's session, or `None` for a guest —
+/// the GET twin of the wire `POST /api/user` endpoint.
+///
+/// This is what `super::use_user` reads, so the navbar, the guards and the
+/// profile pages all see the server's own session state.
+#[expect(
+    clippy::unused_async,
+    reason = "the #[get] server fn's client-side stub is async; the signature stays async for symmetry with it"
+)]
+#[get("/api/user", user: crate::server::current_user::CurrentUser)]
+pub async fn get_current_user() -> core::result::Result<Option<User>, HttpError> {
+    Ok(user.0)
+}

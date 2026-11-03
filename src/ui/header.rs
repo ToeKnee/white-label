@@ -6,6 +6,7 @@
 
 use dioxus::prelude::*;
 
+use crate::models::auth::User;
 use crate::ui::Route;
 use crate::ui::use_label;
 use crate::ui::use_user;
@@ -26,7 +27,16 @@ pub fn LabelHeader() -> Element {
                     BrandLink {}
                 }
             }
-            div { class: "navbar-end", UserMenu {} }
+            div {
+                class: "navbar-end",
+                // The menu comes from the request's own session (the
+                // `GET /api/user` twin); the fallback shows the guest
+                // links while a client build hasn't resolved it yet.
+                SuspenseBoundary {
+                    fallback: |_context: SuspenseContext| rsx! { GuestMenu {} },
+                    UserMenu {}
+                }
+            }
         }
     }
 }
@@ -45,63 +55,67 @@ fn BrandLink() -> Element {
     }
 }
 
-/// The user menu: an avatar dropdown once signed in, Register/Login links
-/// for guests (the default `User` context is a guest until Phase 4 wires
-/// the session check).
+/// The user menu, resolved against the request's session: an avatar
+/// dropdown once signed in, the guest links otherwise.
+///
+/// These are the two branches the Leptos `UserMenu` picked from its user
+/// context.
 #[component]
 pub fn UserMenu() -> Element {
-    let user = use_user();
+    let session = use_user().suspend()?;
+    let user = session().ok().flatten();
+    let Some(user) = user.filter(User::is_authenticated) else {
+        return rsx! { GuestMenu {} };
+    };
 
-    if user.read().is_authenticated() {
-        let username = user.read().username.clone();
-        let is_admin = user.read().permissions.contains("admin");
-        let avatar_url = user.read().avatar_url();
-        rsx! {
-            div { class: "flex-none",
-                ul { class: "px-1 menu menu-horizontal",
-                    li {
-                        details {
-                            summary {
-                                div { class: "avatar",
-                                    div { class: "w-10 rounded-full",
-                                        img {
-                                            alt: format!("{}'s Avatar", username),
-                                            src: avatar_url,
-                                        }
+    let username = user.username.clone();
+    let is_admin = user.permissions.contains("admin");
+    let avatar_url = user.avatar_url();
+    rsx! {
+        div { class: "flex-none",
+            ul { class: "px-1 menu menu-horizontal",
+                li {
+                    details {
+                        summary {
+                            div { class: "avatar",
+                                div { class: "w-10 rounded-full",
+                                    img {
+                                        alt: format!("{}'s Avatar", username),
+                                        src: avatar_url,
                                     }
                                 }
-                                "{username}"
                             }
-                            ul { class: "p-2 rounded-t-none bg-base-100", "data-theme": "light",
+                            "{username}"
+                        }
+                        ul { class: "p-2 rounded-t-none bg-base-100", "data-theme": "light",
+                            li {
+                                Link {
+                                    to: Route::EditProfile { saved: None, bad: None },
+                                    class: "btn btn-ghost",
+                                    "Profile"
+                                }
+                            }
+                            li {
+                                Link {
+                                    to: Route::ChangePassword { updated: None, bad: None },
+                                    class: "btn btn-ghost",
+                                    "Change Password"
+                                }
+                            }
+                            if is_admin {
                                 li {
                                     Link {
-                                        to: Route::EditProfile {},
+                                        to: Route::Dashboard {},
                                         class: "btn btn-ghost",
-                                        "Profile"
+                                        "Admin"
                                     }
                                 }
-                                li {
-                                    Link {
-                                        to: Route::ChangePassword {},
-                                        class: "btn btn-ghost",
-                                        "Change Password"
-                                    }
-                                }
-                                if is_admin {
-                                    li {
-                                        Link {
-                                            to: Route::Dashboard {},
-                                            class: "btn btn-ghost",
-                                            "Admin"
-                                        }
-                                    }
-                                }
-                                li {
-                                    Link {
-                                        to: Route::Logout {},
-                                        class: "btn btn-ghost",
-                                        "Log out"
-                                    }
+                            }
+                            li {
+                                Link {
+                                    to: Route::Logout { done: None },
+                                    class: "btn btn-ghost",
+                                    "Log out"
                                 }
                             }
                         }
@@ -109,12 +123,16 @@ pub fn UserMenu() -> Element {
                 }
             }
         }
-    } else {
-        rsx! {
-            span {
-                Link { to: Route::Register {}, class: "btn btn-ghost", "Register" }
-                Link { to: Route::Login {}, class: "btn btn-ghost", "Login" }
-            }
+    }
+}
+
+/// The guest links (also the user menu's suspense fallback).
+#[component]
+fn GuestMenu() -> Element {
+    rsx! {
+        span {
+            Link { to: Route::Register { bad: None }, class: "btn btn-ghost", "Register" }
+            Link { to: Route::Login { bad: None }, class: "btn btn-ghost", "Login" }
         }
     }
 }

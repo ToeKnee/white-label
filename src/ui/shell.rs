@@ -19,18 +19,19 @@
 
 use dioxus::prelude::*;
 
-use crate::models::auth::User;
 use crate::store::GlobalState;
 use crate::ui::Route;
 use crate::ui::footer::LabelFooter;
 use crate::ui::header::LabelHeader;
 
 /// The application root — handed to `dioxus::server::router` in
-/// `crate::server::build_router`. Provides the `GlobalState` and `User`
-/// contexts and sets up the document head.
+/// `crate::server::build_router`.
+///
+/// Provides the `GlobalState` context and sets up the document head. (The
+/// current user is not a context: every component that needs it reads the
+/// session through `super::use_user`.)
 pub fn App() -> Element {
     use_context_provider(|| Signal::new(GlobalState::default()));
-    use_context_provider(|| Signal::new(User::default()));
 
     rsx! {
         document::Meta { charset: "utf-8" }

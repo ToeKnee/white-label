@@ -34,6 +34,16 @@ if [ "$ready" -eq 0 ]; then
     exit 1
 fi
 
+echo "== seed the e2e login user (idempotent) =="
+# Creates `e2e-dioxus` via the app's own register handler the first time;
+# later runs answer 303 -> /login?bad=taken, which is just as fine.
+curl -sS -o /dev/null -w "e2e seed status=%{http_code}\n" \
+  --data-urlencode "username=e2e-dioxus" \
+  --data-urlencode "email=e2e-dioxus@example.com" \
+  --data-urlencode "password=password" \
+  --data-urlencode "password_confirmation=password" \
+  "$base/auth/register"
+
 echo "== curl spot checks =="
 curl -sS -o "$OUT/home.html" -w "home status=%{http_code}\n" "$base/"
 grep -c 'navbar bg-primary text-primary-content' "$OUT/home.html"
@@ -42,6 +52,12 @@ grep -c 'href="/main.css"' "$OUT/home.html"
 curl -sS -o /dev/null -w "main.css status=%{http_code}\n" "$base/main.css"
 curl -sS -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/jimi/releases"
 grep -c 'tabs tabs-border' "$OUT/nested.html"
+curl -sS -o "$OUT/guest_profile.html" -w "guest profile status=%{http_code}\n" "$base/profile"
+grep -c 'action="/auth/login"' "$OUT/guest_profile.html"
+curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \
+  --data-urlencode "username=e2e-dioxus" \
+  --data-urlencode "password=definitely-wrong" \
+  "$base/auth/login"
 
 echo "== playwright navigation smoke (chromium) =="
 cd "$ROOT/end2end" || exit 1

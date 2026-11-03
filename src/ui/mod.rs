@@ -13,6 +13,10 @@
 
 /// Artist index and artist page, plus the shared artist card.
 pub mod artist;
+/// Auth pages (login/register/logout/profile/change-password).
+///
+/// Phase 4 slice 3; form posts are handled by `crate::server::forms`.
+pub mod auth;
 /// Dioxus-native data endpoints (`#[get]` server fns) behind the page
 /// resources.
 pub mod data;
@@ -83,11 +87,13 @@ pub fn use_global_state() -> Signal<GlobalState> {
     use_context()
 }
 
-/// The current user.
+/// The current user's session, loaded through the `GET /api/user` twin.
 ///
-/// Stays `User::default()` (a guest) until the session check lands with the
-/// auth slice in Phase 4, then the header populates it once per load.
+/// Like [`use_label`], create it and `suspend()` on it immediately inside a
+/// `SuspenseBoundary` (the slice-2 resource rule), then read the result: a
+/// signed-in session resolves to `Some(User)`, guests and load failures to
+/// `None`. Guards and the navbar build their menus from this.
 #[must_use]
-pub fn use_user() -> Signal<User> {
-    use_context()
+pub fn use_user() -> Resource<core::result::Result<Option<User>, HttpError>> {
+    use_resource(crate::ui::data::get_current_user)
 }

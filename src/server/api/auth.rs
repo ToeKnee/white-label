@@ -4,19 +4,16 @@
 
 use axum::response::Response;
 use tower_sessions::Session;
-use tower_sessions::session::Expiry;
 
-use crate::error::AppError;
-use crate::models::auth::{User, UserPasshash};
+use crate::models::auth::User;
 use crate::routes::auth::{ChangePassword, GetUser, Login, Logout, Register, UpdateUser};
 use crate::server::api::{WireError, decode_args, json_response};
 use crate::server::current_user::{
-    CurrentUser, Db, login as record_login, logout as record_logout,
+    CurrentUser, Db, login as record_login, logout as record_logout, remember_session,
 };
-use crate::services::user::{change_password_service, register_user_service, update_user_service};
-
-/// How long a session survives without re-activity when `remember` is set.
-const REMEMBER_SESSION_INACTIVITY: time::Duration = time::Duration::days(30);
+use crate::services::user::{
+    change_password_service, login_user, register_user_service, update_user_service,
+};
 
 const PATH_USER: &str = "/api/user";
 const PATH_LOGIN: &str = "/api/login";
@@ -24,14 +21,6 @@ const PATH_REGISTER: &str = "/api/register";
 const PATH_LOGOUT: &str = "/api/logout";
 const PATH_UPDATE_PROFILE: &str = "/api/update_profile";
 const PATH_CHANGE_PASSWORD: &str = "/api/change_password";
-
-/// Keep the `remember` flag alive on the tower-sessions side, mirroring the
-/// Leptos app's `remember_user`.
-fn remember_session(session: &Session, remember: Option<&str>) {
-    if remember.is_some() {
-        session.set_expiry(Some(Expiry::OnInactivity(REMEMBER_SESSION_INACTIVITY)));
-    }
-}
 
 /// Get the current user from the session.
 ///
@@ -49,30 +38,11 @@ pub async fn get_user(
 pub async fn login(Db(pool): Db, session: Session, body: String) -> Result<Response, WireError> {
     let args = decode_args::<Login>(PATH_LOGIN, &body)?;
 
-    if args.username.is_empty() || args.password.is_empty() {
-        return Err(WireError::from_app_error(
-            PATH_LOGIN,
-            &AppError::BadRequest("Username and password are required.".into()),
-        ));
-    }
-
-    let Some((user, UserPasshash(expected_passhash))) =
-        User::get_from_username_with_passhash(args.username, &pool).await
-    else {
-        return Err(WireError::from_app_error(
-            PATH_LOGIN,
-            &AppError::Unauthorized("User does not exist.".into()),
-        ));
-    };
-
-    if !bcrypt::verify(&args.password, &expected_passhash)
-        .map_err(|error| WireError::internal(PATH_LOGIN, error))?
-    {
-        return Err(WireError::from_app_error(
-            PATH_LOGIN,
-            &AppError::Unauthorized("Password does not match.".into()),
-        ));
-    }
+    // `login_user` carries the empty-field, unknown-user and wrong-password
+    // checks (same messages and statuses as this handler always had).
+    let user = login_user(&pool, args.username, args.password)
+        .await
+        .map_err(|error| WireError::from_app_error(PATH_LOGIN, &error))?;
 
     record_login(&session, user.id)
         .await

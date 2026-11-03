@@ -25,8 +25,9 @@ each top-level public-dir file at its own path). The `dx` CLI is pinned to
 the dioxus crate version (currently 0.7.10); `dx serve` replaces the
 `cargo run` above once the Phase 4 slices need client hydration.
 
-The Phase 3 runtime gate does the same thing with curl spot checks and a
-chromium navigation smoke test (dev DB, port 8127):
+The Phase 3/4 runtime gate does the same thing with curl spot checks, an
+idempotent `e2e-dioxus` seed user (registered through the app's own handler),
+and a chromium navigation + auth smoke test (dev DB, port 8127):
 
 ```bash
 sh end2end/run-dioxus-gate.sh
@@ -41,7 +42,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 413 lib tests, includes src/server/ + src/ui/ tests
+cargo test --features server   # 433 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
 cargo test --features server -- ui::          # just the route-table + UI component tests
 ```

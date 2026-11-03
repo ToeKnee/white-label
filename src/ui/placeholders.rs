@@ -7,7 +7,7 @@
 //!
 //! - public pages → done (Phase 4 slice 2: see `record_label`, `artist`,
 //!   `release` and `page`)
-//! - auth pages → slice 3
+//! - auth pages → done (Phase 4 slice 3: see `auth`)
 //! - admin dashboard/label/pages → slice 4
 //! - admin artist/release/track → slice 5
 
@@ -29,53 +29,9 @@ fn page_body(title: &str, detail: Option<&str>) -> Element {
     }
 }
 
-/// Standalone placeholder with Leptos' `article.prose` wrapper. Pages under
-/// the admin tree skip the wrapper: the `AdminRoot` layout provides it.
-fn prose_page(title: &str, detail: Option<&str>) -> Element {
-    rsx! {
-        article { class: "my-6 md:container md:mx-auto prose",
-            {page_body(title, detail)}
-        }
-    }
-}
-
 /// Admin placeholder: no wrapper (the `AdminRoot` layout provides it).
 fn admin_page(title: &str, detail: Option<&str>) -> Element {
     page_body(title, detail)
-}
-
-// ---------------------------------------------------------------------------
-// Auth pages
-// ---------------------------------------------------------------------------
-
-/// Placeholder login page.
-#[component]
-pub fn Login() -> Element {
-    prose_page("Log in", None)
-}
-
-/// Placeholder registration page.
-#[component]
-pub fn Register() -> Element {
-    prose_page("Register", None)
-}
-
-/// Placeholder logout page (the Leptos original posts then redirects).
-#[component]
-pub fn Logout() -> Element {
-    prose_page("Log out", None)
-}
-
-/// Placeholder profile editor.
-#[component]
-pub fn EditProfile() -> Element {
-    prose_page("Edit profile", None)
-}
-
-/// Placeholder password change page.
-#[component]
-pub fn ChangePassword() -> Element {
-    prose_page("Change password", None)
 }
 
 // ---------------------------------------------------------------------------

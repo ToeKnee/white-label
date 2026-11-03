@@ -8,16 +8,17 @@
 //!   [`AppError`](crate::error::AppError) (whose `Display` is already the
 //!   bare message), replacing the Leptos `ServerFnError` + `split_at_colon`
 //!   dance.
-//! - The permission guards take a [`Route`] instead of a URL string, and
-//!   call the shared [`crate::ui::redirect`] helper.
+//! - The permission guards take the resolved session user and a [`Route`]
+//!   instead of a URL string, and call the shared
+//!   [`crate::ui::redirect`] helper.
 
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
 
 use crate::error::AppError;
+use crate::models::auth::User;
 use crate::ui::Route;
 use crate::ui::redirect;
-use crate::ui::use_user;
 
 /// Wraps hero content in the `article > hero` shell the error/404 pages use.
 fn hero(content: Element) -> Element {
@@ -182,11 +183,11 @@ pub fn StatusBadge(
 /// Guards a page: redirects to `to` unless the user is signed in. Does not
 /// check permissions — see [`permission_or_redirect`].
 ///
-/// Call it at the top of a component that has a guard; the component then
-/// renders as normal for active users (the server-side API is still the
-/// enforcement point — this only mirrors the Leptos UI behaviour).
-pub fn authenticated_or_redirect(to: Route) {
-    if !use_user().read().is_active() {
+/// Pass the user resolved from [`crate::ui::use_user`]; when this
+/// redirects, the component should render [`Loading`] while the router
+/// moves (the pattern `ui::auth`'s guarded pages use).
+pub fn authenticated_or_redirect(user: Option<&User>, to: Route) {
+    if !user.is_some_and(User::is_active) {
         redirect(to);
     }
 }
@@ -197,9 +198,9 @@ pub fn authenticated_or_redirect(to: Route) {
 /// The condition is kept intentionally identical to the Leptos original: an
 /// *active* user passes even without the permission token, so this is closer
 /// to "redirect guests" than a strict permission gate.
-pub fn permission_or_redirect(permission: &str, to: Route) {
-    let user = use_user();
-    if !(user.read().is_active() || user.read().permissions.contains(permission)) {
+pub fn permission_or_redirect(user: Option<&User>, permission: &str, to: Route) {
+    let passes = user.is_some_and(|user| user.is_active() || user.permissions.contains(permission));
+    if !passes {
         redirect(to);
     }
 }

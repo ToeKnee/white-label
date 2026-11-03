@@ -130,6 +130,22 @@ pub async fn login(
     session.insert(USER_ID_SESSION_KEY, &user_id).await
 }
 
+/// How long a session survives without re-activity when `remember` is set.
+pub const REMEMBER_SESSION_INACTIVITY: time::Duration = time::Duration::days(30);
+
+/// Keep the `remember` flag alive on the tower-sessions side, mirroring the
+/// Leptos app's `remember_user`.
+///
+/// Shared by the wire login endpoint and the web login/register forms so
+/// both honour the checkbox the same way.
+pub fn remember_session(session: &tower_sessions::Session, remember: Option<&str>) {
+    if remember.is_some() {
+        session.set_expiry(Some(tower_sessions::session::Expiry::OnInactivity(
+            REMEMBER_SESSION_INACTIVITY,
+        )));
+    }
+}
+
 /// End the session for a logout (clears the record and rotates the cookie,
 /// matching the Leptos app's logout behaviour).
 ///

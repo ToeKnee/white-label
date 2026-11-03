@@ -1,12 +1,14 @@
 //! Dioxus server side of the migration (see MIGRATION.md, Phases 1–3).
 //!
 //! Assembles the axum router that `dioxus::serve` wraps: the app database
-//! pool as a request extension, `tower-sessions` backed by Postgres, static
-//! uploads, the `/api/*` port and the Dioxus SSR app (`crate::ui`). The
-//! Leptos `setup.rs` still serves the shipped site until cutover.
+//! pool as a request extension, `tower-sessions` backed by Postgres,
+//! static uploads, the `/api/*` port, the auth form handlers
+//! (`forms`) and the Dioxus SSR app (`crate::ui`). The Leptos `setup.rs`
+//! still serves the shipped site until cutover.
 
 mod api;
 pub mod current_user;
+mod forms;
 
 use anyhow::Context;
 use axum::Router;
@@ -73,6 +75,9 @@ pub async fn build_router(
         // Ported `/api/*` endpoints (see `api` module); merged before the
         // layers below so handlers get the session and `Db` extensions.
         .merge(api::api_routes())
+        // The auth pages' form posts (see `forms`), POST counterparts of
+        // the SSR pages' paths, also under the session and `Db` layers.
+        .merge(forms::form_routes())
         .layer(SessionManagerLayer::new(session_store))
         // Handlers and server fns reach the pool via `Db`.
         .layer(axum::Extension(Db(pool)))
@@ -81,11 +86,77 @@ pub async fn build_router(
 
     // Uploaded files, mounted after the session stack so static hits skip
     // the database — same treatment as the Leptos app's `/uploads`.
+    //
+    // Dioxus' own server router nests every top-level entry of the public
+    // dir (`serve_dir_cached` in dioxus-server), so a public `uploads`
+    // entry already occupies `/uploads` and nesting there again panics
+    // axum's route table. `uploads_mount` turns that into a skip (the
+    // uploads root *is* the public entry) or a clear startup error.
     if let Some(upload_path) = upload_path {
-        router = router.nest_service("/uploads", tower_http::services::ServeDir::new(upload_path));
+        match uploads_mount(&upload_path, dioxus_public_dir().as_deref()) {
+            UploadsMount::Skip => {
+                tracing::warn!(
+                    "uploads root is the public dir's uploads entry; dioxus serves it at /uploads, skipping the explicit mount"
+                );
+            }
+            UploadsMount::Conflict => {
+                return Err(anyhow::anyhow!(
+                    "the dioxus public dir contains an `uploads` entry, which dioxus mounts at /uploads; that collides with the uploads root {} — remove it from the public dir or point UPLOAD_PATH at it",
+                    upload_path.display()
+                ));
+            }
+            UploadsMount::Mount => {
+                router = router
+                    .nest_service("/uploads", tower_http::services::ServeDir::new(upload_path));
+            }
+        }
     }
 
     Ok(router)
+}
+
+/// The public dir dioxus' server router will serve, mirroring the private
+/// `public_path()` in dioxus-server: `DIOXUS_PUBLIC_PATH` first, else the
+/// `public` dir next to the executable.
+fn dioxus_public_dir() -> Option<std::path::PathBuf> {
+    if let Ok(path) = std::env::var("DIOXUS_PUBLIC_PATH") {
+        return Some(path.into());
+    }
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    Some(exe_dir.join("public"))
+}
+
+/// What to do about the explicit `/uploads` mount (see the call site).
+#[derive(Debug, PartialEq, Eq)]
+enum UploadsMount {
+    /// Dioxus already serves the uploads root itself (it *is* the public
+    /// dir's `uploads` entry).
+    Skip,
+    /// A public `uploads` entry blocks `/uploads` for a different uploads
+    /// root; nesting would panic axum's route table.
+    Conflict,
+    /// Nest the uploads root at `/uploads` as usual.
+    Mount,
+}
+
+/// Decide the `/uploads` mount from the configured uploads root and the
+/// public dir dioxus serves. The skip comparison requires both paths to
+/// exist (canonicalize), so a mistyped `UPLOAD_PATH` never skips silently.
+fn uploads_mount(
+    upload_path: &std::path::Path,
+    public_dir: Option<&std::path::Path>,
+) -> UploadsMount {
+    let public_uploads = public_dir.map(|dir| dir.join("uploads"));
+    match (
+        upload_path.canonicalize(),
+        public_uploads.as_deref().map(std::path::Path::canonicalize),
+    ) {
+        (Ok(upload), Some(Ok(auto))) if upload == auto => UploadsMount::Skip,
+        // Dioxus nests any existing public `uploads` entry (dir or file),
+        // which would clash with our own `/uploads` catch-all.
+        _ if public_uploads.is_some_and(|entry| entry.exists()) => UploadsMount::Conflict,
+        _ => UploadsMount::Mount,
+    }
 }
 
 /// `dioxus::server::router` reads (and serves) a `public` dir next to
@@ -104,13 +175,15 @@ pub(crate) fn ensure_exe_public_dir() {
 
 #[cfg(test)]
 mod tests {
+    use axum::http::StatusCode;
     use axum_test::{TestResponse, TestServer};
     use sqlx::PgPool;
 
     use super::ensure_exe_public_dir;
+    use super::{UploadsMount, uploads_mount};
     use crate::models::test_helpers::{
         create_test_artist, create_test_page, create_test_record_label, create_test_release,
-        create_test_track, create_test_user_with_permissions,
+        create_test_track, create_test_user, create_test_user_with_permissions,
     };
     use crate::server::api::test_support::{api_server, post_args};
     use crate::server::build_router;
@@ -179,14 +252,10 @@ mod tests {
         let server = test_server(pool, None).await;
 
         // (path, marker) — the marker is the placeholder page's h1 text.
-        // The public pages render seeded data instead (see the tests
-        // below); only the still-stubbed auth/admin routes are listed here.
+        // The public and auth pages render real content now (slice 2/3;
+        // see the tests below); only the still-stubbed admin routes are
+        // listed here.
         let routes = [
-            ("/login", "Log in"),
-            ("/register", "Register"),
-            ("/logout", "Log out"),
-            ("/profile", "Edit profile"),
-            ("/profile/change-password", "Change password"),
             ("/admin", "Admin dashboard"),
             ("/admin/label", "Edit label"),
             ("/admin/artist", "Create artist"),
@@ -371,6 +440,374 @@ mod tests {
         );
     }
 
+    // --- Auth form flows (MIGRATION.md Phase 4 slice 3) -----------------
+    //
+    // The pages in `crate::ui::auth` post to the 303-redirect handlers in
+    // `crate::server::forms`; `api_server`'s cookie jar plays the browser.
+
+    /// Post an `application/x-www-form-urlencoded` body, like a real form.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; these tests run on one thread via block_on, so Send isn't needed"
+    )]
+    async fn post_form(server: &TestServer, path: &str, fields: &[(&str, &str)]) -> TestResponse {
+        let form: std::collections::BTreeMap<&str, &str> = fields.iter().copied().collect();
+        server.post(path).form(&form).await
+    }
+
+    /// The `Location` header of a redirect, as a string.
+    fn location(response: &TestResponse) -> String {
+        response
+            .header(axum::http::header::LOCATION)
+            .to_str()
+            .expect("utf-8 location header")
+            .to_string()
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn auth_pages_render_their_forms(pool: PgPool) {
+        let server = test_server(pool, None).await;
+
+        assert_shell(
+            &server.get("/login").await,
+            &[CHROME[0], "action=\"/auth/login\"", "Remember me"],
+        );
+        assert_shell(
+            &server.get("/register").await,
+            &[
+                CHROME[0],
+                "action=\"/auth/register\"",
+                "Password Confirmation",
+            ],
+        );
+        assert_shell(
+            &server.get("/logout").await,
+            &[CHROME[0], "action=\"/auth/logout\""],
+        );
+
+        // A guest who visits a guarded page gets an inline router redirect:
+        // the SSR body is already the login form (a component-level redirect
+        // can't issue a 303 over plain HTTP; the POST handlers below do).
+        for path in ["/profile", "/profile/change-password"] {
+            let response = server.get(path).await;
+            assert_shell(&response, &[CHROME[0], "action=\"/auth/login\""]);
+        }
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn login_form_sets_the_session_and_lands_home(pool: PgPool) {
+        // The fixture hashes the word "password" as test-5.
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+
+        let response = post_form(
+            &server,
+            "/auth/login",
+            &[
+                ("username", "test-5"),
+                ("password", "password"),
+                ("remember", "on"),
+            ],
+        )
+        .await;
+        response.assert_status(StatusCode::SEE_OTHER);
+        assert_eq!(location(&response), "/");
+
+        // The home page's session read shows the signed-in menu.
+        let home = server.get("/").await.text();
+        assert!(home.contains("test-5"), "signed-in navbar:\n{home}");
+        assert!(home.contains("Log out"), "signed-in navbar:\n{home}");
+        assert!(!home.contains("Register"), "guest links gone:\n{home}");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn login_form_notices_for_bad_attempts(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+
+        let wrong_password = post_form(
+            &server,
+            "/auth/login",
+            &[("username", "test-5"), ("password", "nope")],
+        )
+        .await;
+        assert_eq!(location(&wrong_password), "/login?bad=password");
+
+        let unknown_user = post_form(
+            &server,
+            "/auth/login",
+            &[("username", "nobody"), ("password", "password")],
+        )
+        .await;
+        assert_eq!(location(&unknown_user), "/login?bad=not_found");
+
+        let empty_fields = post_form(
+            &server,
+            "/auth/login",
+            &[("username", ""), ("password", "")],
+        )
+        .await;
+        assert_eq!(location(&empty_fields), "/login?bad=required");
+
+        // The page turns a code back into the Leptos alert text.
+        let page = server.get("/login?bad=password").await;
+        assert_shell(
+            &page,
+            &[CHROME[0], "alert alert-error", "Password does not match."],
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn logout_form_ends_the_session(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+
+        post_form(
+            &server,
+            "/auth/login",
+            &[("username", "test-5"), ("password", "password")],
+        )
+        .await
+        .assert_status(StatusCode::SEE_OTHER);
+
+        let before = server.get("/logout").await.text();
+        assert!(before.contains("action=\"/auth/logout\""), "{before}");
+
+        let after = post_form(&server, "/auth/logout", &[]).await;
+        assert_eq!(location(&after), "/logout?done=1");
+
+        // The done state shows the Leptos page's "Logged out" line, and the
+        // home page is back to the guest menu.
+        let done_page = server.get("/logout?done=1").await;
+        assert_shell(&done_page, &[CHROME[0], "Logged out"]);
+        let home = server.get("/").await.text();
+        assert!(home.contains("Register"), "session should be gone:\n{home}");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn register_form_signs_the_new_user_in(pool: PgPool) {
+        let server = api_server(pool).await;
+
+        let created = post_form(
+            &server,
+            "/auth/register",
+            &[
+                ("username", "new-person"),
+                ("email", "new@example.com"),
+                ("password", "secret123"),
+                ("password_confirmation", "secret123"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&created), "/");
+        let home = server.get("/").await.text();
+        assert!(home.contains("new-person"), "signed-in navbar:\n{home}");
+
+        let duplicate = post_form(
+            &server,
+            "/auth/register",
+            &[
+                ("username", "new-person"),
+                ("email", "other@example.com"),
+                ("password", "secret123"),
+                ("password_confirmation", "secret123"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&duplicate), "/register?bad=taken");
+
+        let mismatch = post_form(
+            &server,
+            "/auth/register",
+            &[
+                ("username", "third-person"),
+                ("email", "third@example.com"),
+                ("password", "secret123"),
+                ("password_confirmation", "other456"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&mismatch), "/register?bad=mismatch");
+        let page = server.get("/register?bad=mismatch").await;
+        assert_shell(&page, &[CHROME[0], "Passwords did not match."]);
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn profile_and_password_forms_redirect_guests(pool: PgPool) {
+        let server = api_server(pool).await;
+
+        let profile = post_form(
+            &server,
+            "/auth/profile",
+            &[
+                ("original_username", "test-5"),
+                ("username", "hacker"),
+                ("email", "hacker@example.com"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&profile), "/login");
+
+        let password = post_form(
+            &server,
+            "/auth/change-password",
+            &[
+                ("password", "x"),
+                ("new_password", "y"),
+                ("new_password_confirmation", "y"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&password), "/login");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn profile_form_saves_the_session_user(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+        post_form(
+            &server,
+            "/auth/login",
+            &[("username", "test-5"), ("password", "password")],
+        )
+        .await
+        .assert_status(StatusCode::SEE_OTHER);
+
+        let saved = post_form(
+            &server,
+            "/auth/profile",
+            &[
+                ("original_username", "test-5"),
+                ("username", "test-5"),
+                ("email", "test-5@example.com"),
+                ("first_name", "Testy"),
+                ("last_name", ""),
+                ("description", "hello"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&saved), "/profile?saved=1");
+
+        // The reload re-fills the form with the stored values, and the
+        // `?saved` code raises the Leptos page's success alert.
+        let page = server.get("/profile").await.text();
+        assert!(page.contains("Testy"), "reloaded profile:\n{page}");
+        let alerted = server.get("/profile?saved=1").await.text();
+        assert!(
+            alerted.contains("alert alert-success") && alerted.contains("test-5 Updated!"),
+            "success alert:\n{alerted}"
+        );
+
+        // A signed-in session still cannot edit someone else's account.
+        let impersonate = post_form(
+            &server,
+            "/auth/profile",
+            &[
+                ("original_username", "someone-else"),
+                ("username", "whoever"),
+                ("email", "whoever@example.com"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&impersonate), "/profile?bad=forbidden");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn change_password_form_updates_the_password(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+        post_form(
+            &server,
+            "/auth/login",
+            &[("username", "test-5"), ("password", "password")],
+        )
+        .await
+        .assert_status(StatusCode::SEE_OTHER);
+
+        let wrong_current = post_form(
+            &server,
+            "/auth/change-password",
+            &[
+                ("password", "nope"),
+                ("new_password", "fresh123"),
+                ("new_password_confirmation", "fresh123"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&wrong_current),
+            "/profile/change-password?bad=current"
+        );
+
+        let changed = post_form(
+            &server,
+            "/auth/change-password",
+            &[
+                ("password", "password"),
+                ("new_password", "fresh123"),
+                ("new_password_confirmation", "fresh123"),
+            ],
+        )
+        .await;
+        assert_eq!(location(&changed), "/profile/change-password?updated=1");
+        let alerted = server
+            .get("/profile/change-password?updated=1")
+            .await
+            .text();
+        assert!(
+            alerted.contains("alert alert-success") && alerted.contains("Password Updated!"),
+            "success alert:\n{alerted}"
+        );
+
+        // The old password is dead and the new one logs in.
+        let stale = post_form(
+            &server,
+            "/auth/login",
+            &[("username", "test-5"), ("password", "password")],
+        )
+        .await;
+        assert_eq!(location(&stale), "/login?bad=password");
+        let fresh = post_form(
+            &server,
+            "/auth/login",
+            &[("username", "test-5"), ("password", "fresh123")],
+        )
+        .await;
+        assert_eq!(location(&fresh), "/");
+    }
+
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
@@ -474,5 +911,31 @@ mod tests {
             .get("/uploads/missing.txt")
             .await
             .assert_status_not_found();
+    }
+
+    #[test]
+    fn uploads_mount_decisions_cover_skip_conflict_and_mount() {
+        let root = tempfile::tempdir().expect("fixture root");
+        let public = root.path().join("public");
+        std::fs::create_dir_all(public.join("uploads")).expect("public uploads entry");
+        let outside = root.path().join("uploads");
+        std::fs::create_dir_all(&outside).expect("outside uploads dir");
+
+        // Skip: the uploads root *is* the public dir's `uploads` entry.
+        assert_eq!(
+            uploads_mount(&public.join("uploads"), Some(&public)),
+            UploadsMount::Skip
+        );
+        // Conflict: a public `uploads` entry blocks a different uploads root.
+        assert_eq!(
+            uploads_mount(&outside, Some(&public)),
+            UploadsMount::Conflict
+        );
+        // Mount: no public dir, or no `uploads` entry in it.
+        assert_eq!(uploads_mount(&outside, None), UploadsMount::Mount);
+        assert_eq!(
+            uploads_mount(&outside, Some(&root.path().join("missing"))),
+            UploadsMount::Mount
+        );
     }
 }

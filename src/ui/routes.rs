@@ -15,11 +15,12 @@
 use dioxus::prelude::*;
 
 use super::artist::{ArtistPage, ArtistsPage};
+use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
 use super::page::PageDetails;
 use super::placeholders::{
-    AdminArtistRoot, AdminRoot, ChangePassword, CreateArtist, CreatePage, CreateRelease,
-    CreateTrack, Dashboard, EditArtist, EditArtistImages, EditArtistLinks, EditLabel, EditPage,
-    EditProfile, EditRelease, EditTrack, Login, Logout, Register, Releases, Tracks,
+    AdminArtistRoot, AdminRoot, CreateArtist, CreatePage, CreateRelease, CreateTrack, Dashboard,
+    EditArtist, EditArtistImages, EditArtistLinks, EditLabel, EditPage, EditRelease, EditTrack,
+    Releases, Tracks,
 };
 use super::record_label::RecordLabelHome;
 use super::release::ReleasePage;
@@ -62,21 +63,45 @@ pub enum Route {
         /// The page slug.
         slug: String,
     },
-    /// Log in (session cookie).
-    #[route("/login")]
-    Login {},
-    /// Create an account.
-    #[route("/register")]
-    Register {},
-    /// Destroy the session.
-    #[route("/logout")]
-    Logout {},
-    /// Edit the signed-in user's profile.
-    #[route("/profile")]
-    EditProfile {},
-    /// Change the signed-in user's password.
-    #[route("/profile/change-password")]
-    ChangePassword {},
+    /// Log in. `bad` carries a fixed error code when a login attempt
+    /// failed (the form posts to `/login`; see `crate::server::forms`).
+    #[route("/login?:bad")]
+    Login {
+        /// Error code from a failed login attempt.
+        bad: Option<String>,
+    },
+    /// Create an account. `bad` carries a fixed code when registration
+    /// failed.
+    #[route("/register?:bad")]
+    Register {
+        /// Error code from a failed registration attempt.
+        bad: Option<String>,
+    },
+    /// Destroy the session. `done` is set by the redirect after a
+    /// successful logout, which swaps the button for a "Logged out" line.
+    #[route("/logout?:done")]
+    Logout {
+        /// Set when the session has just ended.
+        done: Option<String>,
+    },
+    /// Edit the signed-in user's profile. `saved` and `bad` carry fixed
+    /// codes from the profile form's redirect.
+    #[route("/profile?:saved&:bad")]
+    EditProfile {
+        /// Set when the profile has just been saved.
+        saved: Option<String>,
+        /// Error code from a failed save.
+        bad: Option<String>,
+    },
+    /// Change the signed-in user's password. `updated` and `bad` carry
+    /// fixed codes from the password form's redirect.
+    #[route("/profile/change-password?:updated&:bad")]
+    ChangePassword {
+        /// Set when the password has just been changed.
+        updated: Option<String>,
+        /// Error code from a failed change.
+        bad: Option<String>,
+    },
     /// Admin section: menu + permission gate live in the layout.
     #[layout(AdminRoot)]
     /// Admin dashboard.
@@ -230,11 +255,63 @@ mod tests {
 
     #[test]
     fn auth_routes_parse() {
-        assert_eq!(parse("/login"), Route::Login {});
-        assert_eq!(parse("/register"), Route::Register {});
-        assert_eq!(parse("/logout"), Route::Logout {});
-        assert_eq!(parse("/profile"), Route::EditProfile {});
-        assert_eq!(parse("/profile/change-password"), Route::ChangePassword {});
+        assert_eq!(parse("/login"), Route::Login { bad: None });
+        assert_eq!(parse("/register"), Route::Register { bad: None });
+        assert_eq!(parse("/logout"), Route::Logout { done: None });
+        assert_eq!(
+            parse("/profile"),
+            Route::EditProfile {
+                saved: None,
+                bad: None
+            }
+        );
+        assert_eq!(
+            parse("/profile/change-password"),
+            Route::ChangePassword {
+                updated: None,
+                bad: None
+            }
+        );
+    }
+
+    /// The auth forms post to the axum handlers in `crate::server::forms`,
+    /// which 303 back to these pages carrying fixed status codes in the
+    /// query string.
+    #[test]
+    fn auth_routes_carry_query_codes() {
+        assert_eq!(
+            parse("/login?bad=password"),
+            Route::Login {
+                bad: Some("password".into())
+            }
+        );
+        assert_eq!(
+            parse("/logout?done=1"),
+            Route::Logout {
+                done: Some("1".into())
+            }
+        );
+        assert_eq!(
+            parse("/profile?saved=1"),
+            Route::EditProfile {
+                saved: Some("1".into()),
+                bad: None
+            }
+        );
+        assert_eq!(
+            parse("/profile?bad=taken"),
+            Route::EditProfile {
+                saved: None,
+                bad: Some("taken".into())
+            }
+        );
+        assert_eq!(
+            parse("/profile/change-password?updated=1"),
+            Route::ChangePassword {
+                updated: Some("1".into()),
+                bad: None
+            }
+        );
     }
 
     #[test]

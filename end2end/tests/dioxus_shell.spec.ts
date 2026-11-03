@@ -3,12 +3,14 @@ import { expect, test } from "@playwright/test";
 /**
  * Dioxus shell navigation smoke test (see MIGRATION.md Phases 3-4). Run against
  * a live Dioxus server via `end2end/run-dioxus-gate.sh`; override the target
- * with DIOXUS_URL. The public site (home, artists, artist, release, page) is
- * real since slice 2 and is rendered server-side from the gate's database, so
- * these assertions read the label and artist names from the page instead of
- * hardcoding fixture data. Auth and admin pages are still placeholders until
- * their slices land, so those checks cover the chrome, route resolution and
- * Link hrefs only.
+ * with DIOXUS_URL. The public site (home, artists, artist, release, page) and
+ * the auth pages (login/register/logout/profile) are real since slices 2-3 and
+ * are rendered server-side from the gate's database, so these assertions read
+ * the label and artist names from the page instead of hardcoding fixture data.
+ * The gate seeds an `e2e-dioxus`/`password` account through the app's own
+ * register handler (idempotent across runs). Admin pages are still
+ * placeholders until their slice lands, so those checks cover the chrome,
+ * route resolution and Link hrefs only.
  * There is no wasm bundle yet, so clicks are full page loads (hydration smoke
  * coverage comes once the client targets land, Phases 4-7).
  */
@@ -55,6 +57,50 @@ test("navbar and footer links navigate", async ({ page }) => {
   // Back home via the brand link, whose text is the label name.
   await brandLink(page).click();
   await expect(h1(page)).toHaveText(await labelName(page));
+});
+
+test("login rejects wrong credentials and shows a fixed alert", async ({ page }) => {
+  await page.goto(`${base}/login`);
+  await page.fill('input[name="username"]', "e2e-dioxus");
+  await page.fill('input[name="password"]', "definitely-wrong");
+  await page.getByRole("button", { name: "Login" }).click();
+  // The form posts to /auth/login; the handler 303s back with a fixed code,
+  // and the page renders the matching alert (the code itself is never shown).
+  await expect(page).toHaveURL(/\/login\?bad=password$/);
+  await expect(page.getByText("Password does not match.")).toBeVisible();
+});
+
+test("the signed-in flow: user menu, profile form and logout", async ({ page }) => {
+  await page.goto(`${base}/login`);
+  await page.fill('input[name="username"]', "e2e-dioxus");
+  await page.fill('input[name="password"]', "password");
+  await page.getByRole("button", { name: "Login" }).click();
+  // Success 303s to the home page and the navbar switches to the user menu.
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator(".navbar summary")).toContainText("e2e-dioxus");
+
+  await page.goto(`${base}/profile`);
+  await expect(h1(page)).toHaveText("Edit Profile");
+  await expect(page.locator('input[name="username"]')).toHaveValue("e2e-dioxus");
+  await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
+
+  // Logout: open the navbar dropdown, visit the logout page, then press its
+  // button (the form posts and 303s back with ?done=1).
+  await page.locator(".navbar summary").click();
+  await page.getByRole("link", { name: "Log out" }).click();
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page).toHaveURL(/\/logout\?done=1$/);
+  await expect(page.getByText("Logged out")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Login" })).toBeVisible();
+});
+
+test("a guest visiting a guarded page is served the login page", async ({ page }) => {
+  // Deviation note (MIGRATION.md slice 3): a component-level redirect renders
+  // the login page *inside* the current URL (dioxus has no 303 from SSR
+  // components); the login form is what the guest gets to interact with.
+  await page.goto(`${base}/profile`);
+  await expect(h1(page)).toHaveText("Login");
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
 });
 
 test("the artists index lists the public artists", async ({ page }) => {
