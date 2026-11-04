@@ -16,7 +16,9 @@
 //!   → done (Phase 4 slice 5b: see `admin::release`)
 //! - admin tracks (`Tracks`/`CreateTrack`/`EditTrack`) → done
 //!   (Phase 4 slice 5c: see `admin::track`)
-//! - admin artist links/images → slice 5
+//! - admin artist links (`EditArtistLinks`) → done (Phase 4 slice 5d: see
+//!   `admin::links`)
+//! - admin artist images → Phase 5 (with uploads)
 
 use dioxus::prelude::*;
 
@@ -53,13 +55,22 @@ fn admin_page(title: &str, detail: Option<&str>) -> Element {
 /// is a plain comparison of the current route — Phase 5 may refine it.
 #[component]
 pub fn AdminArtistRoot(artist_slug: String) -> Element {
-    // Query codes carried by the profile editor (`?updated=1`, `?bad=`)
-    // must not un-highlight its tab, so the comparison value drops them.
+    // Query codes carried by the profile and links editors (`?updated=1`,
+    // `?bad=`) must not un-highlight their tabs, so the comparison value
+    // drops them.
     let current = match use_route::<Route>() {
         Route::EditArtist {
             artist_slug: ref slug,
             ..
         } => Route::EditArtist {
+            artist_slug: slug.clone(),
+            updated: None,
+            bad: None,
+        },
+        Route::EditArtistLinks {
+            artist_slug: ref slug,
+            ..
+        } => Route::EditArtistLinks {
             artist_slug: slug.clone(),
             updated: None,
             bad: None,
@@ -76,6 +87,8 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
     };
     let links = Route::EditArtistLinks {
         artist_slug: artist_slug.clone(),
+        updated: None,
+        bad: None,
     };
     let images = Route::EditArtistImages { artist_slug };
 
@@ -116,12 +129,6 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
         }
         Outlet::<Route> {}
     }
-}
-
-/// Placeholder artist links editor.
-#[component]
-pub fn EditArtistLinks(artist_slug: String) -> Element {
-    admin_page("Edit artist links", Some(&format!("slug: {artist_slug}")))
 }
 
 /// Placeholder artist images editor.

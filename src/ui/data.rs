@@ -19,6 +19,7 @@
 use dioxus::prelude::*;
 
 use crate::error::AppError;
+use crate::forms::links::LinksForm;
 use crate::models::auth::User;
 use crate::models::record_label::RecordLabel;
 use crate::routes::artist::ArtistResult;
@@ -120,6 +121,27 @@ pub async fn get_artist(slug: String) -> core::result::Result<ArtistResult, Http
 #[get("/api/get_links", db: crate::server::current_user::Db)]
 pub async fn get_links(artist_slug: String) -> core::result::Result<LinksResult, HttpError> {
     match services::links::get_links_service(&db.0, artist_slug).await {
+        Ok(result) => Ok(result),
+        Err(error) => to_http_error(&error),
+    }
+}
+
+/// Save an artist's music-service and social links, returning the rows as
+/// stored. The POST twin of the wire `UpdateLinks` endpoint, used by the
+/// reactive links form (`ui::admin::links`) once the client build lands;
+/// the no-JS fallback is the 303 handler at `POST /admin/forms/links`
+/// (`crate::server::forms`). The service requires admin *and*
+/// `label_owner`, so guests and owner-only users get a 403.
+///
+/// # Errors
+/// 403 when the session lacks the permissions, 404 when the slug matches
+/// no artist, 500 on database or row-handling failure.
+#[post("/api/update_links",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn update_links(form: LinksForm) -> core::result::Result<LinksResult, HttpError> {
+    match services::links::update_links_service(&db.0, user.0.as_ref(), form).await {
         Ok(result) => Ok(result),
         Err(error) => to_http_error(&error),
     }

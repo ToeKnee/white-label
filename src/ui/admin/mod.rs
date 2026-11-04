@@ -24,6 +24,7 @@
 pub mod artist;
 pub mod dashboard;
 pub mod label;
+pub mod links;
 pub mod pages;
 pub mod release;
 pub mod track;
@@ -32,6 +33,7 @@ pub mod track;
 pub use artist::{CreateArtist, EditArtist};
 pub use dashboard::Dashboard;
 pub use label::EditLabel;
+pub use links::EditArtistLinks;
 pub use pages::{CreatePage, EditPage};
 pub use release::{CreateRelease, EditRelease, Releases};
 pub use track::{CreateTrack, EditTrack, TrackList, Tracks};

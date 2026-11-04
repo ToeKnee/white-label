@@ -4,7 +4,12 @@ use crate::models::{music_service::Platform, social_media::SocialMedia};
 
 /// This form is used to collect and update the links associated with an artist, including music streaming services
 /// and social media platforms.
+///
+/// `#[serde(default)]` keeps partial bodies (the dioxus JSON twin, or a
+/// probed POST) deserializable: absent platform fields simply clear that
+/// link, matching an emptied input.
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone, Default)]
+#[serde(default)]
 pub struct LinksForm {
     /// The slug of the artist.
     pub artist_slug: String,

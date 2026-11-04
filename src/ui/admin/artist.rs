@@ -237,8 +237,10 @@ fn EditArtistFields(artist: Artist, slug: String) -> Element {
 }
 
 /// The soft-delete sibling form (the `DeleteArtist` dialog's JS-free twin).
+/// The soft-delete sibling form (shared with the links editor, which also
+/// carries the artist delete/restore buttons).
 #[component]
-fn DeleteForm(slug: String) -> Element {
+pub(super) fn DeleteForm(slug: String) -> Element {
     rsx! {
         form { id: "artist-delete", method: "post", action: "/admin/forms/artist/delete",
             input { r#type: "hidden", name: "slug", value: slug }
@@ -251,7 +253,7 @@ fn DeleteForm(slug: String) -> Element {
 
 /// The restore sibling form (the `RestoreArtist` dialog's JS-free twin).
 #[component]
-fn RestoreForm(slug: String) -> Element {
+pub(super) fn RestoreForm(slug: String) -> Element {
     rsx! {
         form { id: "artist-restore", method: "post", action: "/admin/forms/artist/restore",
             input { r#type: "hidden", name: "slug", value: slug }

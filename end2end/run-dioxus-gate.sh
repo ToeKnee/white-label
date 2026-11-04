@@ -103,6 +103,9 @@ if [ "$admin_ok" -eq 1 ]; then
     # (slice 5b) The release create page serves its real form handlers too.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/release_create.html" "$base/admin/artist/e2e-tabs/releases/new"
     grep -c 'action="/admin/forms/release"' "$OUT/release_create.html"
+    # (slice 5d) The artist links editor serves its real form handler.
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_links.html" "$base/admin/artist/e2e-tabs/links"
+    grep -c 'action="/admin/forms/links"' "$OUT/artist_links.html"
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.

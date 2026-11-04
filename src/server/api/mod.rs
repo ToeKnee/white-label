@@ -78,9 +78,13 @@ pub fn api_routes() -> Router {
         )
         // Admin menu (routes/menu.rs)
         .route("/api/admin_menu", post(menu::admin_menu))
-        // Artist links (routes/links.rs)
+        // Artist links (routes/links.rs). The `update_links` wire endpoint
+        // was retired early (slice 5d): the dioxus `#[post("/api/update_links")]`
+        // server fn in `ui/data.rs` now owns that exact path, and axum
+        // rejects two handlers for one method+path. The reactive editor is
+        // the only caller today, and the Leptos-side endpoint in the old
+        // server binary is untouched.
         .route("/api/get_links", post(links::get_links))
-        .route("/api/update_links", post(links::update_links))
         // Tracks (routes/track.rs)
         .route("/api/get_tracks", post(track::get_tracks))
         .route("/api/get_track", post(track::get_track))

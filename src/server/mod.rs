@@ -270,6 +270,7 @@ mod tests {
             "/admin/artist/jimi/release/axis/tracks",
             "/admin/artist/jimi/release/axis/tracks/new",
             "/admin/artist/jimi/release/axis/track/castles",
+            "/admin/artist/jimi/links",
         ];
         for path in routes {
             let response = server.get(path).await;
@@ -999,6 +1000,7 @@ mod tests {
             "/admin/forms/track/update",
             "/admin/forms/track/delete",
             "/admin/forms/track/restore",
+            "/admin/forms/links",
         ];
         for path in paths {
             let response = post_form(&server, path, &[]).await;
@@ -2172,6 +2174,214 @@ mod tests {
         );
     }
 
+    /// Slice 5d: the links editor page and its no-JS form handler. The GET
+    /// renders one input per platform (Leptos parity), the 303 handler
+    /// saves and steers back with `?updated=1`, and failures carry fixed
+    /// codes.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn links_editor_flow_for_a_label_owner(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        create_test_user_with_permissions(&pool, 2, vec!["label_owner"])
+            .await
+            .expect("label_owner-only user");
+        create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        let page = server.get("/admin/artist/test-artist-1/links").await;
+        assert_shell(
+            &page,
+            &[
+                "Test Artist 1 Links",
+                "action=\"/admin/forms/links\"",
+                "name=\"spotify\"",
+                "src=\"/images/music_services/Spotify.svg\"",
+            ],
+        );
+
+        // A save 303s back with `?updated=1`; GETing that URL renders both
+        // the alert and the saved value in the input.
+        let saved = post_form_pairs(
+            &server,
+            "/admin/forms/links",
+            &[
+                ("artist_slug", "test-artist-1"),
+                ("spotify", "https://open.spotify.com/artist/test"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&saved),
+            "/admin/artist/test-artist-1/links?updated=1"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/links?updated=1")
+            .await
+            .text();
+        assert!(
+            body.contains("Test Artist 1 Links Updated!"),
+            "the success alert should render:\n{body}"
+        );
+        assert!(
+            body.contains("value=\"https://open.spotify.com/artist/test\""),
+            "the saved url should pre-fill the input:\n{body}"
+        );
+
+        // Clearing the input deletes the row (empty field + saved row).
+        let cleared = post_form_pairs(
+            &server,
+            "/admin/forms/links",
+            &[("artist_slug", "test-artist-1"), ("spotify", "")],
+        )
+        .await;
+        assert_eq!(cleared.status_code(), StatusCode::SEE_OTHER);
+        let body = server
+            .get("/admin/artist/test-artist-1/links?updated=1")
+            .await
+            .text();
+        assert!(
+            !body.contains("https://open.spotify.com/artist/test"),
+            "the cleared row must not come back:\n{body}"
+        );
+
+        // An unknown artist gets `no_artist`; the page gate only requires
+        // label_owner, but the service also needs admin, so a label_owner
+        // without admin gets `forbidden`.
+        let ghost = post_form_pairs(
+            &server,
+            "/admin/forms/links",
+            &[("artist_slug", "ghost"), ("spotify", "https://example.com")],
+        )
+        .await;
+        assert_eq!(location(&ghost), "/admin/artist/ghost/links?bad=no_artist");
+        login_as(&server, 2).await;
+        let forbidden = post_form_pairs(
+            &server,
+            "/admin/forms/links",
+            &[
+                ("artist_slug", "test-artist-1"),
+                ("spotify", "https://example.com"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&forbidden),
+            "/admin/artist/test-artist-1/links?bad=forbidden"
+        );
+    }
+
+    /// The JSON twin `POST /api/update_links` (the reactive path the wasm
+    /// client will call in Phases 6-7) saves, clears and authorizes like
+    /// the form handler, answering with the `LinksResult` the editor
+    /// re-renders.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn update_links_twin_saves_and_clears_links(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        create_test_user_with_permissions(&pool, 2, vec!["label_owner"])
+            .await
+            .expect("label_owner-only user");
+        create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+
+        let server = api_server(pool.clone()).await;
+        login_as(&server, 1).await;
+
+        // The dioxus client sends the server-fn args as a JSON object of
+        // named parameters: `{"form": …}`.
+        let saved = server
+            .post("/api/update_links")
+            .json(&serde_json::json!({
+                "form": {
+                    "artist_slug": "test-artist-1",
+                    "spotify": "https://example.com/artist",
+                }
+            }))
+            .await;
+        saved.assert_status_ok();
+        let body = saved.text();
+        assert!(
+            body.contains("https://example.com/artist"),
+            "the LinksResult should carry the saved url:\n{body}"
+        );
+
+        // The GET twin takes its typed args as a JSON body too: the dioxus
+        // client (`send_json`) only puts route-spec query params in the URL,
+        // so function arguments ride in the body even on GET.
+        let fetched = server
+            .get("/api/get_links")
+            .json(&serde_json::json!({ "artist_slug": "test-artist-1" }))
+            .await
+            .text();
+        assert!(
+            fetched.contains("https://example.com/artist"),
+            "get_links should return the saved url:\n{fetched}"
+        );
+
+        // An empty field deletes the saved row.
+        let cleared = server
+            .post("/api/update_links")
+            .json(&serde_json::json!({
+                "form": {
+                    "artist_slug": "test-artist-1",
+                    "spotify": "",
+                }
+            }))
+            .await;
+        cleared.assert_status_ok();
+        let body = cleared.text();
+        assert!(
+            !body.contains("https://example.com/artist"),
+            "the cleared row must be gone from the LinksResult:\n{body}"
+        );
+
+        // The service's NotFound for an unknown artist surfaces as 404.
+        let ghost = server
+            .post("/api/update_links")
+            .json(&serde_json::json!({
+                "form": { "artist_slug": "ghost", "spotify": "https://example.com" }
+            }))
+            .await;
+        assert_eq!(ghost.status_code(), StatusCode::NOT_FOUND);
+
+        // A guest hits the user extractor first (401), a label_owner
+        // without admin reaches the permission check (403).
+        let guest_server = api_server(pool).await;
+        let unauthorized = guest_server
+            .post("/api/update_links")
+            .json(&serde_json::json!({
+                "form": { "artist_slug": "test-artist-1", "spotify": "https://example.com" }
+            }))
+            .await;
+        assert_eq!(unauthorized.status_code(), StatusCode::UNAUTHORIZED);
+
+        login_as(&server, 2).await;
+        let forbidden = server
+            .post("/api/update_links")
+            .json(&serde_json::json!({
+                "form": { "artist_slug": "test-artist-1", "spotify": "https://example.com" }
+            }))
+            .await;
+        assert_eq!(forbidden.status_code(), StatusCode::FORBIDDEN);
+    }
+
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
@@ -2221,6 +2431,17 @@ mod tests {
                 "tabs tabs-border",
                 "Test Artist 1 Releases",
                 "No releases found.",
+            ],
+        );
+
+        // Slice 5d: the Links tab inside the artist tab layout.
+        let links = server.get("/admin/artist/test-artist-1/links").await;
+        assert_shell(
+            &links,
+            &[
+                "tabs tabs-border",
+                "Test Artist 1 Links",
+                "action=\"/admin/forms/links\"",
             ],
         );
     }

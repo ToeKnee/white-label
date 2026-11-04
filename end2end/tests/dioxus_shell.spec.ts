@@ -5,17 +5,16 @@ import { expect, test } from "@playwright/test";
  * a live Dioxus server via `end2end/run-dioxus-gate.sh`; override the target
  * with DIOXUS_URL. The public site (home, artists, artist, release, page),
  * the auth pages (login/register/logout/profile) and the admin section
- * (gate, dashboard, label/page/artist-profile/release editors) are real since
- * slices 2-5b and are
- * rendered server-side from the gate's database, so these assertions read
+ * (gate, dashboard, label/page/artist-profile/release/track/links editors)
+ * are real since slices 2-5d and are rendered server-side from the gate's
+ * database, so these assertions read
  * the label and artist names from the page instead of hardcoding fixture
  * data. The gate seeds an `e2e-dioxus`/`password` account through the app's
  * own register handler (idempotent across runs); admin tests need an
  * `e2e-admin` account seeded with the admin/label_owner permissions
  * out-of-band and are skipped unless the gate reports `E2E_ADMIN_OK`.
- * The artist links/images tabs are still placeholders until the rest of
- * slice 5 (links) and Phase 5 (images), so those checks cover the chrome,
- * route resolution and Link hrefs only.
+ * The artist images tab is still a placeholder until Phase 5, so that
+ * check covers the chrome, route resolution and Link hrefs only.
  * There is no wasm bundle yet, so clicks are full page loads (hydration smoke
  * coverage comes once the client targets land, Phases 4-7).
  */
@@ -208,6 +207,13 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
   // Slice 5b made the releases tab real: the list header names the artist.
   await expect(h1(page)).toHaveText("E2E Tabs Artist Releases");
   await expect(page.getByRole("tab", { name: "Releases" })).toHaveClass(/tab-active/);
+
+  await page.getByRole("tab", { name: "Links" }).click();
+  // (Links to routes with optional query segments render a trailing `?`.)
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/links\??$/);
+  // Slice 5d made the links tab real: the editor header names the artist.
+  await expect(h1(page)).toHaveText("E2E Tabs Artist Links");
+  await expect(page.getByRole("tab", { name: "Links" })).toHaveClass(/tab-active/);
 });
 
 test("the admin dashboard renders cards and the side menu", async ({ page }) => {
@@ -404,6 +410,31 @@ test("track create, rename, delete and restore round-trip", async ({ page }) => 
   await page.goto(`${base}/admin/artist/e2e-tabs/release/e2e-track-release-${stamp}`);
   await page.getByRole("button", { name: "Delete" }).click();
   await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+});
+
+test("artist links save and clear through the 303 fallback", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // The links editor (slice 5d) renders one input per platform with the
+  // saved URL pre-filled. There is no wasm client yet, so Update is a
+  // full-page POST that 303s back with ?updated=1 and the alert.
+  const stamp = Date.now();
+  const spotifyUrl = `https://e2e.example.com/artist/${stamp}`;
+  await page.goto(`${base}/admin/artist/e2e-tabs/links`);
+  await expect(h1(page)).toHaveText("E2E Tabs Artist Links");
+
+  await page.fill('input[name="spotify"]', spotifyUrl);
+  await page.getByRole("button", { name: "Update" }).click();
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/links\?updated=1$/);
+  await expect(page.getByText("E2E Tabs Artist Links Updated!")).toBeVisible();
+  await expect(page.locator('input[name="spotify"]')).toHaveValue(spotifyUrl);
+
+  // Clearing the input deletes the row (the service diffs empty fields
+  // against the saved links), and the reload renders an empty input.
+  await page.fill('input[name="spotify"]', "");
+  await page.getByRole("button", { name: "Update" }).click();
+  await expect(page.locator('input[name="spotify"]')).toHaveValue("");
 });
 
 test("unknown paths show the 404 page inside the shell", async ({ page }) => {

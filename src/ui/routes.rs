@@ -16,12 +16,12 @@ use dioxus::prelude::*;
 
 use super::admin::{
     AdminRoot, CreateArtist, CreatePage, CreateRelease, CreateTrack, Dashboard, EditArtist,
-    EditLabel, EditPage, EditRelease, EditTrack, Releases, Tracks,
+    EditArtistLinks, EditLabel, EditPage, EditRelease, EditTrack, Releases, Tracks,
 };
 use super::artist::{ArtistPage, ArtistsPage};
 use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
 use super::page::PageDetails;
-use super::placeholders::{AdminArtistRoot, EditArtistImages, EditArtistLinks};
+use super::placeholders::{AdminArtistRoot, EditArtistImages};
 use super::record_label::RecordLabelHome;
 use super::release::ReleasePage;
 use super::shell::AppShell;
@@ -145,11 +145,17 @@ pub enum Route {
         /// Error code from a failed save/delete/restore.
         bad: Option<String>,
     },
-    /// Edit an artist's external links.
-    #[route("/links")]
+    /// Edit an artist's external links. `updated`/`bad` carry the links
+    /// form's codes (posts to `/admin/forms/links`; see
+    /// `crate::server::forms`).
+    #[route("/links?:updated&:bad")]
     EditArtistLinks {
         /// The artist slug.
         artist_slug: String,
+        /// Set when the links have just been saved.
+        updated: Option<String>,
+        /// Error code from a failed save.
+        bad: Option<String>,
     },
     /// Upload/replace an artist's images.
     #[route("/images")]
@@ -380,7 +386,9 @@ mod tests {
         assert_eq!(
             parse("/admin/artist/jimi/links"),
             Route::EditArtistLinks {
-                artist_slug: "jimi".into()
+                artist_slug: "jimi".into(),
+                updated: None,
+                bad: None,
             }
         );
         assert_eq!(
@@ -559,6 +567,14 @@ mod tests {
                 bad: None,
             }
         );
+        assert_eq!(
+            parse("/admin/artist/jimi/links?bad=forbidden"),
+            Route::EditArtistLinks {
+                artist_slug: "jimi".into(),
+                updated: None,
+                bad: Some("forbidden".into()),
+            }
+        );
     }
 
     /// The Leptos table needed exact `""`/`"/"` route pairs; dioxus matches
@@ -654,6 +670,16 @@ mod tests {
                 track_slug: "castles".into(),
                 updated: None,
                 bad: None,
+            },
+            Route::EditArtistLinks {
+                artist_slug: "jimi".into(),
+                updated: Some("1".into()),
+                bad: None,
+            },
+            Route::EditArtistLinks {
+                artist_slug: "jimi".into(),
+                updated: None,
+                bad: Some("forbidden".into()),
             },
         ];
         for route in routes {

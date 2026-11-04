@@ -41,6 +41,7 @@ use tower_sessions::Session;
 
 use crate::error::AppError;
 use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
+use crate::forms::links::LinksForm;
 use crate::forms::page::{CreatePageForm, UpdatePageForm};
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
@@ -86,6 +87,7 @@ pub fn form_routes() -> Router {
         .route("/admin/forms/track/update", post(update_track))
         .route("/admin/forms/track/delete", post(delete_track))
         .route("/admin/forms/track/restore", post(restore_track))
+        .route("/admin/forms/links", post(submit_links))
 }
 
 /// Fields of the login form. Every field defaults so a missing one is a
@@ -1138,6 +1140,122 @@ async fn restore_track(
     }
 }
 
+/// Fields of the links form: the hidden artist slug plus one input per
+/// platform. Every platform always renders an input (Leptos parity), so
+/// an empty value means "clear this link"; absent fields default the same
+/// way. There are no repeated keys here, unlike the artist checkboxes.
+#[derive(Debug, Default, serde::Deserialize)]
+struct LinksFields {
+    #[serde(default)]
+    artist_slug: String,
+    #[serde(default)]
+    amazon_music: String,
+    #[serde(default)]
+    apple_music: String,
+    #[serde(default)]
+    bandcamp: String,
+    #[serde(default)]
+    beatport: String,
+    #[serde(default)]
+    deezer: String,
+    #[serde(default)]
+    sound_cloud: String,
+    #[serde(default)]
+    spotify: String,
+    #[serde(default)]
+    tidal: String,
+    #[serde(default)]
+    you_tube_music: String,
+    #[serde(default)]
+    blue_sky: String,
+    #[serde(default)]
+    facebook: String,
+    #[serde(default)]
+    instagram: String,
+    #[serde(default)]
+    linked_in: String,
+    #[serde(default)]
+    mastodon: String,
+    #[serde(default)]
+    pinterest: String,
+    #[serde(default)]
+    snapchat: String,
+    #[serde(default)]
+    threads: String,
+    #[serde(default)]
+    tik_tok: String,
+    #[serde(default)]
+    twitter: String,
+    #[serde(default)]
+    you_tube: String,
+}
+
+/// Save an artist's links (the no-JS fallback for the links page; the
+/// reactive path posts to the JSON twin `ui::data::update_links`). The
+/// service applies the create/update/delete diff from the submitted URLs
+/// itself, so a success 303 always carries `?updated=1` (unlike the other
+/// create handlers, there is no "new row" slug to land on).
+async fn submit_links(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    // No checkbox group here; the split helper's object builder is reused
+    // with a key the links form never sends.
+    let (_, rest) = split_form_pairs(pairs, "artist_ids");
+    let args: LinksFields = serde_json::from_value(rest).unwrap_or_default();
+    // Keep the addressed slug for the redirect targets (the form is moved
+    // into the service call).
+    let addressed_artist = args.artist_slug.clone();
+    let form = LinksForm {
+        artist_slug: args.artist_slug,
+        amazon_music: args.amazon_music,
+        apple_music: args.apple_music,
+        bandcamp: args.bandcamp,
+        beatport: args.beatport,
+        deezer: args.deezer,
+        sound_cloud: args.sound_cloud,
+        spotify: args.spotify,
+        tidal: args.tidal,
+        you_tube_music: args.you_tube_music,
+        blue_sky: args.blue_sky,
+        facebook: args.facebook,
+        instagram: args.instagram,
+        linked_in: args.linked_in,
+        mastodon: args.mastodon,
+        pinterest: args.pinterest,
+        snapchat: args.snapchat,
+        threads: args.threads,
+        tik_tok: args.tik_tok,
+        twitter: args.twitter,
+        you_tube: args.you_tube,
+    };
+    match services::links::update_links_service(&pool, current_user.as_ref(), form).await {
+        Ok(_) => Redirect::to(&format!("/admin/artist/{addressed_artist}/links?updated=1")),
+        Err(error) => {
+            tracing::warn!("links form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{addressed_artist}/links?bad={}",
+                links_code(&error)
+            ))
+        }
+    }
+}
+
+/// The links service only fails on permissions, a missing artist, or the
+/// database/rows, so the code set is short.
+const fn links_code(error: &AppError) -> &'static str {
+    match error {
+        AppError::Unauthorized(_) | AppError::Forbidden(_) => "forbidden",
+        AppError::NotFound(_) => "no_artist",
+        _ => "server",
+    }
+}
+
 /// Resolve a `DateField` submission: a submitted `datetime-local` value
 /// wins (interpreted as UTC — the browser's zone is not applied; see
 /// `ui::admin::pages`), else the hidden full-date field, else no date.
@@ -1248,7 +1366,8 @@ mod tests {
     use chrono::{TimeZone, Utc};
 
     use super::{
-        label_code, page_code, parse_form_date, release_code, split_form_pairs, track_code,
+        label_code, links_code, page_code, parse_form_date, release_code, split_form_pairs,
+        track_code,
     };
     use crate::error::AppError;
 
@@ -1287,6 +1406,26 @@ mod tests {
         let parsed =
             parse_form_date("2026-03-01T09:30", "2020-01-01T00:00:00+00:00").expect("date");
         assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 3, 1, 9, 30, 0).unwrap());
+    }
+
+    #[test]
+    fn links_codes_map_the_known_failures() {
+        assert_eq!(links_code(&AppError::Forbidden("no".into())), "forbidden");
+        assert_eq!(
+            links_code(&AppError::Unauthorized("User not supplied.".into())),
+            "forbidden"
+        );
+        assert_eq!(
+            links_code(&AppError::NotFound("Artist not found".into())),
+            "no_artist"
+        );
+        // Row-handling failures arrive wrapped as internal errors.
+        assert_eq!(
+            links_code(&AppError::Internal(
+                "Error handling music services: boom".into()
+            )),
+            "server"
+        );
     }
 
     #[test]
