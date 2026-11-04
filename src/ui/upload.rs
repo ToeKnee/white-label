@@ -229,6 +229,12 @@ pub fn FileUploadWithProgress(
     /// The item the file belongs to: an artist or release slug, or the
     /// uploader's own username for [`UploadConfiguration::Avatar`].
     slug: String,
+    /// Runs after a file is stored, with the name it was stored under. The
+    /// artist and release pages use it to point their `<img>` at the new
+    /// file, so the user does not have to reload (Leptos left the old image
+    /// on screen until they did).
+    #[props(optional)]
+    on_uploaded: Option<EventHandler<String>>,
 ) -> Element {
     let details = config.get_details();
     let accepted_types = details.mime_types.join(",");
@@ -243,7 +249,17 @@ pub fn FileUploadWithProgress(
     // so it has to own its data rather than borrow the closure.
     let mut submit = use_action(move |file: FileData| {
         let slug = slug.clone();
-        async move { upload_attempt(config, slug, file, sent_bytes, size_limit_mb).await }
+        async move {
+            let attempt = upload_attempt(config, slug, file, sent_bytes, size_limit_mb).await;
+            // Tell the page about the stored file before the alert renders,
+            // so its image swap and the alert arrive in one pass.
+            if let (Some(callback), Ok(outcome)) = (on_uploaded, attempt.as_ref())
+                && let Some(stored_name) = outcome.stored_name.clone()
+            {
+                callback.call(stored_name);
+            }
+            attempt
+        }
     });
 
     let outcome = match submit.value() {
@@ -251,6 +267,7 @@ pub fn FileUploadWithProgress(
         // Unreachable: this action reports every failure inside the outcome.
         Some(Err(captured)) => Some(UploadOutcome {
             succeeded: false,
+            stored_name: None,
             message: format!("Upload failed: {captured}"),
         }),
         None => None,
@@ -334,7 +351,17 @@ const fn bytes_for_progress(bytes: u64) -> f64 {
 #[derive(Clone)]
 struct UploadOutcome {
     succeeded: bool,
+    /// The name the file was stored under (set only on success); pages use
+    /// it to build the file's URL.
+    stored_name: Option<String>,
     message: String,
+}
+
+/// The public URL an upload is served from, matching the models'
+/// `primary_image_url` (`/uploads/<config directory>/<stored name>`).
+#[must_use]
+pub fn stored_file_url(config: UploadConfiguration, stored_name: &str) -> String {
+    format!("/uploads/{}/{stored_name}", config.get_details().path)
 }
 
 /// Runs one attempt: the progress request is established before the file
@@ -443,10 +470,12 @@ fn upload_outcome(result: core::result::Result<String, HttpError>) -> UploadOutc
     match result {
         Ok(stored_name) => UploadOutcome {
             succeeded: true,
+            stored_name: Some(stored_name.clone()),
             message: format!("Uploaded {stored_name}"),
         },
         Err(error) => UploadOutcome {
             succeeded: false,
+            stored_name: None,
             // A transport error without a message body (dioxus may answer
             // one) falls back to the generic copy.
             message: error
@@ -470,8 +499,12 @@ mod tests {
     use sqlx::PgPool;
 
     use super::*;
+    use crate::models::artist::Artist;
     use crate::models::auth::User;
-    use crate::models::test_helpers::create_test_user_with_permissions;
+    use crate::models::release::Release;
+    use crate::models::test_helpers::{
+        create_test_artist, create_test_release, create_test_user_with_permissions,
+    };
     use crate::routes::auth::Login;
     use crate::server::api::test_support::{api_server, api_server_with_uploads, post_args};
     use crate::services::files::progress::{FILES, add_chunk};
@@ -509,7 +542,7 @@ mod tests {
     /// A temp uploads root with the directories `setup` normally creates.
     fn upload_dirs() -> (tempfile::TempDir, std::path::PathBuf) {
         let root = tempfile::tempdir().expect("upload dir");
-        for subdirectory in ["tmp", "avatars", "artists"] {
+        for subdirectory in ["tmp", "avatars", "artists", "releases"] {
             std::fs::create_dir_all(root.path().join(subdirectory))
                 .expect("subdirectory should exist");
         }
@@ -574,6 +607,133 @@ mod tests {
             .await
             .expect("user after upload");
         assert_eq!(user.avatar.as_deref(), Some(stored_name.as_str()));
+    }
+
+    /// Attaching an uploaded image must leave the artist's own columns alone.
+    /// `Artist::update` re-derives `slug` from `name`, so the whole-model save
+    /// this tail used to do silently renamed every artist whose slug did not
+    /// derive from its name (the end-to-end fixture lost its `e2e-tabs` slug
+    /// this way, which broke the images page behind it).
+    #[sqlx::test]
+    async fn artist_image_upload_does_not_rewrite_the_slug(pool: PgPool) {
+        let artist = create_test_artist(&pool, 6, None)
+            .await
+            .expect("test artist");
+        // A slug `slugify("Test Artist 6")` would never produce.
+        sqlx::query("UPDATE artists SET slug = $1 WHERE id = $2")
+            .bind("jimi-hendrix")
+            .bind(artist.id)
+            .execute(&pool)
+            .await
+            .expect("hand-set artist slug");
+        create_test_user_with_permissions(&pool, 6, vec!["admin", "label_owner"])
+            .await
+            .expect("admin user");
+
+        let (_root, upload_root) = upload_dirs();
+        let server = api_server_with_uploads(&pool, upload_root.clone()).await;
+        post_args(&server, "/api/login", &login_args("test-6"))
+            .await
+            .assert_status_ok();
+
+        let response = post_file(
+            &server,
+            "Artist",
+            "jimi-hendrix",
+            "live.png",
+            "image/png",
+            b"png bytes",
+        )
+        .await;
+
+        response.assert_status_ok();
+        let stored_name: String = response.json();
+        assert_eq!(
+            stored_names(&upload_root.join("artists")),
+            vec![stored_name.clone()],
+            "the file lands in the artists directory"
+        );
+
+        let after_upload = Artist::get_by_slug(&pool, "jimi-hendrix".to_string())
+            .await
+            .expect("the artist is still reachable by its own slug");
+        assert_eq!(after_upload.id, artist.id);
+        assert_eq!(after_upload.name, "Test Artist 6");
+        assert_eq!(
+            after_upload.primary_image.as_deref(),
+            Some(stored_name.as_str()),
+            "the upload still attaches the image"
+        );
+        assert!(
+            Artist::find_by_slug(&pool, "test-artist-6".to_string())
+                .await
+                .expect("lookup by the slug the model would derive")
+                .is_none(),
+            "attaching an image must not derive a slug from the artist's name"
+        );
+    }
+
+    /// The release image path has the same guard: `Release::update` slugifies
+    /// the name too, so a hand-set release slug must survive an upload.
+    #[sqlx::test]
+    async fn release_image_upload_does_not_rewrite_the_slug(pool: PgPool) {
+        let artist = create_test_artist(&pool, 7, None)
+            .await
+            .expect("test artist");
+        let release = create_test_release(&pool, 7, Some(artist.clone()))
+            .await
+            .expect("test release");
+        sqlx::query("UPDATE releases SET slug = $1 WHERE id = $2")
+            .bind("areta-now")
+            .bind(release.id)
+            .execute(&pool)
+            .await
+            .expect("hand-set release slug");
+        create_test_user_with_permissions(&pool, 7, vec!["admin", "label_owner"])
+            .await
+            .expect("admin user");
+
+        let (_root, upload_root) = upload_dirs();
+        let server = api_server_with_uploads(&pool, upload_root.clone()).await;
+        post_args(&server, "/api/login", &login_args("test-7"))
+            .await
+            .assert_status_ok();
+
+        let response = post_file(
+            &server,
+            "Release",
+            "areta-now",
+            "cover.png",
+            "image/jpeg",
+            b"jpeg bytes",
+        )
+        .await;
+
+        response.assert_status_ok();
+        let stored_name: String = response.json();
+        assert_eq!(
+            stored_names(&upload_root.join("releases")),
+            vec![stored_name.clone()],
+            "the file lands in the releases directory"
+        );
+
+        let after_upload = Release::get_by_slug(&pool, "areta-now".to_string())
+            .await
+            .expect("the release is still reachable by its own slug");
+        assert_eq!(after_upload.id, release.id);
+        assert_eq!(after_upload.name, "Test Release 7");
+        assert_eq!(
+            after_upload.primary_image.as_deref(),
+            Some(stored_name.as_str()),
+            "the upload still attaches the image"
+        );
+        assert!(
+            Release::find_by_slug(&pool, "test-release-7".to_string())
+                .await
+                .expect("lookup by the slug the model would derive")
+                .is_none(),
+            "attaching an image must not derive a slug from the release's name"
+        );
     }
 
     #[sqlx::test]
@@ -753,6 +913,13 @@ mod tests {
             "Uploaded someone.png"
         );
         assert!(upload_outcome(Ok("someone.png".to_string())).succeeded);
+        // The stored name travels with the success so pages can build its URL.
+        assert_eq!(
+            upload_outcome(Ok("someone.png".to_string()))
+                .stored_name
+                .as_deref(),
+            Some("someone.png")
+        );
         assert_eq!(
             upload_outcome(HttpError::payload_too_large(
                 "File too large (the limit is 10 MB)."
@@ -762,9 +929,26 @@ mod tests {
         );
         // A dioxus transport error with no body keeps the generic copy.
         let bare = HttpError::new(axum::http::StatusCode::BAD_GATEWAY, "");
+        let failure = upload_outcome(Err(bare));
+        assert_eq!(failure.message, "Upload failed, try again later.");
+        assert!(failure.stored_name.is_none());
+    }
+
+    #[test]
+    fn stored_files_are_urls_under_their_config_directory() {
+        // Mirrors `Artist::primary_image_url`/`Release::primary_image_url`
+        // and the avatar path, so an upload swaps straight into an `<img>`.
         assert_eq!(
-            upload_outcome(Err(bare)).message,
-            "Upload failed, try again later."
+            stored_file_url(UploadConfiguration::Artist, "123-jimi.png"),
+            "/uploads/artists/123-jimi.png"
+        );
+        assert_eq!(
+            stored_file_url(UploadConfiguration::Release, "123-axis.jpg"),
+            "/uploads/releases/123-axis.jpg"
+        );
+        assert_eq!(
+            stored_file_url(UploadConfiguration::Avatar, "123-test-1.png"),
+            "/uploads/avatars/123-test-1.png"
         );
     }
 

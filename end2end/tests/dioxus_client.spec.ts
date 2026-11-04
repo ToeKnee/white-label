@@ -197,3 +197,46 @@ test("the profile avatar upload runs through the server fns with a progress bar"
 
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
+
+test("the artist images tab uploads and shows the new image", async ({ page }) => {
+  // Unlike the avatar slot, the Artist slot asks for `admin` + `label_owner`,
+  // so this run needs the seeded admin account.
+  requireAdmin();
+
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await loginAs(page, "e2e-admin");
+
+  await page.goto(`${base}/admin/artist/e2e-tabs/images`);
+  await expect(h1(page)).toHaveText("E2E Tabs Artist Images");
+  await clientIsLive(page);
+
+  const shown = page.getByAltText("E2E Tabs Artist");
+  const before = await shown.getAttribute("src");
+
+  const picked = {
+    name: "e2e-artist.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(PNG_1X1_BASE64, "base64"),
+  };
+  const loadsBeforeUpload = documentLoads;
+  await page.setInputFiles('input[name="file_to_upload"]', picked);
+  await page.getByRole("button", { name: "Upload" }).click();
+
+  // The alert names the stored file (`<timestamp>-<artist slug>.png`) and the
+  // `<img>` moves onto it without a reload — Leptos kept showing the previous
+  // file until the page was reloaded.
+  await expect(page.locator(".alert-success")).toContainText(/Uploaded .+-e2e-tabs\.png/, {
+    timeout: 30000,
+  });
+  await expect(shown).toHaveAttribute("src", /\/uploads\/artists\/\d+-e2e-tabs\.png$/);
+  expect(await shown.getAttribute("src"), "the shown image should change").not.toBe(before);
+  expect(documentLoads, "an upload is a fetch, not a form post").toBe(loadsBeforeUpload);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});

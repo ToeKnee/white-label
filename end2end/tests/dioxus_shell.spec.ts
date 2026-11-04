@@ -13,8 +13,9 @@ import { expect, test } from "@playwright/test";
  * own register handler (idempotent across runs); admin tests need an
  * `e2e-admin` account seeded with the admin/label_owner permissions
  * out-of-band and are skipped unless the gate reports `E2E_ADMIN_OK`.
- * The artist images tab is still a placeholder until Phase 5, so that
- * check covers the chrome, route resolution and Link hrefs only.
+ * The artist images tab is real since Phase 5 slice 5g; uploading needs the
+ * wasm client, so this spec only pins its SSR markup (the client spec uploads
+ * for real).
  * There is no wasm bundle yet, so clicks are full page loads (hydration smoke
  * coverage comes once the client targets land, Phases 4-7).
  */
@@ -214,6 +215,14 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
   // Slice 5d made the links tab real: the editor header names the artist.
   await expect(h1(page)).toHaveText("E2E Tabs Artist Links");
   await expect(page.getByRole("tab", { name: "Links" })).toHaveClass(/tab-active/);
+
+  await page.getByRole("tab", { name: "Images" }).click();
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\/?$/);
+  // Slice 5g made the images tab real: header + the upload picker (the upload
+  // itself is the client's job, asserted in dioxus_client.spec.ts).
+  await expect(h1(page)).toHaveText("E2E Tabs Artist Images");
+  await expect(page.getByRole("tab", { name: "Images" })).toHaveClass(/tab-active/);
+  await expect(page.locator('input[name="file_to_upload"]')).toHaveCount(1);
 });
 
 test("the admin dashboard renders cards and the side menu", async ({ page }) => {

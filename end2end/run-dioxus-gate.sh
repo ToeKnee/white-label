@@ -15,6 +15,29 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 cd "$ROOT" || exit 1
 
+# A missing page marker must fail the gate. `grep -c` prints a count and
+# exits 0 whatever it counts, so pins never reached the exit status on their
+# own (the images pins sat at 0 for a whole slice without anyone noticing).
+# Every check below goes through `pin`/`no_pin`, and the failures are folded
+# into the exit status at the end.
+pin_failed=0
+pin() {
+    if grep -q -- "$2" "$1"; then
+        echo "pin ok: $2"
+    else
+        echo "PIN FAILED: missing '$2' in $1"
+        pin_failed=1
+    fi
+}
+no_pin() {
+    if grep -q -- "$2" "$1"; then
+        echo "PIN FAILED: '$2' should not appear in $1"
+        pin_failed=1
+    else
+        echo "pin ok: no '$2' in $1"
+    fi
+}
+
 echo "== build =="
 cargo build --offline --no-default-features --features server --bin dioxus-server >"$OUT/build.log" 2>&1 || {
     echo "BUILD FAILED"; tail -n 30 "$OUT/build.log"; exit 1
@@ -69,11 +92,14 @@ curl -sS -o /dev/null -w "e2e seed status=%{http_code}\n" \
   --data-urlencode "password_confirmation=password" \
   "$base/auth/register"
 
-echo "== seed the e2e-tabs artist fixture (idempotent) =="
+echo "== seed the e2e-tabs artist fixture (idempotent, self-healing) =="
 # The nested-admin-tabs Playwright test edits this artist through the real
-# profile editor, so the row must exist (`name` and `slug` are both UNIQUE,
-# so re-running is a no-op). The row hangs off the first label; the profile
-# editor loads artists by slug, not by label.
+# profile editor, so the row must exist. Its slug deliberately does *not*
+# derive from its name (`slugify("E2E Tabs Artist")` would be
+# `e2e-tabs-artist`): anything that re-saves the whole model re-sluggifies
+# and would silently rename the row, breaking every later check that
+# addresses `e2e-tabs`. Conflicting on `name` (also UNIQUE) rather than on
+# `slug` is what lets a rerun repair that drift instead of skipping.
 if [ -f "$ROOT/.env" ]; then
     . "$ROOT/.env"
 fi
@@ -82,8 +108,11 @@ if [ -n "${DATABASE_URL:-}" ]; then
         SELECT 'E2E Tabs Artist', 'e2e-tabs', 'Gate fixture artist', 'https://e2e-tabs.example.com',
                id, now()
         FROM labels ORDER BY id LIMIT 1
-        ON CONFLICT (slug) DO NOTHING;" >/dev/null \
-        || echo "WARNING: could not seed the e2e-tabs artist (is psql installed?)"
+        ON CONFLICT (name) DO UPDATE SET
+            slug = EXCLUDED.slug,
+            label_id = EXCLUDED.label_id,
+            published_at = COALESCE(artists.published_at, EXCLUDED.published_at),
+            deleted_at = NULL;" || echo "WARNING: could not seed the e2e-tabs artist (is psql installed?)"
 else
     echo "WARNING: DATABASE_URL not set; skipping the e2e-tabs seed"
 fi
@@ -121,44 +150,52 @@ if curl -sS -c "$OUT/admin-cookies.txt" -o /dev/null \
      --data-urlencode "password=password" \
      "$base/auth/login" && \
    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/admin_dashboard.html" "$base/admin" && \
-   grep -q 'card-title\">Artists' "$OUT/admin_dashboard.html"; then
+   grep -q 'card-title">Artists' "$OUT/admin_dashboard.html"; then
     admin_ok=1
 fi
 if [ "$admin_ok" -eq 1 ]; then
     echo "admin session active (e2e-admin)"
-    grep -c 'Admin Dashboard' "$OUT/admin_dashboard.html"
-    grep -c 'w-56 menu bg-base-200 rounded-box' "$OUT/admin_dashboard.html"
+    pin "$OUT/admin_dashboard.html" 'Admin Dashboard'
+    pin "$OUT/admin_dashboard.html" 'w-56 menu bg-base-200 rounded-box'
     # The nested tab layout only renders behind the admin gate. The
     # releases tab is real since slice 5b, so it needs a live artist row
     # (the seed above); a missing slug would render NotFound instead.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/e2e-tabs/releases"
-    grep -c 'tabs tabs-border' "$OUT/nested.html"
+    pin "$OUT/nested.html" 'tabs tabs-border'
+    pin "$OUT/nested.html" 'E2E Tabs Artist Releases'
     # (slice 5a) The artist create page serves the real form handlers.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_create.html" "$base/admin/artist"
-    grep -c 'action="/admin/forms/artist"' "$OUT/artist_create.html"
+    pin "$OUT/artist_create.html" 'action="/admin/forms/artist"'
     # (slice 5b) The release create page serves its real form handlers too.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/release_create.html" "$base/admin/artist/e2e-tabs/releases/new"
-    grep -c 'action="/admin/forms/release"' "$OUT/release_create.html"
+    pin "$OUT/release_create.html" 'action="/admin/forms/release"'
     # (slice 5d) The artist links editor serves its real form handler.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_links.html" "$base/admin/artist/e2e-tabs/links"
-    grep -c 'action="/admin/forms/links"' "$OUT/artist_links.html"
+    pin "$OUT/artist_links.html" 'action="/admin/forms/links"'
+    # (slice 5g) The artist Images tab serves the upload picker; the upload
+    # itself is the wasm client's job (checked in dioxus_client.spec.ts).
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_images.html" \
+      -w "artist images status=%{http_code}\n" "$base/admin/artist/e2e-tabs/images"
+    pin "$OUT/artist_images.html" 'E2E Tabs Artist Images'
+    pin "$OUT/artist_images.html" 'name="file_to_upload"'
+    pin "$OUT/artist_images.html" 'accept="image/jpeg,image/png,image/gif,image/webp"'
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.
     curl -sS -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/jimi/releases"
-    grep -c 'action="/auth/login"' "$OUT/nested.html"
+    pin "$OUT/nested.html" 'action="/auth/login"'
 fi
 
 echo "== curl spot checks =="
 curl -sS -o "$OUT/home.html" -w "home status=%{http_code}\n" "$base/"
-grep -c 'navbar bg-primary text-primary-content' "$OUT/home.html"
-grep -c 'footer bg-neutral text-neutral-content' "$OUT/home.html"
-grep -c 'href="/main.css"' "$OUT/home.html"
+pin "$OUT/home.html" 'navbar bg-primary text-primary-content'
+pin "$OUT/home.html" 'footer bg-neutral text-neutral-content'
+pin "$OUT/home.html" 'href="/main.css"'
 curl -sS -o /dev/null -w "main.css status=%{http_code}\n" "$base/main.css"
 curl -sS -o "$OUT/guest_profile.html" -w "guest profile status=%{http_code}\n" "$base/profile"
-grep -c 'action="/auth/login"' "$OUT/guest_profile.html"
+pin "$OUT/guest_profile.html" 'action="/auth/login"'
 # The upload widget needs a session, so a guest never sees its markup.
-grep -c 'file_to_upload' "$OUT/guest_profile.html" || echo "0 (no widget for guests, as expected)"
+no_pin "$OUT/guest_profile.html" 'file_to_upload'
 curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \
   --data-urlencode "username=e2e-dioxus" \
   --data-urlencode "password=definitely-wrong" \
@@ -172,9 +209,9 @@ curl -sS -c "$OUT/user-cookies.txt" -o /dev/null -w "e2e-dioxus login status=%{h
   --data-urlencode "password=password" \
   "$base/auth/login"
 curl -sS -b "$OUT/user-cookies.txt" -o "$OUT/user_profile.html" -w "user profile status=%{http_code}\n" "$base/profile"
-grep -c 'name="file_to_upload"' "$OUT/user_profile.html"
-grep -c 'file-input file-input-primary' "$OUT/user_profile.html"
-grep -c 'btn btn-primary' "$OUT/user_profile.html"
+pin "$OUT/user_profile.html" 'name="file_to_upload"'
+pin "$OUT/user_profile.html" 'file-input file-input-primary'
+pin "$OUT/user_profile.html" 'btn btn-primary'
 # The progress endpoint refuses a guest (the Rust tests pin the streamed
 # totals; the wire status is pinned here).
 curl -sS -o /dev/null -w "progress without a session status=%{http_code}\n" \
@@ -184,7 +221,7 @@ echo "== hydrated server spot checks (8131) =="
 # The dx-generated index.html in this server's public dir makes the SSR
 # renderer inject the wasm bundle bootstrap into every page.
 curl -sS -o "$OUT/home_client.html" -w "home(hydrated) status=%{http_code}\n" "$base_client/"
-grep -c 'wasm/dioxus-web.js' "$OUT/home_client.html"
+pin "$OUT/home_client.html" 'wasm/dioxus-web.js'
 curl -sS -o /dev/null -w "wasm glue status=%{http_code}\n" "$base_client/wasm/dioxus-web.js"
 curl -sS -o /dev/null -w "wasm binary status=%{http_code}\n" "$base_client/wasm/dioxus-web_bg.wasm"
 
@@ -202,6 +239,11 @@ if [ "$admin_ok" -eq 1 ]; then
     E2E_ADMIN_OK=1 DIOXUS_URL="$base_client" npx playwright test tests/dioxus_client.spec.ts --project=chromium --reporter=list || status=$?
 else
     DIOXUS_URL="$base_client" npx playwright test tests/dioxus_client.spec.ts --project=chromium --reporter=list || status=$?
+fi
+
+if [ "$pin_failed" -ne 0 ]; then
+    echo "== gate page pins FAILED =="
+    status=1
 fi
 
 if [ "$status" -ne 0 ]; then

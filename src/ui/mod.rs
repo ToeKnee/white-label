@@ -32,9 +32,7 @@ pub mod footer;
 pub mod header;
 /// Marketing/legal page details.
 pub mod page;
-/// Page placeholders and the admin layouts referenced by the route table.
-///
-/// Deleted as Phase 4 slices replace them with real components.
+/// The artist-tabs layout the artist admin pages render inside.
 pub mod placeholders;
 /// The record label home page.
 pub mod record_label;

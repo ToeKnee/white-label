@@ -77,17 +77,26 @@ pub async fn finalise_upload(
 }
 
 /// Point an artist's `primary_image` at the uploaded file.
+///
+/// Only the image column is written. Saving the whole `Artist` instead
+/// would rename the row: [`Artist::update`] re-derives `slug` from `name`,
+/// so any artist whose slug does not match its name (a hand-edited slug, or
+/// a fixture like `e2e-tabs`) silently loses its slug — breaking every link
+/// to that artist. The same flaw in the Leptos wire endpoint is fixed here,
+/// since both stacks share this tail.
 async fn store_artist_primary_image(
     pool: &PgPool,
     file_name: &str,
     slug: &str,
 ) -> Result<(), String> {
-    let mut artist = Artist::get_by_slug(pool, slug.to_string())
+    let artist = Artist::get_by_slug(pool, slug.to_string())
         .await
         .map_err(|error| error.to_string())?;
-    artist.primary_image = Some(file_name.to_string());
-    artist
-        .update(pool)
+
+    sqlx::query("UPDATE artists SET primary_image = $1, updated_at = NOW() WHERE id = $2")
+        .bind(file_name)
+        .bind(artist.id)
+        .execute(pool)
         .await
         .map(|_| ())
         .map_err(|error| error.to_string())
@@ -116,18 +125,21 @@ async fn store_avatar(
         .map_err(|error| error.to_string())
 }
 
-/// Point a release's `primary_image` at the uploaded file.
+/// Point a release's `primary_image` at the uploaded file, writing only the
+/// image column for the same reason as [`store_artist_primary_image`].
 async fn store_release_primary_image(
     pool: &PgPool,
     file_name: &str,
     slug: &str,
 ) -> Result<(), String> {
-    let mut release = Release::get_by_slug(pool, slug.to_string())
+    let release = Release::get_by_slug(pool, slug.to_string())
         .await
         .map_err(|error| error.to_string())?;
-    release.primary_image = Some(file_name.to_string());
-    release
-        .update(pool)
+
+    sqlx::query("UPDATE releases SET primary_image = $1, updated_at = NOW() WHERE id = $2")
+        .bind(file_name)
+        .bind(release.id)
+        .execute(pool)
         .await
         .map(|_| ())
         .map_err(|error| error.to_string())

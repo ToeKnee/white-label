@@ -271,6 +271,7 @@ mod tests {
             "/admin/artist/jimi/release/axis/tracks/new",
             "/admin/artist/jimi/release/axis/track/castles",
             "/admin/artist/jimi/links",
+            "/admin/artist/jimi/images",
         ];
         for path in routes {
             let response = server.get(path).await;
@@ -2380,6 +2381,114 @@ mod tests {
             }))
             .await;
         assert_eq!(forbidden.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    /// The artist Images tab (Phase 5 slice 5g): the SSR body carries the
+    /// upload widget addressed to the artist slug, and the artist's current
+    /// primary image below it (the site logo until one is stored).
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn artist_images_page_renders_the_uploader(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+
+        // `api_server` takes the pool; `PgPool` is an Arc handle, so the
+        // clone leaves this test's pool usable for the update below.
+        let server = api_server(pool.clone()).await;
+        login_as(&server, 1).await;
+
+        let page = server.get("/admin/artist/test-artist-1/images").await;
+        assert_shell(
+            &page,
+            &[
+                "Test Artist 1 Images",
+                "name=\"file_to_upload\"",
+                "class=\"w-full file-input file-input-primary\"",
+                ">Upload</button>",
+                // The Artist configuration drives the accept list.
+                "accept=\"image/jpeg,image/png,image/gif,image/webp\"",
+                // Nothing stored yet: the model's default logo.
+                "src=\"/Logo.svg\"",
+                "alt=\"Test Artist 1\"",
+            ],
+        );
+
+        // With a stored file the same page points at it — the URL the widget's
+        // `on_uploaded` handler builds after an upload.
+        sqlx::query("UPDATE artists SET primary_image = $1 WHERE id = $2")
+            .bind("1700000000-test-artist-1.png")
+            .bind(artist.id)
+            .execute(&pool)
+            .await
+            .expect("stored image");
+        assert_shell(
+            &server.get("/admin/artist/test-artist-1/images").await,
+            &["src=\"/uploads/artists/1700000000-test-artist-1.png\""],
+        );
+    }
+
+    /// The release editor's image uploader (slice 5g) renders below the field
+    /// form — a sibling, never nested inside it — with the release's current
+    /// image under it.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn release_editor_renders_the_image_uploader(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        create_test_release(&pool, 1, Some(artist))
+            .await
+            .expect("release fixture");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        let page = server
+            .get("/admin/artist/test-artist-1/release/test-release-1")
+            .await;
+        assert_shell(
+            &page,
+            &[
+                "name=\"file_to_upload\"",
+                // The Release configuration, addressed by the release slug.
+                "accept=\"image/jpeg,image/png,image/gif,image/webp\"",
+                "src=\"/Logo.svg\"",
+                "alt=\"Test Release 1\"",
+            ],
+        );
+
+        // Ordering matters: the uploader form comes after the field form's
+        // Update button, so the two forms stay siblings.
+        let body = page.text();
+        let update = body
+            .find(">Update</button>")
+            .expect("the field form's Update button");
+        let images = body
+            .find("class=\"divider\">Images</div>")
+            .expect("the images divider");
+        assert!(
+            update < images,
+            "the uploader should follow the field form:\n{body}"
+        );
     }
 
     #[expect(

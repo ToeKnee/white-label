@@ -15,8 +15,13 @@
 //!   fields (repeated `artist_ids` entries), replacing the original's
 //!   hidden comma-joined input that click handlers updated. The primary
 //!   artist stays a `<select>`.
-//! - The image upload block (`FileUploadWithProgress`) stays deferred to
-//!   Phase 5, as in the artist editors.
+//! - The editor's image uploader (`FileUploadWithProgress`, wired up in
+//!   Phase 5 slice 5g) sits *after* the field form instead of between
+//!   "Release Date" and "Private" as Leptos had it: the uploader brings its
+//!   own `<form>`, and a form may not nest — the Leptos page relied on the
+//!   browser dropping the inner `<form>` tag, which also closed the outer one
+//!   early. The `<img>` follows a finished upload at once (Leptos kept showing
+//!   the old file until a reload).
 //! - The list's "Tracks" column keeps the original's static `0` (the list
 //!   service carries no track counts), and the editor's sidebar renders the
 //!   real track list from the same `get_release` fetch instead of Leptos'
@@ -28,11 +33,13 @@
 
 use dioxus::prelude::*;
 
+use crate::config::upload::UploadConfiguration;
 use crate::models::artist::Artist;
 use crate::models::release::Release;
 use crate::models::track::Track;
 use crate::ui::data::{get_artist, get_label_artists, get_release, get_releases};
 use crate::ui::page_data;
+use crate::ui::upload::{FileUploadWithProgress, stored_file_url};
 use crate::ui::use_label;
 use crate::ui::use_page;
 use crate::ui::use_user;
@@ -395,6 +402,10 @@ fn EditReleaseBody(
         }
     };
     let release = result.release;
+    // Read the image URL and alt text before the form takes the row apart
+    // field by field (the uploader's `<img>` needs both).
+    let current_image_url = release.primary_image_url();
+    let image_alt = release.name.clone();
     // The sidebar track list shares this fetch (Leptos made a second
     // `get_tracks` request for it).
     let sidebar_tracks = result
@@ -405,6 +416,13 @@ fn EditReleaseBody(
     let selected_ids = result.artists.iter().map(|a| a.id).collect::<Vec<i64>>();
     let primary_artist_id = release.primary_artist_id;
     let current_slug = release.slug.clone();
+
+    // Set when an upload lands, so the `<img>` shows the new file without a
+    // reload. Read here in the body, which is what re-renders on it.
+    let mut uploaded_image = use_signal(|| None::<String>);
+    let shown_image = uploaded_image().map_or(current_image_url, |stored| {
+        stored_file_url(UploadConfiguration::Release, &stored)
+    });
 
     rsx! {
         div { class: "flex gap-6 justify-around w-full",
@@ -480,6 +498,16 @@ fn EditReleaseBody(
                 }
             }
         }
+        // (slice 5g) The image uploader. Leptos put it between "Release
+        // Date" and "Private", but it brings its own `<form>` and forms may
+        // not nest, so it lives after the field form here (module docs).
+        div { class: "divider", "Images" }
+        FileUploadWithProgress {
+            config: UploadConfiguration::Release,
+            slug: current_slug.clone(),
+            on_uploaded: move |stored_name: String| uploaded_image.set(Some(stored_name)),
+        }
+        img { src: shown_image, alt: image_alt }
         // Sibling forms for the buttons above (a `<form>` may not nest);
         // they carry the artist slug the redirect target needs.
         DeleteForm {

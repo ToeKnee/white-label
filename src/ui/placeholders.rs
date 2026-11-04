@@ -1,9 +1,8 @@
-//! Placeholder pages and the artist-tab layout for the route table
-//! (MIGRATION.md Phase 3).
+//! The artist-tabs layout for the route table (MIGRATION.md Phase 3).
 //!
-//! Every route variant needs a component by the end of Phase 3, so pages
-//! that are not ported yet render these stubs. The Phase 4 slices delete
-//! them as their real components land, per group:
+//! This module held the placeholder pages every route variant needed in
+//! Phase 3; the slices since then replaced each group with its real
+//! component:
 //!
 //! - public pages → done (Phase 4 slice 2: see `record_label`, `artist`,
 //!   `release` and `page`)
@@ -18,34 +17,15 @@
 //!   (Phase 4 slice 5c: see `admin::track`)
 //! - admin artist links (`EditArtistLinks`) → done (Phase 4 slice 5d: see
 //!   `admin::links`)
-//! - admin artist images → Phase 5 (with uploads)
+//! - admin artist images (`EditArtistImages`) → done (Phase 5 slice 5g: see
+//!   `admin::images`)
+//!
+//! [`crate::ui::placeholders::AdminArtistRoot`] is all that is left; it moves
+//! in with the Phase 8 cleanup, once nothing here has to be a stub.
 
 use dioxus::prelude::*;
 
 use crate::ui::Route;
-
-/// Page title, an optional "context" line (e.g. the slug from the URL), and
-/// the migration marker shared by every placeholder.
-fn page_body(title: &str, detail: Option<&str>) -> Element {
-    rsx! {
-        h1 { "{title}" }
-        if let Some(detail) = detail {
-            p { class: "text-base-content/60", "{detail}" }
-        }
-        p { class: "text-base-content/60",
-            "Placeholder page — the real one arrives with the Phase 4 slices."
-        }
-    }
-}
-
-/// Admin placeholder: no wrapper (the `AdminRoot` layout provides it).
-fn admin_page(title: &str, detail: Option<&str>) -> Element {
-    page_body(title, detail)
-}
-
-// ---------------------------------------------------------------------------
-// Admin section (the `AdminRoot` layout is real since slice 4: `ui::admin`)
-// ---------------------------------------------------------------------------
 
 /// Artist editor tabs layout (Leptos: `components::admin::artist::root`).
 ///
@@ -129,10 +109,4 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
         }
         Outlet::<Route> {}
     }
-}
-
-/// Placeholder artist images editor.
-#[component]
-pub fn EditArtistImages(artist_slug: String) -> Element {
-    admin_page("Edit artist images", Some(&format!("slug: {artist_slug}")))
 }

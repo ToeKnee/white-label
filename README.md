@@ -6,14 +6,14 @@
 
 ## Migration checkpoint (branch `dioxus`)
 
-The Dioxus port (Phases 1–4 and the 5a–5f slices of MIGRATION.md) lives in
+The Dioxus port (Phases 1–5 of MIGRATION.md) lives in
 `src/server/` (axum router: sessions, uploads, current-user extractor, and
-the `/api/*` endpoints — including multipart `upload_file` and streaming
-`file_progress` — in the Leptos server-fn wire format, so the shipped Leptos
-UI can call it during the overlap; both stacks finish their uploads through
+the `/api/*` endpoints — including raw-body `upload_file` and streaming
+`file_progress`, both in the Leptos server-fn wire format, so the shipped Leptos
+UI can call them during the overlap; both stacks finish their uploads through
 the shared `services::files::upload` tail) and `src/ui/` (the whole page tree: route
 table, layouts, header/footer chrome, public pages, auth pages, the admin
-dashboard and the artist/release/track/links editors). It boots as a second
+dashboard and the artist/release/track/links/images editors). It boots as a second
 binary while the shipped site stays on Leptos (`cargo leptos watch`):
 
 ```bash
@@ -58,7 +58,8 @@ item.
 `cargo test --features server` covers the SSR side; the hydrated client side
 is covered by `end2end/tests/dioxus_client.spec.ts` (SPA nav issues no extra
 document loads, the links editor submits without a round trip, the profile
-avatar upload runs through the server fns with a progress bar) — it needs the
+avatar upload and the artist image upload both run through the server fns
+with a progress bar) — it needs the
 wasm bundle, so it only runs through the gate script below.
 
 The gate script boots that server against the dev database and adds curl
@@ -66,11 +67,15 @@ spot checks, an
 idempotent `e2e-dioxus` seed user (registered through the app's own handler),
 the admin flows through a `e2e-admin` user you grant `admin`/`label_owner`
 to in the dev database once (see the comments in the script; the browser
-checks skip without it), an idempotent `e2e-tabs` artist row the script
-seeds straight into the dev DB with `psql` (the nested-admin-tabs browser
-test edits it through the real profile editor), a chromium navigation +
-auth smoke test against the SSR-only server, and the hydrated-client run
-against the `dx` bundle server (dev DB; ports 8127 and 8131):
+checks skip without it), an `e2e-tabs` artist row the script seeds
+straight into the dev DB with `psql` and **repairs** on every run (its slug
+does not match `slugify(name)` on purpose: if a code path ever re-derives a
+slug from a name on save, the page pins break instead of drifting quietly), a
+chromium navigation + auth smoke test against the SSR-only server, and the
+hydrated-client run against the `dx` bundle server (dev DB; ports 8127 and
+8131). Page pins go through `pin`/`no_pin`, which print what they checked and
+fold failures into the script's exit status — a bare `grep -c` prints `0`
+without failing anything:
 
 ```bash
 sh end2end/run-dioxus-gate.sh
@@ -79,10 +84,12 @@ sh end2end/run-dioxus-gate.sh
 (`end2end`'s Playwright is 1.44.1; run `npx playwright install chromium` in
 `end2end/` once if the `chromium-1117` browser build is missing.)
 
-### Uploads with progress (slice 5f)
+### Uploads with progress (slices 5f–5g)
 
-`src/ui/upload.rs` holds the picker widget and its two dioxus endpoints, and
-the profile page (`/profile`) renders it for the signed-in user's avatar:
+`src/ui/upload.rs` holds the picker widget and its two dioxus endpoints. It is
+rendered on the profile page (`/profile`, the signed-in user's avatar), the
+admin artist **Images** tab (`/admin/artist/<slug>/images`) and the release
+editor (`EditRelease`):
 
 - `POST /api/upload?file_type=Avatar&slug=…&filename=…` — the request body is
   the file itself (dioxus sends a `FileStream` argument as the raw body, with
@@ -108,6 +115,19 @@ Two things a deployment has to know:
 The upload is javascript-only by design: the protocol has no form-post twin, so
 SSR renders the picker and the button, and uploading needs the client build
 above.
+
+Attaching the file is deliberately narrow. The shared tail
+(`services::files::upload`) writes **one column** — `primary_image` for an
+artist or release, `avatar` for a user — because `Artist::update`,
+`Release::update`, `Page::update`, `Track::update` and `RecordLabel::update`
+all start by re-deriving `slug` from `name`, so saving the whole model to
+attach a picture silently renames any row whose slug does not match its name
+(that bug reached the gate: the `e2e-tabs` fixture lost its slug and every
+admin check behind it served NotFound). The endpoint answers the stored name,
+and pages that show the image pass `on_uploaded` to the widget and swap their
+`<img src>` from it, which is what Leptos' reactive refresh looked like — a
+page cannot refetch its own page data, since `use_page` never exposes its
+resource.
 
 The `server`-gated modules (router assembly, sessions, current-user
 extractor, ported API endpoints) have their own tests, but plain `cargo test`

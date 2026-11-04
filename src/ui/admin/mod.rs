@@ -23,6 +23,7 @@
 
 pub mod artist;
 pub mod dashboard;
+pub mod images;
 pub mod label;
 pub mod links;
 pub mod pages;
@@ -32,6 +33,7 @@ pub mod track;
 // Re-exported so the route table can import them from `ui::admin`.
 pub use artist::{CreateArtist, EditArtist};
 pub use dashboard::Dashboard;
+pub use images::EditArtistImages;
 pub use label::EditLabel;
 pub use links::EditArtistLinks;
 pub use pages::{CreatePage, EditPage};

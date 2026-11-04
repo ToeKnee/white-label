@@ -16,12 +16,13 @@ use dioxus::prelude::*;
 
 use super::admin::{
     AdminRoot, CreateArtist, CreatePage, CreateRelease, CreateTrack, Dashboard, EditArtist,
-    EditArtistLinks, EditLabel, EditPage, EditRelease, EditTrack, Releases, Tracks,
+    EditArtistImages, EditArtistLinks, EditLabel, EditPage, EditRelease, EditTrack, Releases,
+    Tracks,
 };
 use super::artist::{ArtistPage, ArtistsPage};
 use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
 use super::page::PageDetails;
-use super::placeholders::{AdminArtistRoot, EditArtistImages};
+use super::placeholders::AdminArtistRoot;
 use super::record_label::RecordLabelHome;
 use super::release::ReleasePage;
 use super::shell::AppShell;
