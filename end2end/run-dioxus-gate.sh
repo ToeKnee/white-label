@@ -88,6 +88,17 @@ else
     echo "WARNING: DATABASE_URL not set; skipping the e2e-tabs seed"
 fi
 
+echo "== seed the uploads directories (idempotent) =="
+# The Leptos `setup` creates these; the dioxus server only reads UPLOAD_PATH,
+# so the gate makes sure the avatar upload in `dioxus_client.spec.ts` has
+# somewhere to write.
+if [ -n "${UPLOAD_PATH:-}" ]; then
+    mkdir -p "$UPLOAD_PATH/tmp" "$UPLOAD_PATH/avatars" "$UPLOAD_PATH/artists" "$UPLOAD_PATH/releases"
+    echo "uploads root ready: $UPLOAD_PATH"
+else
+    echo "WARNING: UPLOAD_PATH not set; the profile upload client test will fail"
+fi
+
 echo "== admin session checks =="
 # The admin pages need a user with the `admin` permission, which the
 # register handler can't grant. Seed `e2e-admin` once (register it here,
@@ -146,10 +157,28 @@ grep -c 'href="/main.css"' "$OUT/home.html"
 curl -sS -o /dev/null -w "main.css status=%{http_code}\n" "$base/main.css"
 curl -sS -o "$OUT/guest_profile.html" -w "guest profile status=%{http_code}\n" "$base/profile"
 grep -c 'action="/auth/login"' "$OUT/guest_profile.html"
+# The upload widget needs a session, so a guest never sees its markup.
+grep -c 'file_to_upload' "$OUT/guest_profile.html" || echo "0 (no widget for guests, as expected)"
 curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \
   --data-urlencode "username=e2e-dioxus" \
   --data-urlencode "password=definitely-wrong" \
   "$base/auth/login"
+
+echo "== profile upload widget (slice 5f SSR markup) =="
+# With a session the profile page serves the picker; the upload itself runs
+# only through the wasm client (checked in dioxus_client.spec.ts).
+curl -sS -c "$OUT/user-cookies.txt" -o /dev/null -w "e2e-dioxus login status=%{http_code}\n" \
+  --data-urlencode "username=e2e-dioxus" \
+  --data-urlencode "password=password" \
+  "$base/auth/login"
+curl -sS -b "$OUT/user-cookies.txt" -o "$OUT/user_profile.html" -w "user profile status=%{http_code}\n" "$base/profile"
+grep -c 'name="file_to_upload"' "$OUT/user_profile.html"
+grep -c 'file-input file-input-primary' "$OUT/user_profile.html"
+grep -c 'btn btn-primary' "$OUT/user_profile.html"
+# The progress endpoint refuses a guest (the Rust tests pin the streamed
+# totals; the wire status is pinned here).
+curl -sS -o /dev/null -w "progress without a session status=%{http_code}\n" \
+  "$base/api/file_progress?filename=e2e-avatar.png"
 
 echo "== hydrated server spot checks (8131) =="
 # The dx-generated index.html in this server's public dir makes the SSR

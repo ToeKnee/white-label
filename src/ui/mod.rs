@@ -44,6 +44,8 @@ pub mod release;
 pub mod routes;
 /// The app root: reactive contexts, document head, and the page shell.
 pub mod shell;
+/// Uploads with progress: the dioxus port of the Leptos widget.
+pub mod upload;
 /// Shared presentational pieces (alerts, badges, spinner, error/404 heroes)
 /// and the auth redirect guards — Phase 4 slice 1 of the component port.
 pub mod utils;

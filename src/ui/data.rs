@@ -44,9 +44,10 @@ use crate::services;
 /// Maps a service-layer [`AppError`] onto a dioxus `HttpError` with the
 /// status from [`AppError::status`], keeping the message user-presentable.
 /// The `HttpError` constructors return a ready `Result`, so a service fn
-/// ends by matching the service result and handing its error here.
+/// ends by matching the service result and handing its error here. Shared
+/// with the upload server fn in [`super::upload`].
 #[cfg(feature = "server")]
-fn to_http_error<T>(error: &AppError) -> core::result::Result<T, HttpError> {
+pub(crate) fn to_http_error<T>(error: &AppError) -> core::result::Result<T, HttpError> {
     let message = error.to_string();
     match error.status() {
         400 => HttpError::bad_request(message),

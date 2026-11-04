@@ -64,7 +64,13 @@ pub async fn add_chunk(filename: &str, len: usize, username: &str) -> usize {
 /// This function will return a stream of the current length of the file.
 /// The stream will be a series of `usize` values.
 /// Each value will be the total length of the file at that point in time.
-pub fn progress_for_file(filename: &str, username: &str) -> impl Stream<Item = usize> + use<> {
+///
+/// The stream is `Send` because the dioxus upload endpoints wrap it in
+/// `Streaming`, which boxes a `dyn Stream + Send`.
+pub fn progress_for_file(
+    filename: &str,
+    username: &str,
+) -> impl Stream<Item = usize> + Send + use<> {
     let id = format!("{username}-{filename}");
     let entry = FILES.entry(id).or_insert_with(|| {
         tracing::debug!("[{}]\tInserting channel.", filename.to_string());

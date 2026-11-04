@@ -15,6 +15,10 @@
 //! inside the handler; here the root comes from the [`UploadRoot`] request
 //! extension that `build_router` installs — same value in production,
 //! injectable in tests.
+//!
+//! The storage tail (move the temp file into place, attach it to the row) is
+//! shared with the dioxus upload server fn in [`crate::ui::upload`] via
+//! [`crate::services::files::upload::finalise_upload`].
 
 use axum::body::Body;
 use axum::extract::Extension;
@@ -26,15 +30,13 @@ use futures::{StreamExt as _, TryStreamExt as _};
 use std::io::Write as _;
 
 use crate::config::upload::UploadConfiguration;
-use crate::models::artist::Artist;
-use crate::models::auth::User;
-use crate::models::release::Release;
 use crate::routes::files::upload::FileProgress as FileProgressArgs;
 use crate::server::UploadRoot;
 use crate::server::api::{WireError, decode_args, json_response};
 use crate::server::current_user::{CurrentUser, Db};
 use crate::services::authentication_helpers::user_with_permissions;
 use crate::services::files::progress::{FILES, add_chunk, progress_for_file};
+use crate::services::files::upload::{UploadedFile, finalise_upload};
 use crate::utils::files::valid_file_name;
 
 const PATH_UPLOAD_FILE: &str = "/api/upload_file";
@@ -143,7 +145,7 @@ pub async fn upload_file(
         // Field complete: move the file into place, then attach it.
         finalise_upload(
             &pool,
-            &upload_root,
+            &upload_path,
             upload_config,
             UploadedFile {
                 tmp_path,
@@ -183,116 +185,6 @@ async fn next_field_text(
             tracing::debug!("upload {purpose} field: {text}");
             text
         })
-}
-
-/// One completed file field: where it landed in `tmp/` and its names.
-struct UploadedFile {
-    tmp_path: String,
-    file_name: String,
-    original_file_name: String,
-}
-
-/// Move the finished temp file to its final location and attach it to the
-/// artist/avatar/release, mirroring the Leptos `finalise_file_upload`
-/// (including its swallowing of database-attach errors).
-async fn finalise_upload(
-    pool: &sqlx::PgPool,
-    upload_root: &UploadRoot,
-    upload_config: UploadConfiguration,
-    field: UploadedFile,
-    uploader: &User,
-    slug_field: &str,
-) -> Result<(), String> {
-    let Some(upload_path) = upload_root.root() else {
-        return Err("No upload path specified.".to_string());
-    };
-    let details = upload_config.get_details();
-    let path = format!(
-        "{upload_path}/{}/{file_name}",
-        details.path,
-        file_name = field.file_name
-    );
-    std::fs::rename(field.tmp_path, &path).map_err(|error| error.to_string())?;
-
-    tracing::info!("File uploaded.");
-    FILES.remove(&format!(
-        "{}-{}",
-        uploader.username, field.original_file_name
-    ));
-
-    // Database attachment never fails the upload today (the Leptos route
-    // ignores these errors) — kept as-is for wire parity.
-    let file_name = field.file_name.as_str();
-    let attach = match upload_config {
-        UploadConfiguration::Artist => {
-            store_artist_primary_image(pool, file_name, slug_field).await
-        }
-        UploadConfiguration::Avatar => store_avatar(pool, file_name, slug_field, uploader).await,
-        UploadConfiguration::Release => {
-            store_release_primary_image(pool, file_name, slug_field).await
-        }
-    };
-    if let Err(error) = attach {
-        tracing::error!("uploaded file not attached to {upload_config}: {error}");
-    }
-    Ok(())
-}
-
-/// Point an artist's `primary_image` at the uploaded file.
-async fn store_artist_primary_image(
-    pool: &sqlx::PgPool,
-    file_name: &str,
-    slug_field: &str,
-) -> Result<(), String> {
-    let mut artist = Artist::get_by_slug(pool, slug_field.to_string())
-        .await
-        .map_err(|error| error.to_string())?;
-    artist.primary_image = Some(file_name.to_string());
-    artist
-        .update(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-/// Point the logged-in user's own avatar at the uploaded file. A slug
-/// that doesn't match the uploader's username is a silent no-op, as in the
-/// Leptos route. (It also refreshed Leptos' client-side user context —
-/// dioxus clients re-fetch instead.)
-async fn store_avatar(
-    pool: &sqlx::PgPool,
-    file_name: &str,
-    slug_field: &str,
-    uploader: &User,
-) -> Result<(), String> {
-    if slug_field != uploader.username {
-        return Ok(());
-    }
-    let mut user = User::get_by_username(pool, slug_field.to_string())
-        .await
-        .map_err(|error| error.to_string())?;
-    user.avatar = Some(file_name.to_string());
-    user.update(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-/// Point a release's `primary_image` at the uploaded file.
-async fn store_release_primary_image(
-    pool: &sqlx::PgPool,
-    file_name: &str,
-    slug_field: &str,
-) -> Result<(), String> {
-    let mut release = Release::get_by_slug(pool, slug_field.to_string())
-        .await
-        .map_err(|error| error.to_string())?;
-    release.primary_image = Some(file_name.to_string());
-    release
-        .update(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// Progress of an in-flight upload as a `text/plain` stream of byte totals

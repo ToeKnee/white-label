@@ -19,8 +19,9 @@ pub struct UploadDetails {
     pub rename: bool,
 }
 
-/// Represents the configuration for different upload types.
-#[derive(Debug, Clone, Copy)]
+/// Represents the configuration for different upload types. `PartialEq`/`Eq`
+/// so it can travel as a dioxus component prop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UploadConfiguration {
     /// Upload configuration for artist images.
     Artist,

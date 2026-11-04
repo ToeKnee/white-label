@@ -6,11 +6,12 @@
 
 ## Migration checkpoint (branch `dioxus`)
 
-The Dioxus port (Phases 1–4 and the 5a–5e slices of MIGRATION.md) lives in
+The Dioxus port (Phases 1–4 and the 5a–5f slices of MIGRATION.md) lives in
 `src/server/` (axum router: sessions, uploads, current-user extractor, and
 the `/api/*` endpoints — including multipart `upload_file` and streaming
 `file_progress` — in the Leptos server-fn wire format, so the shipped Leptos
-UI can call it during the overlap) and `src/ui/` (the whole page tree: route
+UI can call it during the overlap; both stacks finish their uploads through
+the shared `services::files::upload` tail) and `src/ui/` (the whole page tree: route
 table, layouts, header/footer chrome, public pages, auth pages, the admin
 dashboard and the artist/release/track/links editors). It boots as a second
 binary while the shipped site stays on Leptos (`cargo leptos watch`):
@@ -56,7 +57,8 @@ item.
 
 `cargo test --features server` covers the SSR side; the hydrated client side
 is covered by `end2end/tests/dioxus_client.spec.ts` (SPA nav issues no extra
-document loads, the links editor submits without a round trip) — it needs the
+document loads, the links editor submits without a round trip, the profile
+avatar upload runs through the server fns with a progress bar) — it needs the
 wasm bundle, so it only runs through the gate script below.
 
 The gate script boots that server against the dev database and adds curl
@@ -77,13 +79,43 @@ sh end2end/run-dioxus-gate.sh
 (`end2end`'s Playwright is 1.44.1; run `npx playwright install chromium` in
 `end2end/` once if the `chromium-1117` browser build is missing.)
 
+### Uploads with progress (slice 5f)
+
+`src/ui/upload.rs` holds the picker widget and its two dioxus endpoints, and
+the profile page (`/profile`) renders it for the signed-in user's avatar:
+
+- `POST /api/upload?file_type=Avatar&slug=…&filename=…` — the request body is
+  the file itself (dioxus sends a `FileStream` argument as the raw body, with
+  the mime in `Content-Type`, the size in `X-Content-Size` and the name in
+  `Content-Disposition`), which is why the scalars are query params: a server
+  fn can take either JSON args or one body arg, never both. Success answers
+  the stored file name.
+- `GET /api/file_progress?filename` — the running byte totals of your own
+  in-flight upload, one per line, until it finishes. Needs only a session.
+
+Two things a deployment has to know:
+
+- The uploads root (`UPLOAD_PATH`) needs its `tmp/`, `avatars/`, `artists/`
+  and `releases/` directories. The Leptos `setup` used to create them; the
+  dioxus server only reads `UPLOAD_PATH`, so `run-dioxus-gate.sh` now
+  `mkdir -p`s them.
+- Nothing in the transport caps a streamed body, so the per-configuration
+  limit (10 MB avatars, 100 MB artist/release images) is enforced while
+  streaming (413, partial file removed). A reverse proxy still needs its own
+  body limit raised to match — nginx's `client_max_body_size` defaults to
+  1 MB, which would reject these uploads before the app ever sees them.
+
+The upload is javascript-only by design: the protocol has no form-post twin, so
+SSR renders the picker and the button, and uploading needs the client build
+above.
+
 The `server`-gated modules (router assembly, sessions, current-user
 extractor, ported API endpoints) have their own tests, but plain `cargo test`
 (and the pre-commit hook) only builds default features, so run them
 explicitly:
 
 ```bash
-cargo test --features server   # 481 lib tests, includes src/server/ + src/ui/ tests
+cargo test --features server   # 490 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
 cargo test --features server -- ui::          # just the route-table + UI component tests
 ```

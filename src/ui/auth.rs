@@ -17,9 +17,10 @@
 //! it); when the client builds land, `use_action` interception can layer
 //! on top of these endpoints without changing them.
 //!
-//! The avatar upload widget from the Leptos profile page is deliberately
-//! not here yet — uploads are Phase 5 (`FileUploadWithProgress` onto dioxus
-//! `FileData`/`FileStream`).
+//! The profile page also carries the avatar upload widget
+//! ([`crate::ui::upload::FileUploadWithProgress`], Phase 5 slice 5f); like
+//! the Leptos original it needs the client build, since its upload is a
+//! request body rather than a form post.
 //!
 //! Example — a failed login round trip:
 //!
@@ -31,9 +32,11 @@
 
 use dioxus::prelude::*;
 
+use crate::config::upload::UploadConfiguration;
 use crate::models::auth::User;
 use crate::ui::Route;
 use crate::ui::redirect;
+use crate::ui::upload::FileUploadWithProgress;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success};
 
@@ -245,7 +248,16 @@ fn ProfileForm(
     };
 
     let success_message = format!("{} Updated!", user.username);
+    let avatar_username = user.username.clone();
     rsx! {
+        // Leptos placed the avatar picker between the heading and the form.
+        // The slug follows the session user, so after a rename the next
+        // upload still names the account it belongs to (the service checks
+        // it against the session anyway).
+        FileUploadWithProgress {
+            config: UploadConfiguration::Avatar,
+            slug: avatar_username,
+        }
         form { method: "post", action: "/auth/profile",
             div { class: "grid gap-6",
                 Success { message: success_message, show: saved.is_some() }

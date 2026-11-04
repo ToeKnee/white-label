@@ -38,6 +38,17 @@ const loginAs = async (page: import("@playwright/test").Page, username: string) 
   await expect(page.locator(".navbar summary")).toContainText(username);
 };
 
+/**
+ * A real 1x1 PNG (`file` reports: PNG image data, 1x1, 8-bit/color RGBA, 70
+ * bytes). The server never decodes images, so any bytes would stream, but an
+ * actual png keeps the declared mime type honest.
+ */
+const PNG_1X1_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+/** A progress bar sighting: what the DOM carried at the time it was seen. */
+type Sighting = { max: string | null; value: string | null };
+
 /** Same admin gate as the server-side spec (e2e-admin is seeded out-of-band). */
 const requireAdmin = () =>
   test.skip(process.env.E2E_ADMIN_OK !== "1", "needs e2e-admin seeded; see run-dioxus-gate.sh");
@@ -107,4 +118,82 @@ test("the links editor submits reactively (no 303 round trip)", async ({ page })
   await page.fill('input[name="spotify"]', "");
   await page.getByRole("button", { name: "Update" }).click();
   await expect(page.locator('input[name="spotify"]')).toHaveValue("");
+});
+
+test("the profile avatar upload runs through the server fns with a progress bar", async ({ page }) => {
+  // Unlike the admin specs this one only needs a session: the avatar slot
+  // asks for no extra permissions, so the plain `e2e-dioxus` seed user works.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await loginAs(page, "e2e-dioxus");
+
+  const picked = {
+    name: "e2e-avatar.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(PNG_1X1_BASE64, "base64"),
+  };
+
+  await page.goto(`${base}/profile`);
+  await expect(h1(page)).toHaveText("Edit Profile");
+  await clientIsLive(page);
+
+  // The picker markup is SSR'd, and no bar is rendered until an upload runs.
+  // That the submit below uploads at all is the proof the client re-attached
+  // its listener to the form (and that `FormEvent` really carries the file).
+  await expect(page.locator('input[name="file_to_upload"]')).toHaveCount(1);
+  await expect(page.locator("progress")).toHaveCount(0);
+
+  // The bar only exists while an upload is in flight, so its sightings are
+  // recorded by an observer installed before the click instead of polled.
+  await page.evaluate(() => {
+    const recorded = window as unknown as { progressSightings: { max: string | null; value: string | null }[] };
+    recorded.progressSightings = [];
+    const record = () => {
+      for (const bar of document.querySelectorAll("progress.w-56")) {
+        recorded.progressSightings.push({
+          max: bar.getAttribute("max"),
+          value: bar.getAttribute("value"),
+        });
+      }
+    };
+    new MutationObserver(record).observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["max", "value"],
+    });
+  });
+
+  const loadsBeforeUpload = documentLoads;
+  await page.setInputFiles('input[name="file_to_upload"]', picked);
+  await page.getByRole("button", { name: "Upload" }).click();
+
+  // The alert carries the stored name (`<timestamp>-<username>.png`: the
+  // avatar config renames the upload to the uploader). The wire tests in
+  // `crate::ui::upload` cover the storage itself.
+  await expect(page.locator(".alert-success")).toContainText(/Uploaded .+-e2e-dioxus\.png/, {
+    timeout: 30000,
+  });
+  await expect(page.locator(".alert-error")).toHaveCount(0);
+  expect(documentLoads, "an upload is a fetch, not a form post").toBe(loadsBeforeUpload);
+
+  const sightings: Sighting[] = await page.evaluate(
+    () =>
+      (window as unknown as { progressSightings: { max: string | null; value: string | null }[] }).progressSightings,
+  );
+  const size = String(picked.buffer.length);
+  expect(sightings.length, "the bar renders while uploading").toBeGreaterThan(0);
+  expect(
+    sightings.every((sighting) => sighting.max === size),
+    `the bar is sized to the picked file, saw ${JSON.stringify(sightings)}`,
+  ).toBe(true);
+  // The bar retires when the outcome lands, so the page keeps only the alert.
+  await expect(page.locator("progress")).toHaveCount(0);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });

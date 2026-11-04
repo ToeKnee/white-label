@@ -6,7 +6,7 @@
 //! (`forms`) and the Dioxus SSR app (`crate::ui`). The Leptos `setup.rs`
 //! still serves the shipped site until cutover.
 
-mod api;
+pub(crate) mod api;
 pub mod current_user;
 mod forms;
 
