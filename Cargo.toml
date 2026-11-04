@@ -23,6 +23,14 @@ name = "dioxus-web"
 path = "src/bin/dioxus_web.rs"
 required-features = ["web"]
 
+# Desktop client entry for `dx build --platform desktop` (MIGRATION.md
+# Phase 6). The same `src/ui` app in a tao window with a system webview,
+# talking to the API over HTTP.
+[[bin]]
+name = "dioxus-desktop"
+path = "src/bin/dioxus_desktop.rs"
+required-features = ["desktop"]
+
 [dependencies]
 anyhow = "1.0.94"
 async-broadcast = { version = "0.7.2", optional = true }
@@ -151,6 +159,17 @@ server = [
 web = [
     "dep:dioxus",
     "dioxus/web",
+    "dioxus/fullstack",
+    "dioxus/router",
+    "dep:tracing",
+]
+# Desktop client (native) build: `crate::ui` again, in a webview window.
+# Server fns become `reqwest` calls (with a cookie jar) against the API
+# origin the bin passes to `set_server_url`. Needs the system webview libs;
+# on Linux that is webkit2gtk-4.1, gtk+3 and libsoup-3.
+desktop = [
+    "dep:dioxus",
+    "dioxus/desktop",
     "dioxus/fullstack",
     "dioxus/router",
     "dep:tracing",

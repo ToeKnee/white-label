@@ -6,7 +6,8 @@
 
 ## Migration checkpoint (branch `dioxus`)
 
-The Dioxus port (Phases 1–5 of MIGRATION.md) lives in
+The Dioxus port (Phases 1–5 of MIGRATION.md, and now the desktop target of
+Phase 6) lives in
 `src/server/` (axum router: sessions, uploads, current-user extractor, and
 the `/api/*` endpoints — including raw-body `upload_file` and streaming
 `file_progress`, both in the Leptos server-fn wire format, so the shipped Leptos
@@ -128,6 +129,36 @@ and pages that show the image pass `on_uploaded` to the widget and swap their
 `<img src>` from it, which is what Leptos' reactive refresh looked like — a
 page cannot refetch its own page data, since `use_page` never exposes its
 resource.
+
+### The desktop window (slice 6a)
+
+The same `src/ui` page tree also builds as a native window (`dioxus-desktop`:
+a tao window around the system webview — on Linux that means `webkit2gtk-4.1`,
+`gtk+-3.0` and `libsoup-3.0` must be installed):
+
+```bash
+dx build --platform desktop --bin dioxus-desktop --features desktop --no-default-features
+WHITE_LABEL_API_URL=http://127.0.0.1:8127 \
+  ./target/dx/dioxus-desktop/debug/linux/app/dioxus-desktop
+```
+
+`cargo build --no-default-features --features desktop --bin dioxus-desktop`
+compiles the same binary (handy for `cargo check`), but only `dx` gathers the
+app's assets next to it, so run the copy under `target/dx`.
+
+There is no SSR in this target: the app boots client-side and every server fn
+in `ui/data.rs` is an HTTP call made by dioxus' own `reqwest` client, which
+keeps a process-wide cookie jar, so the session cookie round-trips without any
+CORS or `SameSite` work. Two things the desktop build does **not** do yet
+(Phase 6 slices 6b–6c):
+
+- The window's own origin is `http://dioxus.index.html/`, so root-relative
+  server files (`/uploads/…`) are not the API's — they need absolute URLs.
+  Bundled statics (`/main.css`, `/images/…`) are fine.
+- dioxus blocks in-app navigation after the first load, so the plain-HTML
+  303 form fallbacks the SSR pages use are inert in the window: forms need the
+  reactive `use_action` + JSON-twin path (the links editor already has it).
+  `http(s)://` links, by contrast, correctly open in the system browser.
 
 The `server`-gated modules (router assembly, sessions, current-user
 extractor, ported API endpoints) have their own tests, but plain `cargo test`

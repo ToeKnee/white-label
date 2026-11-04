@@ -6,10 +6,9 @@
 //! contexts, and placeholder pages. The real pages arrive per vertical
 //! slice in Phase 4.
 //!
-//! Only built under the `server` feature for now — the `dioxus` dependency
-//! rides that feature so the shipped Leptos build stays untouched. Client
-//! targets (web wasm, desktop, mobile) get their own feature gates in
-//! Phases 6-7.
+//! Only the dioxus targets build it: the SSR server (`server`), the wasm
+//! client (`web`) and the desktop window (`desktop`); the mobile target joins
+//! in Phase 7. Server-only code inside is gated by the fullstack macros.
 
 /// Admin section (dashboard, label/page editors, `AdminRoot` layout with
 /// its side menu and admin gate).
