@@ -44,7 +44,7 @@ fn EditLabelBody(
     /// Error code from a failed save.
     bad: Option<String>,
 ) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     // The Leptos guard redirected non-owners to `/admin`; guests get the
     // same steer (the handler enforces the real permission check).
@@ -53,7 +53,7 @@ fn EditLabelBody(
         return rsx! { Loading {} };
     }
 
-    let label_result = use_label().suspend()?;
+    let label_result = use_label()?;
     let label = match label_result() {
         Ok(result) => result.record_label,
         Err(error) => {

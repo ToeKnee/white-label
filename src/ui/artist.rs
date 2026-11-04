@@ -21,7 +21,9 @@ use crate::routes::links::LinksResult;
 use crate::ui::Route;
 use crate::ui::data::{get_artist, get_label_artists, get_links, get_releases};
 use crate::ui::markdown_html;
+use crate::ui::page_data;
 use crate::ui::use_label;
+use crate::ui::use_page;
 use crate::ui::utils::{Loading, StatusBadge};
 use crate::utils::shorten_string::shorten_string;
 
@@ -42,11 +44,11 @@ pub fn ArtistsPage() -> Element {
 
 /// The artists index content, resolved server-side before render.
 ///
-/// Resources are created and suspended one at a time — see the
-/// scheduling note in `super::record_label::LabelHomeBody`.
+/// Each `use_page` load suspends the boundary in turn — see the note in
+/// `super::record_label::LabelHomeBody`.
 #[component]
 fn ArtistsBody() -> Element {
-    let label = use_label().suspend()?;
+    let label = use_label()?;
     let label_name = match label() {
         Ok(result) => result.record_label.name,
         Err(error) => {
@@ -54,8 +56,7 @@ fn ArtistsBody() -> Element {
             String::new()
         }
     };
-    let artists = use_resource(get_label_artists);
-    let artists = artists.suspend()?;
+    let artists = use_page(move || page_data(get_label_artists()))?;
     let artists = match artists() {
         Ok(result) => result.artists,
         Err(error) => {
@@ -140,16 +141,16 @@ pub fn ArtistPage(
     }
 }
 
-/// The artist page content: the three resources load and suspend one at
-/// a time — see the scheduling note in `super::record_label::LabelHomeBody`.
+/// The artist page content: the artist, links and releases loads each
+/// suspend the boundary in turn — see the note in
+/// `super::record_label::LabelHomeBody`.
 #[component]
 fn ArtistBody(slug: String) -> Element {
     let links_slug = slug.clone();
     let releases_slug = slug.clone();
-    // Cloning inside the bodies: `use_resource` keeps the closure as an
-    // `FnMut` it may call again on restart.
-    let artist = use_resource(move || get_artist(slug.clone()));
-    let artist = artist.suspend()?;
+    // Cloning inside the closures: `use_page` keeps them as `FnMut`s it
+    // may call again on a later refetch.
+    let artist = use_page(move || page_data(get_artist(slug.clone())))?;
     let artist = match artist() {
         Ok(result) => result.artist,
         Err(error) => {
@@ -157,8 +158,7 @@ fn ArtistBody(slug: String) -> Element {
             Artist::default()
         }
     };
-    let links = use_resource(move || get_links(links_slug.clone()));
-    let links = links.suspend()?;
+    let links = use_page(move || page_data(get_links(links_slug.clone())))?;
     let links = match links() {
         Ok(result) => result,
         Err(error) => {
@@ -166,8 +166,7 @@ fn ArtistBody(slug: String) -> Element {
             LinksResult::default()
         }
     };
-    let releases = use_resource(move || get_releases(releases_slug.clone()));
-    let releases = releases.suspend()?;
+    let releases = use_page(move || page_data(get_releases(releases_slug.clone())))?;
     let releases = match releases() {
         Ok(result) => result.releases,
         Err(error) => {

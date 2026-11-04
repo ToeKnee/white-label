@@ -32,7 +32,9 @@ use crate::models::artist::Artist;
 use crate::models::release::Release;
 use crate::models::track::Track;
 use crate::ui::data::{get_artist, get_label_artists, get_release, get_releases};
+use crate::ui::page_data;
 use crate::ui::use_label;
+use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{ErrorPage, InlineError, Loading, StatusBadge, Success, permission_allows};
 use crate::ui::{Route, redirect};
@@ -56,7 +58,7 @@ pub fn Releases(
 
 #[component]
 fn ReleasesBody(artist_slug: String) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -67,7 +69,8 @@ fn ReleasesBody(artist_slug: String) -> Element {
     // redirects to NotFound (the same unmatched target as the artist
     // editor — see `EditArtistBody` in `super::artist`).
     let artist_name_slug = artist_slug.clone();
-    let artist = match use_resource(move || get_artist(artist_name_slug.clone())).suspend()?() {
+    let artist_resource = use_page(move || page_data(get_artist(artist_name_slug.clone())))?;
+    let artist = match artist_resource() {
         Ok(result) => result.artist,
         Err(error) => {
             tracing::error!(
@@ -83,7 +86,8 @@ fn ReleasesBody(artist_slug: String) -> Element {
     // `label_owner` sessions get hidden (unpublished/soft-deleted) rows too,
     // through the service's visibility check.
     let releases_slug = artist_slug.clone();
-    let releases = match use_resource(move || get_releases(releases_slug.clone())).suspend()?() {
+    let releases_resource = use_page(move || page_data(get_releases(releases_slug.clone())))?;
+    let releases = match releases_resource() {
         Ok(result) => result.releases,
         Err(error) => {
             tracing::error!(
@@ -219,7 +223,7 @@ pub fn CreateRelease(
 
 #[component]
 fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -229,7 +233,8 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
     // The page URL addresses the artist, so the form starts with it as the
     // primary/selected artist (the Leptos effect that seeded `artist_ids`).
     let artist_name_slug = artist_slug.clone();
-    let artist = match use_resource(move || get_artist(artist_name_slug.clone())).suspend()?() {
+    let artist_resource = use_page(move || page_data(get_artist(artist_name_slug.clone())))?;
+    let artist = match artist_resource() {
         Ok(result) => result.artist,
         Err(error) => {
             tracing::error!(
@@ -244,7 +249,7 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
 
     // The release is stamped with the label's id, like the Leptos hidden
     // `label_id` field.
-    let label_id = match use_label().suspend()?() {
+    let label_id = match use_label()?() {
         Ok(result) => result.record_label.id,
         Err(error) => {
             tracing::error!("Error while getting label for release create: {error}");
@@ -343,7 +348,7 @@ fn EditReleaseBody(
     updated: Option<String>,
     bad: Option<String>,
 ) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -353,7 +358,8 @@ fn EditReleaseBody(
     // The artist carries the header name and the hidden `label_id` (the
     // Leptos form read both from the store).
     let artist_name_slug = artist_slug.clone();
-    let artist = match use_resource(move || get_artist(artist_name_slug.clone())).suspend()?() {
+    let artist_resource = use_page(move || page_data(get_artist(artist_name_slug.clone())))?;
+    let artist = match artist_resource() {
         Ok(result) => result.artist,
         Err(error) => {
             tracing::error!(
@@ -370,14 +376,13 @@ fn EditReleaseBody(
     // visibility check), so the Restore button can appear.
     let release_artist_slug = artist_slug.clone();
     let release_slug_for_resource = release_slug.clone();
-    let result = match use_resource(move || {
-        get_release(
+    let release_resource = use_page(move || {
+        page_data(get_release(
             release_artist_slug.clone(),
             release_slug_for_resource.clone(),
-        )
-    })
-    .suspend()?()
-    {
+        ))
+    })?;
+    let result = match release_resource() {
         Ok(result) => result,
         Err(error) => {
             tracing::error!(
@@ -552,7 +557,8 @@ pub fn ArtistSelect(
 fn ArtistSelectBody(primary_artist_id: i64, selected_ids: Vec<i64>) -> Element {
     // The label's artists, visibility-filtered by the service (a
     // `label_owner` picks from every artist on the label).
-    let artists = match use_resource(get_label_artists).suspend()?() {
+    let artists_resource = use_page(move || page_data(get_label_artists()))?;
+    let artists = match artists_resource() {
         Ok(result) => result.artists,
         Err(error) => {
             tracing::error!("Error while getting label artists for the release picker: {error}");

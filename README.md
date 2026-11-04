@@ -6,13 +6,14 @@
 
 ## Migration checkpoint (branch `dioxus`)
 
-The Dioxus port (Phases 1–3 of MIGRATION.md) lives in `src/server/` (axum
-router: sessions, uploads, current-user extractor, and **all 39** `/api/*`
-endpoints — including multipart `upload_file` and streaming `file_progress`
-— in the Leptos server-fn wire format, so the shipped Leptos UI can call it
-during the overlap) and `src/ui/` (route table, layouts, header/footer
-chrome, placeholder pages). It boots as a second binary while the shipped
-site stays on Leptos (`cargo leptos watch`):
+The Dioxus port (Phases 1–4 and the 5a–5e slices of MIGRATION.md) lives in
+`src/server/` (axum router: sessions, uploads, current-user extractor, and
+the `/api/*` endpoints — including multipart `upload_file` and streaming
+`file_progress` — in the Leptos server-fn wire format, so the shipped Leptos
+UI can call it during the overlap) and `src/ui/` (the whole page tree: route
+table, layouts, header/footer chrome, public pages, auth pages, the admin
+dashboard and the artist/release/track/links editors). It boots as a second
+binary while the shipped site stays on Leptos (`cargo leptos watch`):
 
 ```bash
 npm install && npm run css   # tailwind + daisyUI -> public/main.css
@@ -22,17 +23,52 @@ cargo run --no-default-features --features server --bin dioxus-server
 `IP`/`PORT` override the bind address; `DIOXUS_PUBLIC_PATH=public` makes the
 server serve `public/main.css`, the favicon and the images (dioxus mounts
 each top-level public-dir file at its own path). The `dx` CLI is pinned to
-the dioxus crate version (currently 0.7.10); `dx serve` replaces the
-`cargo run` above once the Phase 4 slices need client hydration.
+the dioxus crate version (currently 0.7.10).
 
-The Phase 3/4 runtime gate does the same thing with curl spot checks, an
+### The wasm client (slice 5e)
+
+`src/ui` also builds for the browser; that bundle is what hydrates the
+SSR-rendered pages (SPA navigation, reactive forms, client-side redirects):
+
+```bash
+dx build --platform web --bin dioxus-web --features web --no-default-features
+```
+
+It writes a **self-contained** directory — every `public/` static plus
+`wasm/dioxus-web_bg.wasm` — to `target/dx/dioxus-web/debug/web/public`.
+Point the server at it to serve the hydrated site:
+
+```bash
+DIOXUS_PUBLIC_PATH=target/dx/dioxus-web/debug/web/public \
+  cargo run --no-default-features --features server --bin dioxus-server
+```
+
+The gate starts a second `dioxus-server` whose `DIOXUS_PUBLIC_PATH` is that
+`dx` output — the bundle's `index.html` is what makes the SSR renderer
+inject the wasm bootstrap into every page — so the gate runs two servers:
+8127 (SSR-only, `public/`) and 8131 (hydrated). `dx serve --platform web
+--bin dioxus-web --features web --no-default-features` is the watch-mode
+equivalent; expect it to also compile a native "server build" of the crate,
+which is harmless here and ignored. Debug bundles are large (~39 MB) because
+the Leptos modules (`src/routes`, `src/components`) are still compiled
+unconditionally — cfg-gating them out of `web` builds is a Phase 8 cleanup
+item.
+
+`cargo test --features server` covers the SSR side; the hydrated client side
+is covered by `end2end/tests/dioxus_client.spec.ts` (SPA nav issues no extra
+document loads, the links editor submits without a round trip) — it needs the
+wasm bundle, so it only runs through the gate script below.
+
+The gate script boots that server against the dev database and adds curl
+spot checks, an
 idempotent `e2e-dioxus` seed user (registered through the app's own handler),
 the admin flows through a `e2e-admin` user you grant `admin`/`label_owner`
 to in the dev database once (see the comments in the script; the browser
 checks skip without it), an idempotent `e2e-tabs` artist row the script
 seeds straight into the dev DB with `psql` (the nested-admin-tabs browser
-test edits it through the real profile editor), and a chromium navigation +
-auth smoke test (dev DB, port 8127):
+test edits it through the real profile editor), a chromium navigation +
+auth smoke test against the SSR-only server, and the hydrated-client run
+against the `dx` bundle server (dev DB; ports 8127 and 8131):
 
 ```bash
 sh end2end/run-dioxus-gate.sh

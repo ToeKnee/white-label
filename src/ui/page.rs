@@ -9,6 +9,8 @@ use dioxus::prelude::*;
 use crate::models::page::Page;
 use crate::ui::data::get_page;
 use crate::ui::markdown_html;
+use crate::ui::page_data;
+use crate::ui::use_page;
 use crate::ui::utils::Loading;
 
 /// One page by slug: title plus markdown body.
@@ -28,8 +30,7 @@ pub fn PageDetails(
 /// The page content, resolved server-side before render.
 #[component]
 fn PageBody(slug: String) -> Element {
-    let page = use_resource(move || get_page(slug.clone()));
-    let page = page.suspend()?;
+    let page = use_page(move || page_data(get_page(slug.clone())))?;
 
     // Failed loads render the empty default, as the Leptos component did
     // (the route underneath answers 404, so this page is still served).

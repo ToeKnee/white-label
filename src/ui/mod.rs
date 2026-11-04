@@ -57,17 +57,112 @@ use dioxus::prelude::*;
 use crate::models::auth::User;
 use crate::routes::record_label::LabelResult;
 use crate::store::GlobalState;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+/// The error a page resource carries: the message and status the server
+/// fn answered with, kept as plain data.
+///
+/// [`HttpError`] is not serde-serializable, and dioxus' hydration transport
+/// requires the whole resource value to be — so page loads carry this copy
+/// of the two fields that matter to the UI.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PageFailure {
+    /// The message the server fn sent, already phrased for readers.
+    pub message: String,
+    /// The HTTP status the server fn answered with.
+    pub status: u16,
+}
+
+impl std::fmt::Display for PageFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.message.fmt(formatter)
+    }
+}
+
+impl std::error::Error for PageFailure {}
+
+/// Result shape carried by the page resources (see [`page_data`]): the
+/// loaded value, or the error the server fn answered with.
+pub type PageLoad<T> = core::result::Result<T, PageFailure>;
+
+/// Wraps a page data fn so [`use_page`] can carry its result through
+/// hydration.
+///
+/// The value dioxus transports to the client must be serde-serializable,
+/// and [`HttpError`] is not, so it becomes a [`PageFailure`] here — pages
+/// log the message and fall back to defaults, while the real status still
+/// reaches callers of the JSON twins.
+///
+/// ```ignore
+/// let artist = use_page(move || page_data(get_artist(slug())))?;
+/// ```
+///
+/// # Errors
+/// The [`PageFailure`] the server fn answered with (status and message);
+/// the load itself never fails on the client side beyond that.
+pub async fn page_data<T>(
+    load: impl std::future::Future<Output = core::result::Result<T, HttpError>> + 'static,
+) -> PageLoad<T> {
+    load.await.map_err(|error| PageFailure {
+        status: error.status.as_u16(),
+        message: error
+            .message
+            .unwrap_or_else(|| format!("request failed with status {}", error.status.as_u16())),
+    })
+}
+
+/// The read handle [`use_page`] hands back once the boundary has
+/// suspended: calling it (`x()`) gives the loaded [`PageLoad`].
+pub type PageValue<T> = MappedSignal<PageLoad<T>, Signal<Option<PageLoad<T>>>>;
+
+/// Starts a page data load, suspending the enclosing `SuspenseBoundary`
+/// until the answer is in hand.
+///
+/// Built on [`use_server_future`] rather than `use_resource`: it is the
+/// only dioxus hook that hands the client the result the server already
+/// resolved. Without that, the client refetches during its first render and
+/// shows suspense fallbacks where the server rendered content, so hydration
+/// stops matching node for node and the interpreter dies on an unknown node
+/// id. Inside the closure, [`page_data`] swaps the page fn's [`HttpError`]
+/// for [`PageFailure`], since the value has to survive serde to reach the
+/// client.
+///
+/// ```ignore
+/// let artist = use_page(move || page_data(get_artist(slug())))?;
+/// match artist() {
+///     Ok(result) => rsx! { "{result.artist.name}" },
+///     Err(error) => rsx! { "Could not load the artist: {error}" },
+/// }
+/// ```
+///
+/// # Errors
+/// The suspension marker dioxus uses to hand the load to the enclosing
+/// `SuspenseBoundary`; a component inside one propagates it with `?`, which
+/// is what callers do. A load that *fails* arrives as `Ok` with a
+/// [`PageLoad`] error value.
+pub fn use_page<T, F>(
+    load: impl FnMut() -> F + 'static,
+) -> core::result::Result<PageValue<T>, RenderError>
+where
+    T: Clone + Serialize + DeserializeOwned + 'static,
+    F: std::future::Future<Output = PageLoad<T>> + 'static,
+{
+    // `use_server_future` has already suspended the boundary while the
+    // value was pending, so `suspend()` here returns the ready handle.
+    let resource = use_server_future(load)?;
+    resource.suspend()
+}
 
 /// The record label load used by the navbar brand and the home/artists
-/// headings (created per component — see the resource-scheduling note in
+/// headings (created per component — see the load-order note in
 /// `LabelHomeBody`).
 ///
-/// The Phase 0 spike pattern applies: create the
-/// resource and `suspend()` on it right away, inside a `SuspenseBoundary`;
-/// the boundary then drives the server fn itself.
-#[must_use]
-pub fn use_label() -> Resource<core::result::Result<LabelResult, HttpError>> {
-    use_resource(crate::ui::data::get_record_label)
+/// The `?` on the result suspends the enclosing `SuspenseBoundary`.
+///
+/// # Errors
+/// The suspension marker of [`use_page`].
+pub fn use_label() -> core::result::Result<PageValue<LabelResult>, RenderError> {
+    use_page(move || page_data(crate::ui::data::get_record_label()))
 }
 
 /// Render markdown as HTML with GFM options, the same call the Leptos
@@ -95,11 +190,13 @@ pub fn use_global_state() -> Signal<GlobalState> {
 
 /// The current user's session, loaded through the `GET /api/user` twin.
 ///
-/// Like [`use_label`], create it and `suspend()` on it immediately inside a
-/// `SuspenseBoundary` (the slice-2 resource rule), then read the result: a
-/// signed-in session resolves to `Some(User)`, guests and load failures to
-/// `None`. Guards and the navbar build their menus from this.
-#[must_use]
-pub fn use_user() -> Resource<core::result::Result<Option<User>, HttpError>> {
-    use_resource(crate::ui::data::get_current_user)
+/// Like [`use_label`], it suspends through the enclosing `SuspenseBoundary`;
+/// reading the resource gives a signed-in session as `Some(User)`, and
+/// guests and load failures as `None`. Guards and the navbar build their
+/// menus from this.
+///
+/// # Errors
+/// The suspension marker of [`use_page`].
+pub fn use_user() -> core::result::Result<PageValue<Option<User>>, RenderError> {
+    use_page(move || page_data(crate::ui::data::get_current_user()))
 }

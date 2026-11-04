@@ -10,7 +10,9 @@ use dioxus::prelude::*;
 use crate::ui::artist::ArtistList;
 use crate::ui::data::get_label_artists;
 use crate::ui::markdown_html;
+use crate::ui::page_data;
 use crate::ui::use_label;
+use crate::ui::use_page;
 use crate::ui::utils::Loading;
 
 /// Landing page: the label's name and description, then its artists.
@@ -26,17 +28,15 @@ pub fn RecordLabelHome() -> Element {
 
 /// The home page content, resolved server-side before render.
 ///
-/// Resource scheduling rule (learned the hard way in slice 2): create
-/// each resource and `suspend()` on it immediately, inside the boundary —
-/// the `SuspenseBoundary` then drives the server fn's future itself.
-/// Resources spawned early and awaited after another suspend are never
-/// polled, hanging the render.
+/// `use_page`'s `?` suspends the enclosing boundary until that load
+/// answers, so the body always reads finished values and dependent loads
+/// can simply use the value above them.
 #[component]
 fn LabelHomeBody() -> Element {
     // A failed label load renders the empty defaults, like the Leptos
     // store starting at `RecordLabel::default()` (the h1 is then blank
     // and the artist fetch below fails the way the Leptos skip did).
-    let label = use_label().suspend()?;
+    let label = use_label()?;
     let label = match label() {
         Ok(result) => result.record_label,
         Err(error) => {
@@ -44,8 +44,9 @@ fn LabelHomeBody() -> Element {
             crate::models::record_label::RecordLabel::default()
         }
     };
-    let artists = use_resource(get_label_artists);
-    let artists = artists.suspend()?;
+    // Cloning inside the closure: `use_page` keeps it as an `FnMut` it may
+    // call again on a later refetch.
+    let artists = use_page(move || page_data(get_label_artists()))?;
     let artists = match artists() {
         Ok(result) => result.artists,
         Err(error) => {

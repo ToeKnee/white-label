@@ -22,6 +22,8 @@ use dioxus::prelude::*;
 
 use crate::models::track::Track;
 use crate::ui::data::{get_artist, get_release, get_track};
+use crate::ui::page_data;
+use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
 use crate::ui::{Route, redirect};
@@ -48,7 +50,7 @@ pub fn Tracks(
 
 #[component]
 fn TracksBody(artist_slug: String, release_slug: String) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -60,11 +62,13 @@ fn TracksBody(artist_slug: String, release_slug: String) -> Element {
     // profile, as the original's release-fetch failure did.
     let tracks_artist_slug = artist_slug.clone();
     let tracks_release_slug = release_slug.clone();
-    let tracks = match use_resource(move || {
-        get_release(tracks_artist_slug.clone(), tracks_release_slug.clone())
-    })
-    .suspend()?()
-    {
+    let tracks_release_resource = use_page(move || {
+        page_data(get_release(
+            tracks_artist_slug.clone(),
+            tracks_release_slug.clone(),
+        ))
+    })?;
+    let tracks = match tracks_release_resource() {
         Ok(result) => result.tracks.iter().map(|twa| twa.track.clone()).collect(),
         Err(error) => {
             tracing::error!(
@@ -213,7 +217,7 @@ pub fn CreateTrack(
 
 #[component]
 fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String>) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -223,7 +227,8 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
     // The page URL addresses the artist, so the pickers start on it (the
     // Leptos effect that seeded `artist_ids`).
     let artist_name_slug = artist_slug.clone();
-    let artist = match use_resource(move || get_artist(artist_name_slug.clone())).suspend()?() {
+    let artist_resource = use_page(move || page_data(get_artist(artist_name_slug.clone())))?;
+    let artist = match artist_resource() {
         Ok(result) => result.artist,
         Err(error) => {
             tracing::error!(
@@ -240,14 +245,13 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
     // release slug steers to the releases list, as in Leptos.
     let release_artist_slug = artist_slug.clone();
     let release_slug_for_resource = release_slug.clone();
-    let release = match use_resource(move || {
-        get_release(
+    let release_resource = use_page(move || {
+        page_data(get_release(
             release_artist_slug.clone(),
             release_slug_for_resource.clone(),
-        )
-    })
-    .suspend()?()
-    {
+        ))
+    })?;
+    let release = match release_resource() {
         Ok(result) => result.release,
         Err(error) => {
             tracing::error!(
@@ -372,7 +376,7 @@ fn EditTrackBody(
     updated: Option<String>,
     bad: Option<String>,
 ) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -385,7 +389,8 @@ fn EditTrackBody(
     // list; a missing artist gets the NotFound page, as in the other
     // editors).
     let header_artist_slug = artist_slug.clone();
-    let artist = match use_resource(move || get_artist(header_artist_slug.clone())).suspend()?() {
+    let artist_resource = use_page(move || page_data(get_artist(header_artist_slug.clone())))?;
+    let artist = match artist_resource() {
         Ok(result) => result.artist,
         Err(error) => {
             tracing::error!(
@@ -400,14 +405,13 @@ fn EditTrackBody(
 
     let track_release_artist_slug = artist_slug.clone();
     let track_release_slug = release_slug.clone();
-    let release = match use_resource(move || {
-        get_release(
+    let release_resource = use_page(move || {
+        page_data(get_release(
             track_release_artist_slug.clone(),
             track_release_slug.clone(),
-        )
-    })
-    .suspend()?()
-    {
+        ))
+    })?;
+    let release = match release_resource() {
         Ok(result) => result.release,
         Err(error) => {
             tracing::error!(
@@ -423,15 +427,14 @@ fn EditTrackBody(
     let track_artist_slug = artist_slug.clone();
     let track_release_slug = release_slug.clone();
     let track_slug_for_resource = track_slug.clone();
-    let result = match use_resource(move || {
-        get_track(
+    let track_resource = use_page(move || {
+        page_data(get_track(
             track_artist_slug.clone(),
             track_release_slug.clone(),
             track_slug_for_resource.clone(),
-        )
-    })
-    .suspend()?()
-    {
+        ))
+    })?;
+    let result = match track_resource() {
         Ok(result) => result,
         Err(error) => {
             tracing::error!(

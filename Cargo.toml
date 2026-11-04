@@ -15,6 +15,14 @@ name = "dioxus-server"
 path = "src/bin/dioxus_server.rs"
 required-features = ["server"]
 
+# Web (wasm) client entry for `dx build` (MIGRATION.md Phase 5). The SSR
+# server injects this bundle into the page via the public dir's index.html;
+# once it boots, server fns route over HTTP and the pages hydrate.
+[[bin]]
+name = "dioxus-web"
+path = "src/bin/dioxus_web.rs"
+required-features = ["web"]
+
 [dependencies]
 anyhow = "1.0.94"
 async-broadcast = { version = "0.7.2", optional = true }
@@ -119,8 +127,8 @@ ssr = [
     "dep:tower-http",
     "dep:tower-sessions-sqlx-store",
     "dep:tracing",
-    "rand",
-    "getrandom",
+    "dep:rand",
+    "dep:getrandom",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
@@ -136,6 +144,16 @@ server = [
     "dioxus/fullstack",
     "dioxus/router",
     "dioxus/server",
+]
+# Web client (wasm) build: the same `crate::ui` app, launched by
+# `dioxus::launch` in the browser. The fullstack macro turns the server fns
+# in `ui/data.rs` into HTTP calls; nothing server-only compiles here.
+web = [
+    "dep:dioxus",
+    "dioxus/web",
+    "dioxus/fullstack",
+    "dioxus/router",
+    "dep:tracing",
 ]
 
 # Defines a size-optimized profile for the WASM bundle in release mode

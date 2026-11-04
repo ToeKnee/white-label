@@ -45,7 +45,7 @@ pub fn LabelHeader() -> Element {
 /// as the Leptos store default left it with no label loaded).
 #[component]
 fn BrandLink() -> Element {
-    let label = use_label().suspend()?;
+    let label = use_label()?;
     let name = match label() {
         Ok(result) => result.record_label.name,
         Err(_) => String::new(),
@@ -62,7 +62,7 @@ fn BrandLink() -> Element {
 /// context.
 #[component]
 pub fn UserMenu() -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     let Some(user) = user.filter(User::is_authenticated) else {
         return rsx! { GuestMenu {} };

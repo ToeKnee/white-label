@@ -36,9 +36,12 @@ pub mod setup;
 #[cfg(feature = "ssr")]
 pub mod state;
 pub mod store;
-/// Dioxus UI port (MIGRATION.md Phase 3+). Rides the `server` feature until
-/// the client targets get their own feature gates in Phases 6-7.
-#[cfg(feature = "server")]
+/// Dioxus UI port (MIGRATION.md Phase 3+).
+///
+/// Compiles for the SSR server (`server`) and the wasm client (`web`);
+/// server-only code inside it (the server fns' bodies) is gated by the
+/// fullstack macros.
+#[cfg(any(feature = "server", feature = "web"))]
 pub mod ui;
 pub mod utils;
 

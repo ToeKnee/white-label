@@ -29,7 +29,9 @@ use dioxus::prelude::*;
 use crate::models::page::Page;
 use crate::ui::data::get_page;
 use crate::ui::markdown_html;
+use crate::ui::page_data;
 use crate::ui::use_label;
+use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
 use crate::ui::{Route, redirect};
@@ -55,7 +57,7 @@ fn CreatePageBody(
     /// Error code from a failed create.
     bad: Option<String>,
 ) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -64,7 +66,7 @@ fn CreatePageBody(
 
     // The page is stamped with the label's id (the Leptos effect that
     // seeded it into the form state).
-    let label_id = match use_label().suspend()?() {
+    let label_id = match use_label()?() {
         Ok(result) => result.record_label.id,
         Err(error) => {
             tracing::error!("Error while getting label for page create: {error}");
@@ -133,7 +135,7 @@ pub fn EditPage(
 
 #[component]
 fn EditPageBody(slug: String, updated: Option<String>, bad: Option<String>) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -142,7 +144,7 @@ fn EditPageBody(slug: String, updated: Option<String>, bad: Option<String>) -> E
 
     // `label_owner` sessions see hidden pages too (the data twin's rule).
     let slug_for_resource = slug.clone();
-    let page_result = use_resource(move || get_page(slug_for_resource.clone())).suspend()?;
+    let page_result = use_page(move || page_data(get_page(slug_for_resource.clone())))?;
     let page = match page_result() {
         Ok(result) => result.page,
         Err(error) => {

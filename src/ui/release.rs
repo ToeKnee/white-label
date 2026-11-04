@@ -16,6 +16,8 @@ use crate::models::track_with_artists::TrackWithArtists;
 use crate::ui::Route;
 use crate::ui::data::{get_artist, get_release};
 use crate::ui::markdown_html;
+use crate::ui::page_data;
+use crate::ui::use_page;
 use crate::ui::utils::Loading;
 use crate::utils::shorten_string::shorten_string;
 
@@ -38,18 +40,18 @@ pub fn ReleasePage(
     }
 }
 
-/// The release page content: artist then release load and suspend one at
-/// a time (see the scheduling note in `super::record_label::LabelHomeBody`);
-/// the page renders, or redirects — see the module docs.
+/// The release page content: the artist load and then the release load,
+/// each `?` suspending the boundary in turn (see the note in
+/// `super::record_label::LabelHomeBody`); the page renders, or redirects —
+/// see the module docs.
 #[component]
 fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
     let release_artist_slug = artist_slug.clone();
-    // Cloning inside the bodies: `use_resource` keeps the closure as an
-    // `FnMut` it may call again on restart.
+    // Cloning inside the closures: `use_page` keeps them as `FnMut`s it may
+    // call again on a later refetch.
     let navigator = use_navigator();
 
-    let artist = use_resource(move || get_artist(artist_slug.clone()));
-    let artist = artist.suspend()?;
+    let artist = use_page(move || page_data(get_artist(artist_slug.clone())))?;
     let artist = match artist() {
         Ok(result) => result.artist,
         Err(error) => {
@@ -59,9 +61,12 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
         }
     };
 
-    let release =
-        use_resource(move || get_release(release_artist_slug.clone(), release_slug.clone()));
-    let release = release.suspend()?;
+    let release = use_page(move || {
+        page_data(get_release(
+            release_artist_slug.clone(),
+            release_slug.clone(),
+        ))
+    })?;
     let release_result = match release() {
         Ok(result) => result,
         Err(error) => {

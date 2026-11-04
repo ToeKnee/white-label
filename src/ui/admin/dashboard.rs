@@ -8,11 +8,10 @@
 //!
 //! - The countdown is a snapshot of `Utc::now()` at render (SSR only, so no
 //!   `set_interval` tick yet; the values land when the client builds come).
-//! - Social tips are picked with `rand` as on the Leptos server; a client
-//!   build will need to read the server-picked tip (or pick identically) to
-//!   avoid a hydration mismatch — tracked with the client-target phases.
+//! - Social tips rotate daily (deterministic across SSR and client
+//!   renders); the Leptos original picked one per request with `rand`.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use dioxus::prelude::*;
 
 use crate::models::artist::Artist;
@@ -20,7 +19,9 @@ use crate::models::page::Page;
 use crate::models::record_label::RecordLabel;
 use crate::models::release::Release;
 use crate::ui::data::{get_label_artists, get_label_pages, get_next_scheduled_release};
+use crate::ui::page_data;
 use crate::ui::use_label;
+use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{Loading, StatusBadge};
 use crate::utils::shorten_string::shorten_string;
@@ -55,7 +56,7 @@ fn RecordLabelCard() -> Element {
 
 #[component]
 fn RecordLabelCardBody() -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let is_owner = session()
         .ok()
         .flatten()
@@ -64,7 +65,7 @@ fn RecordLabelCardBody() -> Element {
         return rsx! {};
     }
 
-    let label_result = use_label().suspend()?;
+    let label_result = use_label()?;
     // A failed label load renders the empty defaults, like the Leptos
     // store starting at its default.
     let label = match label_result() {
@@ -119,12 +120,13 @@ fn ArtistsTable() -> Element {
 
 #[component]
 fn ArtistsTableBody() -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let is_owner = session()
         .ok()
         .flatten()
         .is_some_and(|user| user.permissions.contains("label_owner"));
-    let artists = match use_resource(get_label_artists).suspend()?() {
+    let artists_resource = use_page(move || page_data(get_label_artists()))?;
+    let artists = match artists_resource() {
         Ok(result) => result.artists,
         Err(error) => {
             tracing::error!("Error while getting artists for dashboard: {error}");
@@ -204,15 +206,15 @@ fn PagesTable() -> Element {
 
 #[component]
 fn PagesTableBody() -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let is_owner = session()
         .ok()
         .flatten()
         .is_some_and(|user| user.permissions.contains("label_owner"));
 
-    // Dependent chain (the slice-2 rule): suspend on the label first, then
-    // create the pages resource with its id.
-    let label_result = use_label().suspend()?;
+    // Dependent loads: `use_page`'s `?` waits for the label, so the pages
+    // resource below can use its id.
+    let label_result = use_label()?;
     let label_id = match label_result() {
         Ok(result) => result.record_label.id,
         Err(error) => {
@@ -220,7 +222,7 @@ fn PagesTableBody() -> Element {
             0
         }
     };
-    let pages_resource = use_resource(move || get_label_pages(label_id)).suspend()?;
+    let pages_resource = use_page(move || page_data(get_label_pages(label_id)))?;
     let pages = match pages_resource() {
         Ok(result) => result.pages,
         Err(error) => {
@@ -285,7 +287,7 @@ fn RowFallback() -> Element {
     }
 }
 
-/// A static promotion tip, chosen at random on the server (the Leptos
+/// A static promotion tip, rotated through the list daily (the Leptos
 /// `SocialMediaTips` list, kept verbatim).
 #[component]
 fn SocialMediaTips() -> Element {
@@ -302,7 +304,8 @@ fn SocialMediaTips() -> Element {
     }
 }
 
-/// The Leptos tip list; index picked with `rand` as on the Leptos server.
+/// The Leptos tip list; the index rotates daily so SSR and client renders
+/// agree (Leptos picked randomly per request).
 fn random_tip() -> &'static str {
     let tips: Vec<&'static str> = vec![
         "Check out our new release... <INSERT RELEASE HERE> Out on Friday!",
@@ -347,8 +350,11 @@ fn random_tip() -> &'static str {
         "This upcoming <RELEASE>, including singles, dates, etc., needs your community participation. How? Share with everyone using our interactive posts – reply below!",
     ];
 
-    let mut rng = rand::rng();
-    let index = rand::Rng::random_range(&mut rng, 0..tips.len());
+    // Deterministic so the SSR render and the client's hydrating render
+    // pick the same tip (the Leptos original shuffled per request, which
+    // would mismatch once a client build exists); rotates through the list
+    // daily.
+    let index = usize::try_from(chrono::Utc::now().ordinal()).unwrap_or(0) % tips.len();
     tips[index]
 }
 
@@ -379,8 +385,7 @@ fn UpcomingRelease() -> Element {
 
 #[component]
 fn UpcomingReleaseBody() -> Element {
-    let upcoming = use_resource(get_next_scheduled_release);
-    let upcoming = upcoming.suspend()?;
+    let upcoming = use_page(move || page_data(get_next_scheduled_release()))?;
     let release = match upcoming() {
         Ok(Some(result)) => result.release,
         Ok(None) => return rsx! {},

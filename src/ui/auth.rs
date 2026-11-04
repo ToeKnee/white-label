@@ -230,7 +230,7 @@ fn ProfileForm(
     /// Error code from a failed save.
     bad: Option<String>,
 ) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = match session() {
         Ok(Some(user)) if user.is_active() => user,
         Ok(_) => {
@@ -355,7 +355,7 @@ fn PasswordForm(
     /// Error code from a failed change.
     bad: Option<String>,
 ) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     match session() {
         Ok(Some(user)) if user.is_active() => {}
         Ok(_) => {

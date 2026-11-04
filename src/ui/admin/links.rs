@@ -30,6 +30,8 @@ use crate::forms::links::LinksForm;
 use crate::models::music_service::{MusicService, Platform};
 use crate::models::social_media::{SocialMedia, SocialMediaService};
 use crate::ui::data::{get_artist, get_links, update_links};
+use crate::ui::page_data;
+use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
 use crate::ui::{Route, redirect};
@@ -64,7 +66,7 @@ fn EditArtistLinksBody(
     updated: Option<String>,
     bad: Option<String>,
 ) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -76,7 +78,8 @@ fn EditArtistLinksBody(
     // though the form itself only carries the slug (a missing artist gets
     // the NotFound page, as in the other editors).
     let header_artist_slug = artist_slug.clone();
-    let artist = match use_resource(move || get_artist(header_artist_slug.clone())).suspend()?() {
+    let artist_resource = use_page(move || page_data(get_artist(header_artist_slug.clone())))?;
+    let artist = match artist_resource() {
         Ok(result) => result.artist,
         Err(error) => {
             tracing::error!(
@@ -92,8 +95,8 @@ fn EditArtistLinksBody(
     let artist_deleted = artist.deleted_at.is_some();
 
     let links_artist_slug = artist_slug.clone();
-    let fetched = use_resource(move || get_links(links_artist_slug.clone()));
-    let resource_links = match fetched.suspend()?() {
+    let fetched = use_page(move || page_data(get_links(links_artist_slug.clone())))?;
+    let resource_links = match fetched() {
         Ok(result) => result,
         Err(error) => {
             tracing::error!(

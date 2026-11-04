@@ -2322,12 +2322,12 @@ mod tests {
             "the LinksResult should carry the saved url:\n{body}"
         );
 
-        // The GET twin takes its typed args as a JSON body too: the dioxus
-        // client (`send_json`) only puts route-spec query params in the URL,
-        // so function arguments ride in the body even on GET.
+        // The GET twin's typed args ride in the query string, which the
+        // route literal declares (`?artist_slug`): browsers refuse a body
+        // on GET, so the dioxus client stub can only send declared params
+        // in the URL.
         let fetched = server
-            .get("/api/get_links")
-            .json(&serde_json::json!({ "artist_slug": "test-artist-1" }))
+            .get("/api/get_links?artist_slug=test-artist-1")
             .await
             .text();
         assert!(

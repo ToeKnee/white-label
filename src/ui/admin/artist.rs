@@ -23,7 +23,9 @@ use dioxus::prelude::*;
 
 use crate::models::artist::Artist;
 use crate::ui::data::get_artist;
+use crate::ui::page_data;
 use crate::ui::use_label;
+use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
 use crate::ui::{Route, redirect};
@@ -51,7 +53,7 @@ fn CreateArtistBody(
     /// Error code from a failed create.
     bad: Option<String>,
 ) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -60,7 +62,7 @@ fn CreateArtistBody(
 
     // The artist is stamped with the label's id (the Leptos effect that
     // seeded it into the form state).
-    let label_id = match use_label().suspend()?() {
+    let label_id = match use_label()?() {
         Ok(result) => result.record_label.id,
         Err(error) => {
             tracing::error!("Error while getting label for artist create: {error}");
@@ -134,7 +136,7 @@ pub fn EditArtist(
 
 #[component]
 fn EditArtistBody(artist_slug: String, updated: Option<String>, bad: Option<String>) -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
@@ -145,7 +147,7 @@ fn EditArtistBody(artist_slug: String, updated: Option<String>, bad: Option<Stri
     // artists (so the Restore button can appear); `get_artist_service`
     // answers by slug with no visibility filter.
     let slug_for_resource = artist_slug.clone();
-    let artist_result = use_resource(move || get_artist(slug_for_resource.clone())).suspend()?;
+    let artist_result = use_page(move || page_data(get_artist(slug_for_resource.clone())))?;
     let artist = match artist_result() {
         Ok(result) => result.artist,
         Err(error) => {

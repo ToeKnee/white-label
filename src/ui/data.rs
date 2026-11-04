@@ -1,13 +1,18 @@
 //! Dioxus-native data loading for the UI (MIGRATION.md Phase 4 slice 2).
 //!
-//! Each page component calls one of these from `use_resource`, and reads
-//! the value inside a `SuspenseBoundary` via `Resource::suspend()`. During
-//! SSR dioxus runs the call in-process with the same axum extractors the
-//! Phase 2 `/api/*` port uses (`Db`, `CurrentUser`), so page content is
-//! rendered server-side and the logged-in user's visibility rules apply
-//! there too (extractor injection in SSR was verified in the Phase 0
-//! spike). Client builds get generated stubs that fetch the same GET
-//! endpoints over HTTP once the client targets land (Phases 6-7).
+//! Page components reach these through `super::use_page` (with `page_data`
+//! adapting the result), which suspends the enclosing `SuspenseBoundary`
+//! until the answer is in hand and carries it to the client for hydration.
+//!
+//! Any typed argument has to be declared in the route literal (`?slug`,
+//! `?artist_slug&release_slug`): dioxus only puts declared params in the
+//! URL, and a browser refuses a body on GET, so an undeclared argument
+//! breaks every client build. During SSR dioxus runs the call in-process
+//! with the same axum extractors the Phase 2 `/api/*` port uses (`Db`,
+//! `CurrentUser`), so page content is rendered server-side and the
+//! logged-in user's visibility rules apply there too (extractor injection
+//! in SSR was verified in the Phase 0 spike). Client builds get generated
+//! stubs that fetch the same GET endpoints over HTTP (Phases 6-7).
 //!
 //! These endpoints deliberately sit beside the Phase 2 port, not on top of
 //! it: the port keeps its exact Leptos wire protocol (POST,
@@ -18,9 +23,11 @@
 
 use dioxus::prelude::*;
 
+#[cfg(feature = "server")]
 use crate::error::AppError;
 use crate::forms::links::LinksForm;
 use crate::models::auth::User;
+#[cfg(feature = "server")]
 use crate::models::record_label::RecordLabel;
 use crate::routes::artist::ArtistResult;
 use crate::routes::links::LinksResult;
@@ -29,13 +36,16 @@ use crate::routes::page::PageResult;
 use crate::routes::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
 use crate::routes::release::{ReleaseResult, ReleasesResult};
 use crate::routes::track::TrackResult;
+// Server-only: the service calls live in the server halves of the fns
+// below (the fullstack macros cfg them out of client builds).
+#[cfg(feature = "server")]
 use crate::services;
 
 /// Maps a service-layer [`AppError`] onto a dioxus `HttpError` with the
 /// status from [`AppError::status`], keeping the message user-presentable.
-/// The `HttpError` constructors return a ready `Result<T, HttpError>`, so
-/// service fns end with `match result { Ok(value) => Ok(value), Err(e) =>
-/// to_http_error(&e) }`.
+/// The `HttpError` constructors return a ready `Result`, so a service fn
+/// ends by matching the service result and handing its error here.
+#[cfg(feature = "server")]
 fn to_http_error<T>(error: &AppError) -> core::result::Result<T, HttpError> {
     let message = error.to_string();
     match error.status() {
@@ -49,6 +59,7 @@ fn to_http_error<T>(error: &AppError) -> core::result::Result<T, HttpError> {
 
 /// Whether hidden (unpublished or deleted) content is listed — the same
 /// `label_owner` check the Phase 2 handlers and Leptos routes use.
+#[cfg(feature = "server")]
 fn show_hidden(current_user: Option<&User>) -> bool {
     current_user.is_some_and(|user| user.permissions.contains("label_owner"))
 }
@@ -106,7 +117,7 @@ pub async fn get_label_artists() -> core::result::Result<LabelArtistResult, Http
 ///
 /// # Errors
 /// 404 when the slug matches no artist, 500 on database failure.
-#[get("/api/get_artist", db: crate::server::current_user::Db)]
+#[get("/api/get_artist?slug", db: crate::server::current_user::Db)]
 pub async fn get_artist(slug: String) -> core::result::Result<ArtistResult, HttpError> {
     match services::artist::get_artist_service(&db.0, slug).await {
         Ok(result) => Ok(result),
@@ -118,7 +129,7 @@ pub async fn get_artist(slug: String) -> core::result::Result<ArtistResult, Http
 ///
 /// # Errors
 /// 404 when the slug matches no artist, 500 on database failure.
-#[get("/api/get_links", db: crate::server::current_user::Db)]
+#[get("/api/get_links?artist_slug", db: crate::server::current_user::Db)]
 pub async fn get_links(artist_slug: String) -> core::result::Result<LinksResult, HttpError> {
     match services::links::get_links_service(&db.0, artist_slug).await {
         Ok(result) => Ok(result),
@@ -151,7 +162,7 @@ pub async fn update_links(form: LinksForm) -> core::result::Result<LinksResult, 
 ///
 /// # Errors
 /// 404 when the slug matches no artist, 500 on database failure.
-#[get("/api/get_releases",
+#[get("/api/get_releases?slug",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -167,7 +178,7 @@ pub async fn get_releases(slug: String) -> core::result::Result<ReleasesResult, 
 /// # Errors
 /// 404 when the release is not visible to this viewer, 500 on database
 /// failure.
-#[get("/api/get_release",
+#[get("/api/get_release?artist_slug&release_slug",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -190,7 +201,7 @@ pub async fn get_release(
 /// 404 when any of the three slugs match nothing (the service checks
 /// artist, release and track), 401/403 when the session is missing or
 /// lacks `label_owner`, 500 on database failure.
-#[get("/api/get_track",
+#[get("/api/get_track?artist_slug&release_slug&track_slug",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -218,7 +229,7 @@ pub async fn get_track(
 ///
 /// # Errors
 /// 404 when the slug matches no visible page, 500 on database failure.
-#[get("/api/get_page",
+#[get("/api/get_page?slug",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -268,7 +279,7 @@ pub async fn get_admin_menu() -> core::result::Result<AdminMenu, HttpError> {
 ///
 /// # Errors
 /// 500 with a retry message when the label or pages cannot be loaded.
-#[get("/api/record_label_pages",
+#[get("/api/record_label_pages?record_label_id",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]

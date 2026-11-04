@@ -43,7 +43,9 @@ use dioxus::prelude::*;
 use crate::routes::menu::{AdminMenu as MenuData, MenuArtist, MenuPage, MenuRelease};
 use crate::ui::Route;
 use crate::ui::data::get_admin_menu;
+use crate::ui::page_data;
 use crate::ui::redirect;
+use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::Loading;
 
@@ -70,7 +72,7 @@ pub fn AdminRoot() -> Element {
 /// permission get the child route; everyone else gets the login page.
 #[component]
 fn AdminGateBody() -> Element {
-    let session = use_user().suspend()?;
+    let session = use_user()?;
     match session() {
         Ok(Some(user)) if user.permissions.contains("admin") => {}
         Ok(_) => {
@@ -95,8 +97,7 @@ fn AdminGateBody() -> Element {
 /// non-admins, which falls through to the skeleton below).
 #[component]
 fn AdminMenuBody() -> Element {
-    let menu = use_resource(get_admin_menu);
-    let menu = menu.suspend()?;
+    let menu = use_page(move || page_data(get_admin_menu()))?;
     let menu = match menu() {
         Ok(menu) => menu,
         Err(error) => {

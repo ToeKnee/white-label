@@ -1,8 +1,11 @@
 #!/bin/sh
-# Phase 3 runtime gate (MIGRATION.md): serve the Dioxus SSR app from the real
-# crate against the dev database, then smoke-test shell navigation with
-# Playwright (chromium) plus a few curl spot checks. Uses port 8127 so it
-# never collides with the Leptos app (3000) or other local services (8080).
+# Phase 3+ runtime gate (MIGRATION.md): serve the Dioxus SSR app from the
+# real crate against the dev database, then smoke-test shell navigation with
+# Playwright (chromium) plus a few curl spot checks. Since Phase 5 a second
+# server (8131) serves the `dx build` client bundle, and
+# `tests/dioxus_client.spec.ts` checks hydration/router takeover against it.
+# Uses ports 8127/8131 so it never collides with the Leptos app (3000) or
+# other local services (8080).
 #
 # Run from anywhere:  sh end2end/run-dioxus-gate.sh
 set -u
@@ -17,10 +20,20 @@ cargo build --offline --no-default-features --features server --bin dioxus-serve
     echo "BUILD FAILED"; tail -n 30 "$OUT/build.log"; exit 1
 }
 
+# The web client bundle (Phase 5): index.html + /wasm glue, with the
+# static public dir copied in, served by the second server below.
+dx build --platform web --bin dioxus-web --features web --no-default-features >"$OUT/client-build.log" 2>&1 || {
+    echo "CLIENT BUILD FAILED"; tail -n 30 "$OUT/client-build.log"; exit 1
+}
+DX_PUBLIC="$ROOT/target/dx/dioxus-web/debug/web/public"
+
 IP=127.0.0.1 PORT=8127 DIOXUS_PUBLIC_PATH="$ROOT/public" ./target/debug/dioxus-server >"$OUT/server.log" 2>&1 &
 SERVER=$!
-trap 'kill "$SERVER" 2>/dev/null' EXIT
+IP=127.0.0.1 PORT=8131 DIOXUS_PUBLIC_PATH="$DX_PUBLIC" ./target/debug/dioxus-server >"$OUT/server-client.log" 2>&1 &
+SERVER2=$!
+trap 'kill "$SERVER" "$SERVER2" 2>/dev/null' EXIT
 base=http://127.0.0.1:8127
+base_client=http://127.0.0.1:8131
 
 echo "== waiting for server =="
 ready=0
@@ -31,6 +44,18 @@ done
 if [ "$ready" -eq 0 ]; then
     echo "SERVER NEVER STARTED; log follows"
     tail -n 30 "$OUT/server.log"
+    exit 1
+fi
+
+echo "== waiting for the hydrated server (8131) =="
+ready_client=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+    if curl -s -o /dev/null "$base_client/" 2>/dev/null; then ready_client=1; break; fi
+    sleep 2
+done
+if [ "$ready_client" -eq 0 ]; then
+    echo "HYDRATED SERVER NEVER STARTED; log follows"
+    tail -n 30 "$OUT/server-client.log"
     exit 1
 fi
 
@@ -126,6 +151,14 @@ curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \
   --data-urlencode "password=definitely-wrong" \
   "$base/auth/login"
 
+echo "== hydrated server spot checks (8131) =="
+# The dx-generated index.html in this server's public dir makes the SSR
+# renderer inject the wasm bundle bootstrap into every page.
+curl -sS -o "$OUT/home_client.html" -w "home(hydrated) status=%{http_code}\n" "$base_client/"
+grep -c 'wasm/dioxus-web.js' "$OUT/home_client.html"
+curl -sS -o /dev/null -w "wasm glue status=%{http_code}\n" "$base_client/wasm/dioxus-web.js"
+curl -sS -o /dev/null -w "wasm binary status=%{http_code}\n" "$base_client/wasm/dioxus-web_bg.wasm"
+
 echo "== playwright navigation smoke (chromium) =="
 cd "$ROOT/end2end" || exit 1
 if [ "$admin_ok" -eq 1 ]; then
@@ -135,8 +168,17 @@ else
 fi
 status=$?
 
+echo "== playwright client hydration smoke (chromium, 8131) =="
+if [ "$admin_ok" -eq 1 ]; then
+    E2E_ADMIN_OK=1 DIOXUS_URL="$base_client" npx playwright test tests/dioxus_client.spec.ts --project=chromium --reporter=list || status=$?
+else
+    DIOXUS_URL="$base_client" npx playwright test tests/dioxus_client.spec.ts --project=chromium --reporter=list || status=$?
+fi
+
 if [ "$status" -ne 0 ]; then
     echo "== server log tail =="
     tail -n 20 "$OUT/server.log"
+    echo "== hydrated server log tail =="
+    tail -n 20 "$OUT/server-client.log"
 fi
 exit $status
