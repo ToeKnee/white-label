@@ -14,7 +14,9 @@
 //!   (Phase 4 slice 5a: see `admin::artist`)
 //! - admin releases list/forms (`Releases`/`CreateRelease`/`EditRelease`)
 //!   → done (Phase 4 slice 5b: see `admin::release`)
-//! - admin artist links/images and tracks → slice 5
+//! - admin tracks (`Tracks`/`CreateTrack`/`EditTrack`) → done
+//!   (Phase 4 slice 5c: see `admin::track`)
+//! - admin artist links/images → slice 5
 
 use dioxus::prelude::*;
 
@@ -126,33 +128,4 @@ pub fn EditArtistLinks(artist_slug: String) -> Element {
 #[component]
 pub fn EditArtistImages(artist_slug: String) -> Element {
     admin_page("Edit artist images", Some(&format!("slug: {artist_slug}")))
-}
-
-/// Placeholder tracks list.
-#[component]
-pub fn Tracks(artist_slug: String, release_slug: String) -> Element {
-    admin_page(
-        "Tracks",
-        Some(&format!("artist: {artist_slug}, release: {release_slug}")),
-    )
-}
-
-/// Placeholder track creation form.
-#[component]
-pub fn CreateTrack(artist_slug: String, release_slug: String) -> Element {
-    admin_page(
-        "Create track",
-        Some(&format!("artist: {artist_slug}, release: {release_slug}")),
-    )
-}
-
-/// Placeholder track editor.
-#[component]
-pub fn EditTrack(artist_slug: String, release_slug: String, track_slug: String) -> Element {
-    admin_page(
-        "Edit track",
-        Some(&format!(
-            "artist: {artist_slug}, release: {release_slug}, track: {track_slug}"
-        )),
-    )
 }

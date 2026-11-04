@@ -43,6 +43,7 @@ use crate::error::AppError;
 use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
 use crate::forms::page::{CreatePageForm, UpdatePageForm};
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
+use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
 use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::server::current_user::{
     CurrentUser, Db, login as record_login, logout as record_logout, remember_session,
@@ -81,6 +82,10 @@ pub fn form_routes() -> Router {
         .route("/admin/forms/release/update", post(update_release))
         .route("/admin/forms/release/delete", post(delete_release))
         .route("/admin/forms/release/restore", post(restore_release))
+        .route("/admin/forms/track", post(create_track))
+        .route("/admin/forms/track/update", post(update_track))
+        .route("/admin/forms/track/delete", post(delete_track))
+        .route("/admin/forms/track/restore", post(restore_track))
 }
 
 /// Fields of the login form. Every field defaults so a missing one is a
@@ -899,6 +904,240 @@ async fn restore_release(
     }
 }
 
+/// Fields of the track create form (flat names, minus `artist_ids`;
+/// `split_form_pairs` handles that checkbox group as for releases).
+#[derive(Debug, Default, serde::Deserialize)]
+struct TrackCreateFields {
+    /// The release the page URL addresses (hidden field + redirect target).
+    #[serde(default)]
+    release_id: String,
+    #[serde(default)]
+    artist_slug: String,
+    #[serde(default)]
+    release_slug: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    lyrics: String,
+    #[serde(default)]
+    primary_artist_id: String,
+    #[serde(default)]
+    isrc_code: String,
+    #[serde(default)]
+    bpm: String,
+    #[serde(default)]
+    track_number: String,
+    #[serde(default)]
+    published_at: String,
+    #[serde(default)]
+    local_published_at: String,
+}
+
+/// Fields of the track update form: the create fields plus the addressed
+/// slug.
+#[derive(Debug, Default, serde::Deserialize)]
+struct TrackUpdateFields {
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    release_id: String,
+    #[serde(default)]
+    artist_slug: String,
+    #[serde(default)]
+    release_slug: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    lyrics: String,
+    #[serde(default)]
+    primary_artist_id: String,
+    #[serde(default)]
+    isrc_code: String,
+    #[serde(default)]
+    bpm: String,
+    #[serde(default)]
+    track_number: String,
+    #[serde(default)]
+    published_at: String,
+    #[serde(default)]
+    local_published_at: String,
+}
+
+/// Track delete/restore: the track slug plus the artist and release slugs
+/// the redirect targets are built under.
+#[derive(Debug, serde::Deserialize)]
+struct TrackSlugForm {
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    artist_slug: String,
+    #[serde(default)]
+    release_slug: String,
+}
+
+/// Create a track. Success 303s to the new track's editor under the slug
+/// the server derived from the name, silently (no `?updated=1`), like the
+/// release and artist create handlers.
+async fn create_track(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
+    let args: TrackCreateFields = serde_json::from_value(rest).unwrap_or_default();
+    let form = CreateTrackForm {
+        artist_ids: artist_ids.join(","),
+        name: args.name,
+        description: args.description,
+        lyrics: args.lyrics,
+        primary_artist_id: args.primary_artist_id.parse::<i64>().unwrap_or_default(),
+        release_id: args.release_id.parse::<i64>().unwrap_or_default(),
+        // Blank stays Some(""): `tracks.isrc_code` is NOT NULL, and the
+        // validate step (Leptos parity) rejects short codes before insert.
+        isrc_code: Some(args.isrc_code),
+        bpm: args.bpm.parse::<i32>().ok(),
+        track_number: args.track_number.parse::<i32>().unwrap_or_default(),
+        published_at: parse_form_date(&args.local_published_at, &args.published_at),
+    };
+    match services::track::create_track_service(&pool, current_user.as_ref(), form).await {
+        Ok(result) => Redirect::to(&format!(
+            "/admin/artist/{}/release/{}/track/{}",
+            args.artist_slug, args.release_slug, result.track.slug
+        )),
+        Err(error) => {
+            tracing::warn!("track create form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}/release/{}/tracks/new?bad={}",
+                args.artist_slug,
+                args.release_slug,
+                track_code(&error)
+            ))
+        }
+    }
+}
+
+/// Update a track (name, description, lyrics, artists, ISRC, BPM, track
+/// number and the publish date).
+async fn update_track(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
+    let args: TrackUpdateFields = serde_json::from_value(rest).unwrap_or_default();
+    // Keep the addressed slugs for the failure redirect (the service takes
+    // the form by value).
+    let addressed_slug = args.slug.clone();
+    let addressed_artist = args.artist_slug.clone();
+    let addressed_release = args.release_slug.clone();
+    let form = UpdateTrackForm {
+        artist_ids: artist_ids.join(","),
+        slug: args.slug,
+        name: args.name,
+        description: args.description,
+        lyrics: args.lyrics,
+        primary_artist_id: args.primary_artist_id.parse::<i64>().unwrap_or_default(),
+        release_id: args.release_id.parse::<i64>().unwrap_or_default(),
+        isrc_code: Some(args.isrc_code),
+        bpm: args.bpm.parse::<i32>().ok(),
+        track_number: args.track_number.parse::<i32>().unwrap_or_default(),
+        published_at: parse_form_date(&args.local_published_at, &args.published_at),
+    };
+    match services::track::update_track_service(&pool, current_user.as_ref(), form).await {
+        // `Track::update` re-slugifies from the name; redirect to the
+        // editor's *current* slug.
+        Ok(result) => Redirect::to(&format!(
+            "/admin/artist/{}/release/{}/track/{}?updated=1",
+            addressed_artist, addressed_release, result.track.slug
+        )),
+        Err(error) => {
+            tracing::warn!("track update form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}/release/{}/track/{}?bad={}",
+                addressed_artist,
+                addressed_release,
+                addressed_slug,
+                track_code(&error)
+            ))
+        }
+    }
+}
+
+/// Soft-delete a track. The editor reloads with `?updated=1`; its
+/// refetch shows the Restore button in place of Delete.
+async fn delete_track(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<TrackSlugForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let slug = args.slug;
+    let artist_slug = args.artist_slug;
+    let release_slug = args.release_slug;
+    match services::track::delete_track_service(&pool, current_user.as_ref(), slug.clone()).await {
+        Ok(result) => Redirect::to(&format!(
+            "/admin/artist/{}/release/{}/track/{}?updated=1",
+            artist_slug, release_slug, result.track.slug
+        )),
+        Err(error) => {
+            tracing::warn!("track delete form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}/release/{}/track/{}?bad={}",
+                artist_slug,
+                release_slug,
+                slug,
+                track_code(&error)
+            ))
+        }
+    }
+}
+
+/// Restore a soft-deleted track.
+async fn restore_track(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<TrackSlugForm>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let slug = args.slug;
+    let artist_slug = args.artist_slug;
+    let release_slug = args.release_slug;
+    match services::track::restore_track_service(&pool, current_user.as_ref(), slug.clone()).await {
+        Ok(result) => Redirect::to(&format!(
+            "/admin/artist/{}/release/{}/track/{}?updated=1",
+            artist_slug, release_slug, result.track.slug
+        )),
+        Err(error) => {
+            tracing::warn!("track restore form rejected: {error}");
+            Redirect::to(&format!(
+                "/admin/artist/{}/release/{}/track/{}?bad={}",
+                artist_slug,
+                release_slug,
+                slug,
+                track_code(&error)
+            ))
+        }
+    }
+}
+
 /// Resolve a `DateField` submission: a submitted `datetime-local` value
 /// wins (interpreted as UTC — the browser's zone is not applied; see
 /// `ui::admin::pages`), else the hidden full-date field, else no date.
@@ -981,11 +1220,36 @@ fn release_code(error: &AppError) -> &'static str {
     }
 }
 
+/// The track services also require both `admin` and `label_owner`; the
+/// extra codes come from `Track::validate` (fixed model messages; the
+/// track-number collision message embeds ids, so it is matched on its
+/// stable middle).
+fn track_code(error: &AppError) -> &'static str {
+    match error {
+        AppError::Forbidden(_) => "forbidden",
+        AppError::Internal(message) if message.contains("Name is required.") => "name_required",
+        AppError::Internal(message) if message.contains("Name must be less than") => "name_length",
+        AppError::Internal(message) if message.contains("Slug must be unique") => "slug_taken",
+        AppError::Internal(message) if message.contains("Artist with id") => "no_artist",
+        AppError::Internal(message) if message.contains("Could not find release with id") => {
+            "no_release"
+        }
+        AppError::Internal(message) if message.contains("ISRC code must be 12") => "isrc_length",
+        AppError::Internal(message) if message.contains("ISRC code must be unique") => "isrc_taken",
+        AppError::Internal(message) if message.contains("must be unique for release") => {
+            "track_number_taken"
+        }
+        _ => "server",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
 
-    use super::{label_code, page_code, parse_form_date, release_code, split_form_pairs};
+    use super::{
+        label_code, page_code, parse_form_date, release_code, split_form_pairs, track_code,
+    };
     use crate::error::AppError;
 
     #[test]
@@ -1023,6 +1287,46 @@ mod tests {
         let parsed =
             parse_form_date("2026-03-01T09:30", "2020-01-01T00:00:00+00:00").expect("date");
         assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 3, 1, 9, 30, 0).unwrap());
+    }
+
+    #[test]
+    fn track_codes_map_the_known_failures() {
+        assert_eq!(track_code(&AppError::Forbidden("no".into())), "forbidden");
+        assert_eq!(
+            track_code(&AppError::Internal("Name is required.".into())),
+            "name_required"
+        );
+        assert_eq!(
+            track_code(&AppError::Internal(
+                "Could not find release with id 3.".into()
+            )),
+            "no_release"
+        );
+        assert_eq!(
+            track_code(&AppError::Internal(
+                "ISRC code must be 12 characters.".into()
+            )),
+            "isrc_length"
+        );
+        assert_eq!(
+            track_code(&AppError::Internal("ISRC code must be unique.".into())),
+            "isrc_taken"
+        );
+        // The collision message embeds the track and release ids.
+        assert_eq!(
+            track_code(&AppError::Internal(
+                "Track number 3 must be unique for release with id 7.".into()
+            )),
+            "track_number_taken"
+        );
+        assert_eq!(
+            track_code(&AppError::Internal(
+                "Artist with id 9 does not exist.".into()
+            )),
+            "no_artist"
+        );
+        // Unknown and not-found failures get the generic code.
+        assert_eq!(track_code(&AppError::NotFound("gone".into())), "server");
     }
 
     #[test]

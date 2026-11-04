@@ -27,6 +27,7 @@ use crate::routes::menu::AdminMenu;
 use crate::routes::page::PageResult;
 use crate::routes::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
 use crate::routes::release::{ReleaseResult, ReleasesResult};
+use crate::routes::track::TrackResult;
 use crate::services;
 
 /// Maps a service-layer [`AppError`] onto a dioxus `HttpError` with the
@@ -154,6 +155,36 @@ pub async fn get_release(
 ) -> core::result::Result<ReleaseResult, HttpError> {
     match services::release::get_release_service(&db.0, user.0.as_ref(), artist_slug, release_slug)
         .await
+    {
+        Ok(result) => Ok(result),
+        Err(error) => to_http_error(&error),
+    }
+}
+
+/// One track within a release (the track editor's data; the track list
+/// reuses [`get_release`], whose result already carries the tracks).
+///
+/// # Errors
+/// 404 when any of the three slugs match nothing (the service checks
+/// artist, release and track), 401/403 when the session is missing or
+/// lacks `label_owner`, 500 on database failure.
+#[get("/api/get_track",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn get_track(
+    artist_slug: String,
+    release_slug: String,
+    track_slug: String,
+) -> core::result::Result<TrackResult, HttpError> {
+    match services::track::get_track_service(
+        &db.0,
+        user.0.as_ref(),
+        artist_slug,
+        release_slug,
+        track_slug,
+    )
+    .await
     {
         Ok(result) => Ok(result),
         Err(error) => to_http_error(&error),

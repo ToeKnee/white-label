@@ -267,6 +267,9 @@ mod tests {
             "/admin/artist/jimi/releases",
             "/admin/artist/jimi/releases/new",
             "/admin/artist/jimi/release/axis",
+            "/admin/artist/jimi/release/axis/tracks",
+            "/admin/artist/jimi/release/axis/tracks/new",
+            "/admin/artist/jimi/release/axis/track/castles",
         ];
         for path in routes {
             let response = server.get(path).await;
@@ -992,6 +995,10 @@ mod tests {
             "/admin/forms/release/update",
             "/admin/forms/release/delete",
             "/admin/forms/release/restore",
+            "/admin/forms/track",
+            "/admin/forms/track/update",
+            "/admin/forms/track/delete",
+            "/admin/forms/track/restore",
         ];
         for path in paths {
             let response = post_form(&server, path, &[]).await;
@@ -1774,6 +1781,402 @@ mod tests {
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
+    async fn track_editor_flows_for_a_label_owner(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        let release = create_test_release(&pool, 1, Some(artist))
+            .await
+            .expect("release fixture");
+        let release_id = release.id.to_string();
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        // The release editor's tracks sidebar (slice 5c) renders from the
+        // editor's own release fetch; a release without tracks gets the
+        // empty-state row plus the Add link.
+        let editor = server
+            .get("/admin/artist/test-artist-1/release/test-release-1")
+            .await;
+        assert_shell(
+            &editor,
+            &[
+                "Test Release 1 - Test Artist 1",
+                "No tracks found.",
+                // Link renders a trailing `?` for routes with optional
+                // query segments (EditTrack-style routes).
+                "href=\"/admin/artist/test-artist-1/release/test-release-1/tracks/new?\"",
+            ],
+        );
+
+        // The dedicated tracks page renders the same empty state (it reuses
+        // the release fetch rather than a separate tracks query).
+        let tracks = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/tracks")
+            .await;
+        assert_shell(&tracks, &["No tracks found."]);
+
+        // The create page seeds the addressed release's id as a hidden
+        // field and posts to the track create handler.
+        let create_page = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/tracks/new")
+            .await;
+        assert_shell(
+            &create_page,
+            &[
+                "New Track",
+                "action=\"/admin/forms/track\"",
+                "name=\"release_id\"",
+            ],
+        );
+
+        // Create 303s silently to the new track's editor under the slug the
+        // server derived from the name (parity with the Leptos action).
+        let created = post_form_pairs(
+            &server,
+            "/admin/forms/track",
+            &[
+                ("release_id", release_id.as_str()),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", "Test Song"),
+                ("description", "Verse one."),
+                ("lyrics", "# Verse one"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("isrc_code", "USRC17607839"),
+                ("bpm", "120"),
+                ("track_number", "1"),
+                ("local_published_at", "2026-01-01T00:00"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&created),
+            "/admin/artist/test-artist-1/release/test-release-1/track/test-song"
+        );
+
+        // The editor loads the new row (track-release-artist header, update
+        // action, ISRC and bpm values, and Delete since the row is live).
+        let editor = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/track/test-song")
+            .await;
+        assert_shell(
+            &editor,
+            &[
+                "Test Song - Test Release 1 - Test Artist 1",
+                "action=\"/admin/forms/track/update\"",
+                "value=\"USRC17607839\"",
+                "value=\"120\"",
+                "btn btn-error",
+            ],
+        );
+
+        // The release editor's sidebar now carries the new row link.
+        let release_editor = server
+            .get("/admin/artist/test-artist-1/release/test-release-1")
+            .await;
+        assert_shell(
+            &release_editor,
+            &["href=\"/admin/artist/test-artist-1/release/test-release-1/track/test-song?\""],
+        );
+
+        // Rename re-slugifies: the 303 lands on the *new* track slug with
+        // `updated=1`, and the browser then sees the success alert there.
+        let renamed = post_form_pairs(
+            &server,
+            "/admin/forms/track/update",
+            &[
+                ("release_id", release_id.as_str()),
+                ("slug", "test-song"),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", "Renamed Song"),
+                ("description", "Verse one."),
+                ("lyrics", "# Verse one"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("isrc_code", "USRC17607839"),
+                ("bpm", "120"),
+                ("track_number", "1"),
+                ("local_published_at", "2026-01-01T00:00"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&renamed),
+            "/admin/artist/test-artist-1/release/test-release-1/track/renamed-song?updated=1"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/track/renamed-song?updated=1")
+            .await
+            .text();
+        assert!(
+            body.contains("Renamed Song Updated!"),
+            "the editor should show the success alert:\n{body}"
+        );
+
+        // Soft delete swaps Delete for Restore on reload (`label_owner`
+        // sessions see soft-deleted rows through the service's visibility
+        // check, so the editor keeps working for Restore); restore swaps it
+        // back.
+        let deleted = post_form(
+            &server,
+            "/admin/forms/track/delete",
+            &[
+                ("slug", "renamed-song"),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&deleted),
+            "/admin/artist/test-artist-1/release/test-release-1/track/renamed-song?updated=1"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/track/renamed-song?updated=1")
+            .await
+            .text();
+        assert!(
+            body.contains("btn btn-secondary"),
+            "the deleted track should offer Restore:\n{body}"
+        );
+        assert!(
+            !body.contains("btn btn-error"),
+            "no Delete button while soft-deleted:\n{body}"
+        );
+
+        let restored = post_form(
+            &server,
+            "/admin/forms/track/restore",
+            &[
+                ("slug", "renamed-song"),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&restored),
+            "/admin/artist/test-artist-1/release/test-release-1/track/renamed-song?updated=1"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/track/renamed-song?updated=1")
+            .await
+            .text();
+        assert!(
+            body.contains("btn btn-error"),
+            "the restored row offers Delete again:\n{body}"
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn track_form_failures_carry_fixed_codes(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        create_test_user_with_permissions(&pool, 2, vec!["label_owner"])
+            .await
+            .expect("label_owner-only user");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        let release = create_test_release(&pool, 1, Some(artist))
+            .await
+            .expect("release fixture");
+        let release_id = release.id.to_string();
+
+        let server = api_server(pool).await;
+        login_as(&server, 1).await;
+
+        // An empty name steers back to the create page with the fixed code.
+        let response = post_form_pairs(
+            &server,
+            "/admin/forms/track",
+            &[
+                ("release_id", release_id.as_str()),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", ""),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/release/test-release-1/tracks/new?bad=name_required"
+        );
+        let body = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/tracks/new?bad=name_required")
+            .await
+            .text();
+        assert!(
+            body.contains("Name is required."),
+            "the create page should show the fixed alert:\n{body}"
+        );
+
+        // An ISRC that is present but not 12 characters gets its own code.
+        let response = post_form_pairs(
+            &server,
+            "/admin/forms/track",
+            &[
+                ("release_id", release_id.as_str()),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", "Short ISRC"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("isrc_code", "ABC"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/release/test-release-1/tracks/new?bad=isrc_length"
+        );
+
+        // A blank ISRC (the form always submits the field) fails the same
+        // length check instead of hitting the NOT NULL column.
+        let response = post_form_pairs(
+            &server,
+            "/admin/forms/track",
+            &[
+                ("release_id", release_id.as_str()),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", "Blank ISRC"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("isrc_code", ""),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/release/test-release-1/tracks/new?bad=isrc_length"
+        );
+
+        // The first use of an ISRC is accepted (silent create redirect).
+        let first = post_form_pairs(
+            &server,
+            "/admin/forms/track",
+            &[
+                ("release_id", release_id.as_str()),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", "First ISRC Song"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("isrc_code", "USRC17607839"),
+                ("track_number", "8"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&first),
+            "/admin/artist/test-artist-1/release/test-release-1/track/first-isrc-song"
+        );
+
+        // Reusing the ISRC on another track fails with the uniqueness code.
+        let dupe = post_form_pairs(
+            &server,
+            "/admin/forms/track",
+            &[
+                ("release_id", release_id.as_str()),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", "Second ISRC Song"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("isrc_code", "USRC17607839"),
+                ("track_number", "9"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&dupe),
+            "/admin/artist/test-artist-1/release/test-release-1/tracks/new?bad=isrc_taken"
+        );
+
+        // Track numbers must be unique within the release.
+        let number_dupe = post_form_pairs(
+            &server,
+            "/admin/forms/track",
+            &[
+                ("release_id", release_id.as_str()),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", "Number Collision"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+                ("isrc_code", "QYZZ18111111"),
+                ("track_number", "8"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&number_dupe),
+            "/admin/artist/test-artist-1/release/test-release-1/tracks/new?bad=track_number_taken"
+        );
+
+        // An unknown slug on delete gets the generic code; only the
+        // Location is asserted (the editor at that slug redirects back to
+        // the tracks list rather than rendering a form).
+        let response = post_form(
+            &server,
+            "/admin/forms/track/delete",
+            &[
+                ("slug", "no-such-track"),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/release/test-release-1/track/no-such-track?bad=server"
+        );
+
+        // The track services require admin *and* label_owner: an owner
+        // without admin gets the form served, then the service forbids the
+        // submit.
+        login_as(&server, 2).await;
+        let response = post_form_pairs(
+            &server,
+            "/admin/forms/track",
+            &[
+                ("release_id", release_id.as_str()),
+                ("artist_slug", "test-artist-1"),
+                ("release_slug", "test-release-1"),
+                ("name", "Owner Without Admin"),
+                ("artist_ids", "1"),
+                ("primary_artist_id", "1"),
+            ],
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/release/test-release-1/tracks/new?bad=forbidden"
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
     async fn nested_admin_layouts_render_outside_in(pool: PgPool) {
         // Slice 5a made the profile editor real, so this check now runs with
         // an admin + label_owner session and a seeded artist (the tab layout
@@ -1837,21 +2240,32 @@ mod tests {
         let artist = create_test_artist(&pool, 1, Some(label))
             .await
             .expect("artist fixture");
-        create_test_release(&pool, 1, Some(artist))
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
             .await
             .expect("release fixture");
+        create_test_track(&pool, 1, Some(release), Some(artist))
+            .await
+            .expect("track fixture");
         let server = api_server(pool).await;
         login_as(&server, 1).await;
 
-        // Track editors are still placeholders until slice 5c, so the deep
-        // URL can address slugs that were never seeded.
+        // Slice 5c made the track editor real: it loads the seeded row all
+        // the way down the artist/release/track path.
         let deep = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/track/test-track-1")
+            .await;
+        assert_shell(&deep, &["Test Track 1 - Test Release 1 - Test Artist 1"]);
+
+        // With the editors real, a URL addressing slugs that were never
+        // seeded renders the NotFound page (the editor's failed fetch
+        // redirects there in place of the form).
+        let ghost = server
             .get("/admin/artist/jimi/release/axis/track/castles")
             .await;
-        assert_shell(&deep, &["Edit track", "track: castles"]);
+        assert_shell(&ghost, &["Oh No..."]);
 
-        // Slice 5b made the release editor real: it loads the seeded row
-        // and keeps the placeholder Tracks sidebar alongside it.
+        // The release editor now carries the real tracks sidebar, with a
+        // row linking the seeded track.
         let release_editor = server
             .get("/admin/artist/test-artist-1/release/test-release-1")
             .await;
@@ -1859,7 +2273,7 @@ mod tests {
             &release_editor,
             &[
                 "Test Release 1 - Test Artist 1",
-                "artist: test-artist-1, release: test-release-1",
+                "href=\"/admin/artist/test-artist-1/release/test-release-1/track/test-track-1?\"",
             ],
         );
 

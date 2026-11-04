@@ -13,9 +13,9 @@ import { expect, test } from "@playwright/test";
  * own register handler (idempotent across runs); admin tests need an
  * `e2e-admin` account seeded with the admin/label_owner permissions
  * out-of-band and are skipped unless the gate reports `E2E_ADMIN_OK`.
- * The track editor and the artist links/images tabs are still placeholders
- * until the rest of slice 5, so those checks cover the chrome, route
- * resolution and Link hrefs only.
+ * The artist links/images tabs are still placeholders until the rest of
+ * slice 5 (links) and Phase 5 (images), so those checks cover the chrome,
+ * route resolution and Link hrefs only.
  * There is no wasm bundle yet, so clicks are full page loads (hydration smoke
  * coverage comes once the client targets land, Phases 4-7).
  */
@@ -318,8 +318,7 @@ test("release create, rename, delete and restore round-trip", async ({ page }) =
   // addressed artist; leave both defaults.
   await page.getByRole("button", { name: "Create" }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/artist/e2e-tabs/release/e2e-release-${stamp}$`));
-  // The editor page has two h1s while the Tracks sidebar is still a
-  // placeholder, so the heading is pinned by name.
+  // Pin the heading by name (robust against extra headings on the page).
   await expect(page.getByRole("heading", { level: 1, name: `e2e Release ${stamp} - E2E Tabs Artist` })).toBeVisible();
 
   // Update with a rename: `update` re-slugifies, and the 303 lands on the
@@ -338,6 +337,71 @@ test("release create, rename, delete and restore round-trip", async ({ page }) =
   await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
 
   // Leave the fixture soft-deleted so reruns don't pile up live releases.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+});
+
+test("track create, rename, delete and restore round-trip", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // Create a fresh release first (the track pages are addressed through one).
+  const stamp = Date.now();
+  await page.goto(`${base}/admin/artist/e2e-tabs/releases`);
+  await page.getByRole("link", { name: "Add" }).click();
+  await expect(h1(page)).toHaveText("New Release");
+  await page.fill('input[name="name"]', `e2e Track Release ${stamp}`);
+  await page.fill('input[name="catalogue_number"]', `E2E-TRK-CAT-${stamp}`);
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/artist/e2e-tabs/release/e2e-track-release-${stamp}$`));
+
+  // The release editor's Tracks sidebar (real since slice 5c) links to the
+  // track create page through its Add button.
+  await page.getByRole("link", { name: "Add" }).click();
+  // (Links to routes with optional query segments render a trailing `?`.)
+  await expect(page).toHaveURL(new RegExp(`/admin/artist/e2e-tabs/release/e2e-track-release-${stamp}/tracks/new\\??$`));
+  await expect(h1(page)).toHaveText("New Track");
+  await page.fill('input[name="name"]', `e2e Track ${stamp}`);
+  await page.fill('input[name="track_number"]', "1");
+  // ISRC must be 12 characters and is unique across reruns; bpm is
+  // optional. The artist pickers start on the addressed artist.
+  await page.fill('input[name="isrc_code"]', `E2EX26${String(stamp).slice(-6)}`);
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/admin/artist/e2e-tabs/release/e2e-track-release-${stamp}/track/e2e-track-${stamp}$`),
+  );
+  // The editor header is "Track - Release - Artist".
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: `e2e Track ${stamp} - e2e Track Release ${stamp} - E2E Tabs Artist`,
+    }),
+  ).toBeVisible();
+
+  // Update with a rename: `update` re-slugifies, and the 303 lands on the
+  // new slug carrying ?updated=1 plus the success alert.
+  await page.fill('input[name="name"]', `e2e Renamed Track ${stamp}`);
+  await page.getByRole("button", { name: "Update" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/admin/artist/e2e-tabs/release/e2e-track-release-${stamp}/track/e2e-renamed-track-${stamp}\\?updated=1$`,
+    ),
+  );
+  await expect(page.getByText(`e2e Renamed Track ${stamp} Updated!`)).toBeVisible();
+
+  // Delete/Restore use the JS-free form-association buttons; the reload
+  // swaps Delete for Restore on the row.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+
+  // Leave both fixtures soft-deleted so reruns don't pile up live rows.
+  await page.goto(`${base}/admin/artist/e2e-tabs/release/e2e-track-release-${stamp}`);
   await page.getByRole("button", { name: "Delete" }).click();
   await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
 });

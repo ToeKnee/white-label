@@ -17,8 +17,10 @@
 //!   artist stays a `<select>`.
 //! - The image upload block (`FileUploadWithProgress`) stays deferred to
 //!   Phase 5, as in the artist editors.
-//! - The list's "Tracks" column keeps the original's static `0`; real
-//!   counts arrive with the track editors (slice 5c).
+//! - The list's "Tracks" column keeps the original's static `0` (the list
+//!   service carries no track counts), and the editor's sidebar renders the
+//!   real track list from the same `get_release` fetch instead of Leptos'
+//!   second `get_tracks` request.
 //!
 //! The page gate is the `label_owner` permission; the release services also
 //! require `admin` (a `label_owner` without it gets the `forbidden` alert
@@ -28,14 +30,15 @@ use dioxus::prelude::*;
 
 use crate::models::artist::Artist;
 use crate::models::release::Release;
+use crate::models::track::Track;
 use crate::ui::data::{get_artist, get_label_artists, get_release, get_releases};
-use crate::ui::placeholders::Tracks;
 use crate::ui::use_label;
 use crate::ui::use_user;
 use crate::ui::utils::{ErrorPage, InlineError, Loading, StatusBadge, Success, permission_allows};
 use crate::ui::{Route, redirect};
 
 use super::pages::{DateField, MarkdownField};
+use super::track::TrackList;
 
 /// The list of an artist's releases (Leptos `release/list.rs`).
 #[component]
@@ -321,22 +324,13 @@ pub fn EditRelease(
     bad: Option<String>,
 ) -> Element {
     rsx! {
-        div { class: "flex gap-6 justify-around w-full",
-            div { class: "w-2/3",
-                SuspenseBoundary {
-                    fallback: |_context: SuspenseContext| rsx! { Loading {} },
-                    EditReleaseBody {
-                        artist_slug: artist_slug.clone(),
-                        release_slug: release_slug.clone(),
-                        updated,
-                        bad,
-                    }
-                }
-            }
-            div { class: "w-1/3",
-                // The track list under the editor; still a placeholder
-                // until the track editors land (slice 5c).
-                Tracks { artist_slug, release_slug }
+        SuspenseBoundary {
+            fallback: |_context: SuspenseContext| rsx! { Loading {} },
+            EditReleaseBody {
+                artist_slug,
+                release_slug,
+                updated,
+                bad,
             }
         }
     }
@@ -396,13 +390,22 @@ fn EditReleaseBody(
         }
     };
     let release = result.release;
+    // The sidebar track list shares this fetch (Leptos made a second
+    // `get_tracks` request for it).
+    let sidebar_tracks = result
+        .tracks
+        .iter()
+        .map(|track_with_artists| track_with_artists.track.clone())
+        .collect::<Vec<Track>>();
     let selected_ids = result.artists.iter().map(|a| a.id).collect::<Vec<i64>>();
     let primary_artist_id = release.primary_artist_id;
     let current_slug = release.slug.clone();
 
     rsx! {
-        document::Title { "{release.name} - {artist.name}" }
-        h1 { "{release.name} - {artist.name}" }
+        div { class: "flex gap-6 justify-around w-full",
+            div { class: "w-2/3",
+                document::Title { "{release.name} - {artist.name}" }
+                h1 { "{release.name} - {artist.name}" }
         Success {
             message: format!("{} Updated!", release.name),
             show: updated.is_some(),
@@ -481,6 +484,17 @@ fn EditReleaseBody(
         RestoreForm {
             slug: current_slug.clone(),
             artist_slug: artist_slug.clone(),
+        }
+            }
+            div { class: "w-1/3",
+                // Slice 5c: the sidebar is the real track list now, fed by
+                // the same fetch as the form.
+                TrackList {
+                    artist_slug: artist_slug.clone(),
+                    release_slug,
+                    tracks: sidebar_tracks,
+                }
+            }
         }
     }
 }

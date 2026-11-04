@@ -15,15 +15,13 @@
 use dioxus::prelude::*;
 
 use super::admin::{
-    AdminRoot, CreateArtist, CreatePage, CreateRelease, Dashboard, EditArtist, EditLabel, EditPage,
-    EditRelease, Releases,
+    AdminRoot, CreateArtist, CreatePage, CreateRelease, CreateTrack, Dashboard, EditArtist,
+    EditLabel, EditPage, EditRelease, EditTrack, Releases, Tracks,
 };
 use super::artist::{ArtistPage, ArtistsPage};
 use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
 use super::page::PageDetails;
-use super::placeholders::{
-    AdminArtistRoot, CreateTrack, EditArtistImages, EditArtistLinks, EditTrack, Tracks,
-};
+use super::placeholders::{AdminArtistRoot, EditArtistImages, EditArtistLinks};
 use super::record_label::RecordLabelHome;
 use super::release::ReleasePage;
 use super::shell::AppShell;
@@ -195,16 +193,20 @@ pub enum Route {
         /// The release slug.
         release_slug: String,
     },
-    /// Create a track on a release.
-    #[route("/release/:release_slug/tracks/new")]
+    /// Create a track on a release. `bad` carries a fixed code from a
+    /// failed create (the form posts to `/admin/forms/track`).
+    #[route("/release/:release_slug/tracks/new?:bad")]
     CreateTrack {
         /// The artist slug.
         artist_slug: String,
         /// The release slug.
         release_slug: String,
+        /// Error code from a failed create.
+        bad: Option<String>,
     },
-    /// Edit a track.
-    #[route("/release/:release_slug/track/:track_slug")]
+    /// Edit a track. `updated`/`bad` carry the track form's codes (posts to
+    /// `/admin/forms/track/*`; see `crate::server::forms`).
+    #[route("/release/:release_slug/track/:track_slug?:updated&:bad")]
     EditTrack {
         /// The artist slug.
         artist_slug: String,
@@ -212,6 +214,10 @@ pub enum Route {
         release_slug: String,
         /// The track slug.
         track_slug: String,
+        /// Set when the track has just been saved/deleted/restored.
+        updated: Option<String>,
+        /// Error code from a failed save/delete/restore.
+        bad: Option<String>,
     },
     #[end_layout]
     #[end_nest]
@@ -417,6 +423,7 @@ mod tests {
             Route::CreateTrack {
                 artist_slug: "jimi".into(),
                 release_slug: "axis".into(),
+                bad: None,
             }
         );
         assert_eq!(
@@ -425,6 +432,8 @@ mod tests {
                 artist_slug: "jimi".into(),
                 release_slug: "axis".into(),
                 track_slug: "castles".into(),
+                updated: None,
+                bad: None,
             }
         );
         assert_eq!(parse("/admin/page"), Route::CreatePage { bad: None });
@@ -448,8 +457,7 @@ mod tests {
                 bad: Some("name_required".into())
             }
         );
-        // The nest base carries the slug, the child route the codes: both
-        // the canonical trailing-slash form and the short form parse.
+        // Nest base carries the slug, the child the codes (both spellings parse).
         assert_eq!(
             parse("/admin/artist/jimi?updated=1"),
             Route::EditArtist {
@@ -487,6 +495,28 @@ mod tests {
             }
         );
         assert_eq!(
+            parse("/admin/page/terms-of-use?updated=1"),
+            Route::EditPage {
+                slug: "terms-of-use".into(),
+                updated: Some("1".into()),
+                bad: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/page/terms-of-use?bad=slug_taken"),
+            Route::EditPage {
+                slug: "terms-of-use".into(),
+                updated: None,
+                bad: Some("slug_taken".into()),
+            }
+        );
+    }
+
+    /// Release- and track-level routes address their parents by slug and
+    /// carry their own query codes.
+    #[test]
+    fn nested_admin_routes_carry_query_codes() {
+        assert_eq!(
             parse("/admin/artist/jimi/releases/new?bad=slug_taken"),
             Route::CreateRelease {
                 artist_slug: "jimi".into(),
@@ -512,19 +542,21 @@ mod tests {
             }
         );
         assert_eq!(
-            parse("/admin/page/terms-of-use?updated=1"),
-            Route::EditPage {
-                slug: "terms-of-use".into(),
-                updated: Some("1".into()),
-                bad: None,
+            parse("/admin/artist/jimi/release/axis/tracks/new?bad=isrc_taken"),
+            Route::CreateTrack {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                bad: Some("isrc_taken".into()),
             }
         );
         assert_eq!(
-            parse("/admin/page/terms-of-use?bad=slug_taken"),
-            Route::EditPage {
-                slug: "terms-of-use".into(),
-                updated: None,
-                bad: Some("slug_taken".into()),
+            parse("/admin/artist/jimi/release/axis/track/castles?updated=1"),
+            Route::EditTrack {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                track_slug: "castles".into(),
+                updated: Some("1".into()),
+                bad: None,
             }
         );
     }
@@ -604,10 +636,24 @@ mod tests {
                 updated: Some("1".into()),
                 bad: None,
             },
+            Route::CreateTrack {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                bad: Some("forbidden".into()),
+            },
             Route::EditTrack {
                 artist_slug: "jimi".into(),
                 release_slug: "axis".into(),
                 track_slug: "castles".into(),
+                updated: Some("1".into()),
+                bad: None,
+            },
+            Route::EditTrack {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                track_slug: "castles".into(),
+                updated: None,
+                bad: None,
             },
         ];
         for route in routes {
