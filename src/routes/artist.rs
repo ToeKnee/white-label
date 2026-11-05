@@ -3,7 +3,6 @@ use leptos::prelude::ServerFnError;
 use leptos::server;
 
 use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
-use crate::models::artist::Artist;
 
 #[cfg(feature = "ssr")]
 use crate::services::artist::{
@@ -13,12 +12,7 @@ use crate::services::artist::{
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-/// Contains the result of fetching a single artist.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct ArtistResult {
-    /// The artist being fetched.
-    pub artist: Artist,
-}
+pub use crate::api_types::artist::ArtistResult;
 
 /// Get a specific artist by its slug.
 ///

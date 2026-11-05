@@ -1,11 +1,11 @@
 //! Services for the releases routes
+use crate::api_types::release::{ReleaseResult, ReleasesResult};
 use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 use crate::models::{artist::Artist, auth::User, release::Release};
-use crate::routes::release::{ReleaseResult, ReleasesResult};
 
 /// `Release::find_by_slug` wired onto the service error ladder: a missing
 /// row is a 404 with the model's message, a database failure stays a 500.

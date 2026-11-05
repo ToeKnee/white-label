@@ -3,7 +3,6 @@ use leptos::prelude::ServerFnError;
 use leptos::server;
 
 use crate::forms::page::{CreatePageForm, UpdatePageForm};
-use crate::models::page::Page;
 
 #[cfg(feature = "ssr")]
 use crate::services::page::{
@@ -13,12 +12,7 @@ use crate::services::page::{
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-/// Contains a single Page.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct PageResult {
-    /// The page being fetched or modified.
-    pub page: Page,
-}
+pub use crate::api_types::page::PageResult;
 
 /// Get a specific page by its slug.
 ///

@@ -18,7 +18,16 @@
 // False positive on `must_use` for components
 #![allow(clippy::must_use_candidate)]
 
+/// Wire response types shared by the services, the endpoints and the UI
+/// (framework-free, so the Dioxus client builds can use them).
+pub mod api_types;
+// The Leptos UI (`app`, `components`) and its endpoints (`routes`) are only
+// built for the Leptos bundles: SSR and `hydrate`. The Dioxus UI (`ui`) is
+// the build used by `web` and `desktop`, so leaving these out keeps the wasm
+// bundle and the native binary from carrying dead Leptos components.
+#[cfg(any(feature = "ssr", feature = "hydrate"))]
 pub mod app;
+#[cfg(any(feature = "ssr", feature = "hydrate"))]
 pub mod components;
 pub mod config;
 #[cfg(feature = "ssr")]
@@ -26,6 +35,7 @@ pub mod database;
 pub mod error;
 pub mod forms;
 pub mod models;
+#[cfg(any(feature = "ssr", feature = "hydrate"))]
 pub mod routes;
 #[cfg(feature = "server")]
 pub mod server;

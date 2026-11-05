@@ -1,11 +1,11 @@
 //! Services for the tracks routes
+use crate::api_types::track::{TrackResult, TracksResult};
 use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
 use crate::models::{artist::Artist, auth::User, release::Release, track::Track};
-use crate::routes::track::{TrackResult, TracksResult};
 
 /// `Artist::find_by_slug` wired onto the service error ladder: a missing
 /// row is a 404 with the model's message, a database failure stays a 500.

@@ -1,11 +1,11 @@
 //! Services for the artist routes
+use crate::api_types::artist::ArtistResult;
 use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
 use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
 use crate::models::{artist::Artist, auth::User};
-use crate::routes::artist::ArtistResult;
 
 /// Get an artist by slug
 ///

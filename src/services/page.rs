@@ -1,11 +1,11 @@
 //! Services for the page routes
+use crate::api_types::page::PageResult;
 use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
 use crate::forms::page::{CreatePageForm, UpdatePageForm};
 use crate::models::{auth::User, page::Page};
-use crate::routes::page::PageResult;
 
 /// Get an page by slug
 ///

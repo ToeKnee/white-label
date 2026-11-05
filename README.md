@@ -55,10 +55,13 @@ The gate starts a second `dioxus-server` whose `DIOXUS_PUBLIC_PATH` is that
 `dx` output — the bundle's `index.html` is what makes the SSR renderer
 inject the wasm bootstrap into every page — so the gate runs two servers:
 8127 (SSR-only, `public/`) and 8131 (hydrated). `sh end2end/run-dioxus-web.sh`
-does the build-and-serve pair for manual work. Debug bundles are large (~39 MB)
-because the Leptos modules (`src/routes`, `src/components`) are still compiled
-unconditionally — cfg-gating them out of `web` builds is a Phase 8 cleanup
-item.
+does the build-and-serve pair for manual work. Debug bundles are still big
+(~27 MB of wasm) but no longer carry the Leptos UI: `src/app`,
+`src/components` and `src/routes` are gated to
+`any(feature = "ssr", feature = "hydrate")`, so only the Leptos site builds
+them. The rest of the weight is the non-optional `leptos*` dependencies
+themselves — `src/store` uses `reactive_stores` and `src/utils` still uses
+`leptos_router`/`ServerFnError` — which Phase 8 optionalizes or drops.
 
 There is **no `dx serve` web watch mode** for this crate (verified, 0.7.10):
 `dx serve --fullstack` builds a _native_ "server build" of the selected bin, so
@@ -211,7 +214,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 508 lib tests, includes src/server/ + src/ui/ tests
+cargo test --features server   # 509 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
 cargo test --features server -- ui::          # just the route-table + UI component tests
 ```

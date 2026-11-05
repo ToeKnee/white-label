@@ -13,11 +13,11 @@
 
 use dioxus::prelude::*;
 
+use crate::api_types::links::LinksResult;
 use crate::models::artist::Artist;
 use crate::models::music_service::MusicService;
 use crate::models::release::Release;
 use crate::models::social_media::SocialMediaService;
-use crate::routes::links::LinksResult;
 use crate::ui::Route;
 use crate::ui::assets::{bundled_asset, display_image_url};
 use crate::ui::data::{get_artist, get_label_artists, get_links, get_releases};

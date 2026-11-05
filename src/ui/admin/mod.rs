@@ -42,7 +42,7 @@ pub use track::{CreateTrack, EditTrack, TrackList, Tracks};
 
 use dioxus::prelude::*;
 
-use crate::routes::menu::{AdminMenu as MenuData, MenuArtist, MenuPage, MenuRelease};
+use crate::api_types::menu::{AdminMenu as MenuData, MenuArtist, MenuPage, MenuRelease};
 use crate::ui::Route;
 use crate::ui::data::get_admin_menu;
 use crate::ui::page_data;

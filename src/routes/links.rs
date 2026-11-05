@@ -4,21 +4,12 @@ use leptos::prelude::ServerFnError;
 use leptos::server;
 
 use crate::forms::links::LinksForm;
-use crate::models::music_service::MusicService;
-use crate::models::social_media::SocialMediaService;
 #[cfg(feature = "ssr")]
 use crate::services::links::{get_links_service, update_links_service};
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-/// Contains the result of fetching music services for an artist.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct LinksResult {
-    /// A vector of music services associated with the artist.
-    pub music_services: Vec<MusicService>,
-    /// A vector of social links associated with the artist.
-    pub social_media_services: Vec<SocialMediaService>,
-}
+pub use crate::api_types::links::LinksResult;
 
 /// Get all music services and social links for a specific artist.
 ///

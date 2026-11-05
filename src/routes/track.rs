@@ -4,7 +4,6 @@ use leptos::prelude::ServerFnError;
 use leptos::server;
 
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
-use crate::models::{artist::Artist, track::Track};
 #[cfg(feature = "ssr")]
 use crate::services::track::{
     create_track_service, delete_track_service, get_track_service, get_tracks_service,
@@ -13,21 +12,7 @@ use crate::services::track::{
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-/// Contains multiple Tracks.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct TracksResult {
-    /// A vector of tracks.
-    pub tracks: Vec<Track>,
-}
-
-/// The result of fetching a single track along with its associated artists and releases.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct TrackResult {
-    /// The track being fetched.
-    pub track: Track,
-    /// A vector of artists associated with the track.
-    pub artists: Vec<Artist>,
-}
+pub use crate::api_types::track::{TrackResult, TracksResult};
 
 /// Get all tracks for a specific artist and release.
 ///

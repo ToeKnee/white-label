@@ -1,12 +1,11 @@
 //! This service will handle the menu operations, such as fetching the menu items and their details.
+use crate::api_types::menu::{AdminMenu, MenuArtist, MenuPage, MenuRelease};
 use crate::error::AppError;
 use sqlx::PgPool;
 
 use crate::models::{
     artist::Artist, auth::User, page::Page, record_label::RecordLabel, release::Release,
 };
-#[cfg(feature = "ssr")]
-use crate::routes::menu::{AdminMenu, MenuArtist, MenuPage, MenuRelease};
 #[cfg(feature = "ssr")]
 use crate::services::authentication_helpers::user_with_permissions;
 

@@ -55,8 +55,8 @@ pub use shell::App;
 
 use dioxus::prelude::*;
 
+use crate::api_types::record_label::LabelResult;
 use crate::models::auth::User;
-use crate::routes::record_label::LabelResult;
 use crate::store::GlobalState;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 

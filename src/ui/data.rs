@@ -23,19 +23,19 @@
 
 use dioxus::prelude::*;
 
+use crate::api_types::artist::ArtistResult;
+use crate::api_types::links::LinksResult;
+use crate::api_types::menu::AdminMenu;
+use crate::api_types::page::PageResult;
+use crate::api_types::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
+use crate::api_types::release::{ReleaseResult, ReleasesResult};
+use crate::api_types::track::TrackResult;
 #[cfg(feature = "server")]
 use crate::error::AppError;
 use crate::forms::links::LinksForm;
 use crate::models::auth::User;
 #[cfg(feature = "server")]
 use crate::models::record_label::RecordLabel;
-use crate::routes::artist::ArtistResult;
-use crate::routes::links::LinksResult;
-use crate::routes::menu::AdminMenu;
-use crate::routes::page::PageResult;
-use crate::routes::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
-use crate::routes::release::{ReleaseResult, ReleasesResult};
-use crate::routes::track::TrackResult;
 // Server-only: the service calls live in the server halves of the fns
 // below (the fullstack macros cfg them out of client builds).
 #[cfg(feature = "server")]

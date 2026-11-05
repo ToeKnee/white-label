@@ -3,18 +3,12 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
 
-use crate::models::release::Release;
 #[cfg(feature = "ssr")]
 use crate::services::artists::get_releases_for_artist_service;
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-/// Contains multiple releases for an artist.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default)]
-pub struct ArtistsReleaseResult {
-    /// A vector of releases associated with the specified artist IDs.
-    pub releases: Vec<Release>,
-}
+pub use crate::api_types::artists::ArtistsReleaseResult;
 
 /// Get releases for multiple artists by their IDs.
 ///

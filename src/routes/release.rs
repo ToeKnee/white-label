@@ -5,8 +5,9 @@ use leptos::server;
 
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 #[cfg(feature = "ssr")]
+use crate::models::artist::Artist;
+#[cfg(feature = "ssr")]
 use crate::models::record_label::RecordLabel;
-use crate::models::{artist::Artist, release::Release, track_with_artists::TrackWithArtists};
 #[cfg(feature = "ssr")]
 use crate::services::release::{
     create_release_service, delete_release_service, get_next_scheduled_release_service,
@@ -15,23 +16,7 @@ use crate::services::release::{
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-/// Contains multiple Releases.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct ReleasesResult {
-    /// A vector of releases.
-    pub releases: Vec<Release>,
-}
-
-/// The result of fetching a single release along with its associated artists and tracks.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct ReleaseResult {
-    /// The release being fetched.
-    pub release: Release,
-    /// A vector of artists associated with the release.
-    pub artists: Vec<Artist>,
-    /// A vector of tracks with artists associated with the release.
-    pub tracks: Vec<TrackWithArtists>,
-}
+pub use crate::api_types::release::{ReleaseResult, ReleasesResult};
 
 /// Get all releases for a specific artist.
 ///

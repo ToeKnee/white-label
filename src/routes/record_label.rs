@@ -2,30 +2,12 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
 
-use crate::models::{artist::Artist, page::Page, record_label::RecordLabel};
+#[cfg(feature = "ssr")]
+use crate::models::record_label::RecordLabel;
 #[cfg(feature = "ssr")]
 use crate::state::{auth, pool};
 
-/// A result containing a single `RecordLabel`.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct LabelResult {
-    /// The record label being returned.
-    pub record_label: RecordLabel,
-}
-
-/// A result containing a list of artists associated with a `RecordLabel`.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct LabelArtistResult {
-    /// A vector of artists associated with the record label.
-    pub artists: Vec<Artist>,
-}
-
-/// A result containing a list of pages associated with a `RecordLabel`.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct LabelPageResult {
-    /// A vector of pages associated with the record label.
-    pub pages: Vec<Page>,
-}
+pub use crate::api_types::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
 
 /// Get the first record label in the database.
 ///

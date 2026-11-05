@@ -1,4 +1,5 @@
 //! Module for routes handling music services and social links associated with artists.
+use crate::api_types::links::LinksResult;
 use crate::error::AppError;
 use sqlx::PgPool;
 
@@ -10,7 +11,6 @@ use crate::models::{
     music_service::{MusicService, Platform},
     social_media::{SocialMedia, SocialMediaService},
 };
-use crate::routes::links::LinksResult;
 
 /// Get all music services for a specific artist.
 ///
