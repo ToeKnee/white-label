@@ -19,7 +19,13 @@
 //!   the reactive path needs the client build. The widget also renders a real
 //!   `multipart/form-data` form, so a browser with javascript off posts to
 //!   `/forms/upload` instead (`crate::server::upload_form` answers it); the two
-//!   paths share the filename rules and the `finalise_upload` tail.
+//!   paths share the filename rules, the signature check and the
+//!   `finalise_upload` tail.
+//! - The type a file claims to be is worked out from its extension when the
+//!   request's own `Content-Type` is not one of the accepted types, because a
+//!   dioxus window cannot put the file's own type in that header. Both upload
+//!   paths then check the first bytes of what arrived, so a wrong claim is only
+//!   ever a wrong guess about the message the user sees.
 //! - [`file_progress`](crate::ui::upload::file_progress) needs only a session,
 //!   not `admin` + `label_owner`: the
 //!   registry key already carries the requester's username, so the extra
@@ -36,8 +42,11 @@ use dioxus::html::FileData;
 use dioxus::prelude::*;
 
 use crate::config::upload::UploadConfiguration;
+#[cfg(feature = "server")]
+use crate::config::upload::UploadDetails;
 use crate::ui::assets::served_file_url;
 use crate::ui::utils::{InlineError, Success};
+use crate::utils::files::{accept_extensions, file_extension, image_mime_for_extension};
 
 #[cfg(feature = "server")]
 use crate::services::authentication_helpers::user_with_permissions;
@@ -48,7 +57,7 @@ use crate::services::files::upload::{UploadedFile, finalise_upload};
 #[cfg(feature = "server")]
 use crate::ui::data::to_http_error;
 #[cfg(feature = "server")]
-use crate::utils::files::valid_file_name;
+use crate::utils::files::{SIGNATURE_BYTES, first_bytes, image_mime_in_bytes, valid_file_name};
 #[cfg(feature = "server")]
 use dioxus::fullstack::Streaming;
 #[cfg(feature = "server")]
@@ -62,17 +71,24 @@ use std::io::Write as _;
 ///
 /// Success answers the name the file was stored under.
 ///
-/// The bytes stream to `<root>/tmp`, counted for the progress endpoint, and
-/// the shared `services::files::upload` tail moves them into the config's
-/// directory and updates the row — the same tail the Leptos wire endpoint
-/// uses, so storage and attachment cannot drift.
+/// The bytes stream to `<root>/tmp` with [`stream_to_tmp`], their first bytes
+/// have to match one of the configuration's image types
+/// ([`check_upload_signature`]), and only then does the shared
+/// `services::files::upload` tail move them into the config's directory and
+/// update the row — the same tail the Leptos wire endpoint uses, so storage and
+/// attachment cannot drift.
+///
+/// What the client *claims* the file is (see [`claimed_upload_type`]) is only a
+/// fast rejection before the body arrives; the bytes and the declared byte count
+/// decide what is kept.
 ///
 /// # Errors
-/// 400 for an unknown configuration or a rejected filename, 401 with no
-/// session, 403 when the configuration needs permissions the session lacks,
-/// 415 for a mime type the configuration disallows, 413 once the stream
-/// passes the size limit, 500 when the uploads root is missing or the write
-/// fails.
+/// 400 for an unknown configuration, a rejected filename or a body that is not
+/// the length the client declared, 401 with no session, 403 when the
+/// configuration needs permissions the session lacks, 415 for a claimed type the
+/// configuration disallows or bytes that are not one of its image types, 413 once
+/// the stream passes the size limit, 500 when the uploads root is missing or the
+/// write fails.
 #[post("/api/upload?file_type&slug&filename",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser,
@@ -82,7 +98,7 @@ pub async fn upload_file(
     file_type: String,
     slug: String,
     filename: String,
-    mut file_stream: FileStream,
+    file_stream: FileStream,
 ) -> core::result::Result<String, HttpError> {
     let Ok(upload_config) = file_type.parse::<UploadConfiguration>() else {
         return HttpError::bad_request("Invalid upload configuration.");
@@ -98,12 +114,16 @@ pub async fn upload_file(
         Err(error) => return to_http_error(&error),
     };
 
-    let mime_type = file_stream.content_type().unwrap_or_default();
+    let header_type = file_stream.content_type().unwrap_or_default().to_string();
+    // Read before the body is handed over to the writer.
+    let declared_size = file_stream.size();
+    let claimed_type = claimed_upload_type(&header_type, &filename, &details.mime_types);
     if !details
         .mime_types
         .iter()
-        .any(|allowed| allowed == mime_type)
+        .any(|allowed| allowed == claimed_type)
     {
+        tracing::warn!("upload {filename} claims {claimed_type}, which {file_type} does not allow");
         return HttpError::unsupported_media_type("Invalid mime type.");
     }
     // `filename` is the client's own copy (see the module docs); the
@@ -122,51 +142,49 @@ pub async fn upload_file(
 
     let tmp_path = format!("{upload_root}/tmp/{tmp_file_name}");
     tracing::info!("Uploading {tmp_file_name} to {tmp_path}");
-    let size_limit = details.size_limit;
-    let stream_result = async {
-        let mut tmp_file = std::fs::File::create(&tmp_path).map_err(|error| {
-            tracing::error!("cannot create {tmp_path}: {error}");
-            HttpError::new(
-                http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Upload write failed.",
-            )
-        })?;
-        let mut received: usize = 0;
-        while let Some(chunk) = file_stream.next().await {
-            let chunk = chunk.map_err(|error| {
-                tracing::error!("upload stream for {tmp_file_name} failed: {error}");
-                HttpError::new(http::StatusCode::BAD_REQUEST, "Upload stream error.")
-            })?;
-            if received + chunk.len() > size_limit {
-                return Err(HttpError::new(
-                    http::StatusCode::PAYLOAD_TOO_LARGE,
-                    format!(
-                        "File too large (the limit is {} MB).",
-                        size_limit / (1024 * 1024)
-                    ),
-                ));
-            }
-            tmp_file.write_all(&chunk).map_err(|error| {
-                tracing::error!("cannot write {tmp_path}: {error}");
-                HttpError::new(
-                    http::StatusCode::INTERNAL_SERVER_ERROR,
-                    "Upload write failed.",
-                )
-            })?;
-            received += chunk.len();
-            add_chunk(&filename, chunk.len(), &uploader.username).await;
-        }
-        Ok::<(), HttpError>(())
-    }
-    .await;
-
-    if let Err(error) = stream_result {
-        // Undo the partial upload, and let any progress stream end.
+    // The progress registry key this upload is watched by: the client sends the
+    // filename itself rather than relying on the `Content-Disposition` copy.
+    let progress_key = format!("{}-{filename}", uploader.username);
+    // Undoing a rejected upload is the same two steps every time: take the
+    // partial file away, and let any progress stream watching it end.
+    let undo_upload = || {
         if let Err(error) = std::fs::remove_file(&tmp_path) {
             tracing::error!("could not remove the partial upload {tmp_path}: {error}");
         }
-        FILES.remove(format!("{}-{filename}", uploader.username).as_str());
+        FILES.remove(progress_key.as_str());
+    };
+
+    let received = match stream_to_tmp(
+        file_stream,
+        &tmp_path,
+        details.size_limit,
+        &filename,
+        &uploader.username,
+    )
+    .await
+    {
+        Ok(received) => received,
+        Err(error) => {
+            undo_upload();
+            return Err(error);
+        }
+    };
+
+    if let Err(error) = check_upload_signature(&tmp_path, &filename, claimed_type, &details) {
+        undo_upload();
         return Err(error);
+    }
+
+    // A body that stops early would otherwise be stored and attached as if it
+    // were the whole file. Dioxus clients declare the length in
+    // `X-Content-Size` (a browser overwrites `Content-Length`); the window path
+    // gets the same guarantee from hyper, which enforces its `Content-Length`.
+    if let Some(declared_size) = declared_size
+        && declared_size != received as u64
+    {
+        tracing::warn!("upload {filename} sent {received} of the declared {declared_size} bytes");
+        undo_upload();
+        return HttpError::bad_request("The upload did not finish.");
     }
 
     finalise_upload(
@@ -191,8 +209,136 @@ pub async fn upload_file(
     })
 }
 
+/// The type an upload claims to be.
+///
+/// A browser puts the file's own type in `Content-Type`. A dioxus window puts
+/// one dioxus invented from a table of *web asset* types that holds no images at
+/// all (a `.png` comes back as `text/html; charset=utf-8`), so a header that is
+/// not one of the `accepted` types falls back to the type the file's extension
+/// stands for, and failing that to the header itself, so a rejection names what
+/// the client actually sent.
+///
+/// This only decides whether a body is worth streaming at all;
+/// [`check_upload_signature`] decides what the file is.
+#[cfg(feature = "server")]
+fn claimed_upload_type<'a>(content_type: &'a str, file_name: &str, accepted: &[String]) -> &'a str {
+    if accepted.iter().any(|allowed| allowed == content_type) {
+        return content_type;
+    }
+    file_extension(file_name)
+        .and_then(image_mime_for_extension)
+        .unwrap_or(content_type)
+}
+
+/// Streams the request body to `tmp_path`, counting each chunk into the progress
+/// registry and refusing to pass `size_limit`; answers how many bytes arrived.
+///
+/// # Errors
+/// 413 once the stream passes the limit, 400 when the stream itself fails, 500
+/// when the temp file cannot be created or written.
+#[cfg(feature = "server")]
+async fn stream_to_tmp(
+    mut file_stream: FileStream,
+    tmp_path: &str,
+    size_limit: usize,
+    original_file_name: &str,
+    username: &str,
+) -> core::result::Result<usize, HttpError> {
+    let mut tmp_file = std::fs::File::create(tmp_path).map_err(|error| {
+        tracing::error!("cannot create {tmp_path}: {error}");
+        HttpError::new(
+            http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Upload write failed.",
+        )
+    })?;
+    let mut received: usize = 0;
+    while let Some(chunk) = file_stream.next().await {
+        let chunk = chunk.map_err(|error| {
+            tracing::error!("upload stream for {original_file_name} failed: {error}");
+            HttpError::new(http::StatusCode::BAD_REQUEST, "Upload stream error.")
+        })?;
+        if received + chunk.len() > size_limit {
+            return Err(HttpError::new(
+                http::StatusCode::PAYLOAD_TOO_LARGE,
+                format!(
+                    "File too large (the limit is {} MB).",
+                    size_limit / (1024 * 1024)
+                ),
+            ));
+        }
+        tmp_file.write_all(&chunk).map_err(|error| {
+            tracing::error!("cannot write {tmp_path}: {error}");
+            HttpError::new(
+                http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Upload write failed.",
+            )
+        })?;
+        received += chunk.len();
+        add_chunk(original_file_name, chunk.len(), username).await;
+    }
+    Ok(received)
+}
+
+/// Checks what an uploaded file's bytes really are, before anything points at
+/// them.
+///
+/// `claimed` only reaches the log: claim and bytes disagree most often when a
+/// file was saved as one type and renamed as another, which is harmless while
+/// the bytes are an accepted type.
+///
+/// # Errors
+/// 415 when the bytes are not a recognised image, or are one the configuration
+/// does not allow; 500 when the temp file cannot be read back.
+#[cfg(feature = "server")]
+fn check_upload_signature(
+    tmp_path: &str,
+    original_file_name: &str,
+    claimed: &str,
+    details: &UploadDetails,
+) -> core::result::Result<(), HttpError> {
+    let signature = first_bytes(tmp_path, SIGNATURE_BYTES).map_err(|error| {
+        tracing::error!("cannot read back {tmp_path}: {error}");
+        HttpError::new(
+            http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Upload write failed.",
+        )
+    })?;
+    match image_mime_in_bytes(&signature) {
+        Some(actual) if actual == claimed => {}
+        Some(actual) if allowed_image_type(actual, details) => {
+            tracing::warn!("upload {original_file_name} was claimed as {claimed} but is {actual}");
+        }
+        Some(actual) => {
+            tracing::warn!(
+                "upload {original_file_name} is {actual}, which its configuration does not allow"
+            );
+            return HttpError::unsupported_media_type("That image type is not allowed here.");
+        }
+        None => {
+            tracing::warn!(
+                "upload {original_file_name} (claimed as {claimed}) is not a recognised image"
+            );
+            return HttpError::unsupported_media_type(
+                "The file is not one of the accepted image types.",
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Whether `mime_type` is one of the types the configuration accepts.
+#[cfg(feature = "server")]
+fn allowed_image_type(mime_type: &str, details: &UploadDetails) -> bool {
+    details
+        .mime_types
+        .iter()
+        .any(|allowed| allowed == mime_type)
+}
+
 /// The running byte totals of the caller's own in-flight upload, one per
-/// line, until that upload finishes (which is what closes the stream).
+/// line, until that upload finishes. The stream also ends if the upload never
+/// arrives or stalls part way through, so a client can leave it without holding
+/// a request open ([`crate::services::files::progress`] owns those waits).
 ///
 /// # Errors
 /// 401 with no session.
@@ -257,7 +403,10 @@ pub fn FileUploadWithProgress(
     on_uploaded: Option<EventHandler<String>>,
 ) -> Element {
     let details = config.get_details();
-    let accepted_types = details.mime_types.join(",");
+    // Extension tokens rather than the config's mime types: a browser accepts
+    // either, but the file dialog in a window understands only extensions, and a
+    // mime type there leaves it offering every file on disk.
+    let accepted_types = accept_extensions(&details.mime_types);
     let size_limit_mb = details.size_limit / (1024 * 1024);
     // The javascript-off form has to name the row it belongs to, and the slug
     // is moved into the action's future below, so keep a copy.
@@ -318,6 +467,9 @@ pub fn FileUploadWithProgress(
                 if let Some(file) = picked_file(&evt) {
                     uploading.set(Some(file.name()));
                     max_bytes.set(Some(file.size()));
+                    // The progress bar is fed on its own task so the body can
+                    // go up straight away (see [`watch_progress`]).
+                    spawn(watch_progress(file.name(), sent_bytes, file.size()));
                     submit.call(file);
                 }
             },
@@ -413,6 +565,7 @@ fn upload_message(code: Option<&str>) -> Option<&'static str> {
         "bad_form" => Some("The upload form was incomplete."),
         "missing_file" => Some("Choose a file to upload."),
         "bad_mime" => Some("Invalid mime type."),
+        "bad_image" => Some("The file is not one of the accepted image types."),
         "bad_file_name" => Some("Invalid file name."),
         "too_large" => Some("File too large."),
         "server" => Some("Upload failed."),
@@ -453,11 +606,10 @@ pub fn stored_file_url(config: UploadConfiguration, stored_name: &str) -> String
     ))
 }
 
-/// Runs one attempt: the progress request is established before the file
-/// body goes up, so the totals entry is registered before any chunk lands.
+/// Runs one attempt: the cheap checks first, then the file body.
 ///
-/// The two requests then run side by side. If the upload finishes before its
-/// stream closes, the stream is dropped rather than waited on.
+/// The progress bar is fed by [`watch_progress`], which the widget spawns
+/// alongside this, rather than by a second request awaited here.
 ///
 /// Everything the user needs to see travels in [`UploadOutcome`], so the
 /// action itself cannot fail (`Infallible` keeps dioxus' action signature
@@ -480,60 +632,80 @@ async fn upload_attempt(
     let size_bytes = file.size();
     let details = config.get_details();
 
-    // Cheap checks first, so an obviously doomed upload never asks for a
-    // progress stream at all.
+    // Cheap checks first, so an obviously doomed upload never sends its body.
     if size_bytes > u64::try_from(details.size_limit).unwrap_or(u64::MAX) {
         return Ok(upload_outcome(HttpError::payload_too_large(format!(
             "{filename} is larger than the {size_limit_mb} MB limit."
         ))));
     }
-    let mime_type = file.content_type().unwrap_or_default();
+    let mime_type = client_declared_mime(&file);
     if !details.mime_types.contains(&mime_type) {
         return Ok(upload_outcome(HttpError::unsupported_media_type(format!(
             "{filename} is not a supported file type."
         ))));
     }
 
-    let progress_stream = match file_progress(filename.clone()).await {
-        Ok(totals) => Some(totals),
-        Err(error) => {
-            tracing::error!("could not start the progress stream for {filename}: {error}");
-            None
-        }
-    };
-    // Two futures on one task: the file body and the totals stream are
-    // interleaved at their await points, which is how the bar moves.
-    let drain_totals = drain_progress(progress_stream, sent_bytes, filename.clone());
-
-    let upload = upload_file(config.to_string(), slug, filename, FileStream::from(file));
-    futures::pin_mut!(drain_totals, upload);
-    let result = match futures::future::select(drain_totals, upload).await {
-        // The stream closed when the upload finished: wait for its answer.
-        futures::future::Either::Left(((), upload)) => upload.await,
-        // The upload is done (a fast rejection, usually); stop listening.
-        futures::future::Either::Right((result, _totals)) => {
-            sent_bytes.set(Some(size_bytes));
-            result
-        }
-    };
-    Ok(upload_outcome(result))
+    let result = upload_file(config.to_string(), slug, filename, FileStream::from(file)).await;
+    let outcome = upload_outcome(result);
+    // The totals stream stops as soon as the file is fully up, so the last step
+    // of the bar is the upload's own answer.
+    if outcome.succeeded {
+        sent_bytes.set(Some(size_bytes));
+    }
+    Ok(outcome)
 }
 
-/// Copies the upload's running byte totals into `sent_bytes`.
+/// The type the picker says the file is, for the server's `declared_mime`.
 ///
-/// The stream ends by itself when the upload finishes (that is what drops its
-/// progress entry), and the last line of a chunk is the current total because
-/// the HTTP layer may pack several totals into one chunk.
+/// A browser answers with the file's own type. A dioxus window hands back a
+/// path, and dioxus invents a type for it from a table of *web asset* types that
+/// holds no images at all (a `.png` comes back as `text/html; charset=utf-8`),
+/// so anything that is not an image is re-derived from the file's extension.
+/// The server checks the bytes themselves, so a wrong guess here only ever
+/// costs the user a rejection.
+fn client_declared_mime(file: &FileData) -> String {
+    declared_mime_from(&file.content_type().unwrap_or_default(), &file.name())
+}
+
+/// [`client_declared_mime`] with its two inputs in hand, so the quirk it works
+/// around can be tested without a platform file object.
+fn declared_mime_from(from_platform: &str, file_name: &str) -> String {
+    if from_platform.starts_with("image/") {
+        return from_platform.to_string();
+    }
+    // With no extension to go on, the request's own type is all there is.
+    file_extension(file_name)
+        .and_then(image_mime_for_extension)
+        .unwrap_or(from_platform)
+        .to_string()
+}
+
+/// Copies one upload's running byte totals into `sent_bytes` until that stream
+/// ends.
+///
+/// This is a task of its own, spawned by the widget, for two reasons:
+/// - A stream response with no bytes in it yet does not resolve in Firefox, so
+///   awaiting it before the body goes up means the upload is never sent at all
+///   (the totals wait for the upload, the upload waits for the totals).
+/// - A request left open when the page navigates is aborted by the browser, and
+///   dioxus turns an aborted request into a panic of the whole client. This one
+///   always ends by itself: when its upload finishes, when the upload never
+///   arrives, or when it stalls (`services::files::progress` owns those waits).
+///
+/// The last line of a chunk is the current total, because the HTTP layer may
+/// pack several totals into one chunk.
 #[expect(
     clippy::future_not_send,
     reason = "takes a dioxus Signal, which is !Send by design; this future only ever runs on the component's executor"
 )]
-async fn drain_progress(
-    totals: Option<TextStream>,
-    mut sent_bytes: Signal<Option<u64>>,
-    filename: String,
-) {
-    let Some(mut totals) = totals else { return };
+async fn watch_progress(filename: String, mut sent_bytes: Signal<Option<u64>>, size_bytes: u64) {
+    let mut totals = match file_progress(filename.clone()).await {
+        Ok(totals) => totals,
+        Err(error) => {
+            tracing::error!("could not start the progress stream for {filename}: {error}");
+            return;
+        }
+    };
     while let Some(total) = totals.next().await {
         match total {
             Ok(chunk) => {
@@ -544,6 +716,11 @@ async fn drain_progress(
                 // chunk completes it.
                 if let Ok(bytes) = last_line.parse::<u64>() {
                     sent_bytes.set(Some(bytes));
+                    if bytes >= size_bytes {
+                        // The whole file is up; anything left in the stream is
+                        // repeats, and the upload's answer finishes the bar.
+                        break;
+                    }
                 }
             }
             Err(error) => {
@@ -606,8 +783,15 @@ mod tests {
         }
     }
 
-    /// One upload in the dioxus protocol: the file bytes are the entire body,
-    /// with the mime type as the content type and the name in a header.
+    /// A real png signature followed by filler: the server checks the signature
+    /// and stores the rest as it came, so tests that are not about image
+    /// contents can keep the body short.
+    const PNG_BODY: &[u8] = b"\x89PNG\r\n\x1a\npng body";
+    const JPEG_BODY: &[u8] = b"\xff\xd8\xff\xe0jpeg body";
+
+    /// One upload in the dioxus protocol, as a browser sends it: the file bytes
+    /// are the entire body, the type arrives in `Content-Type`, the length is
+    /// declared in `X-Content-Size`, and the name arrives in a header.
     fn post_file(
         server: &axum_test::TestServer,
         config: &str,
@@ -616,10 +800,39 @@ mod tests {
         content_type: &str,
         bytes: &[u8],
     ) -> axum_test::TestRequest {
-        server
-            .post(&format!(
-                "/api/upload?file_type={config}&slug={slug}&filename={filename}"
-            ))
+        upload_request(
+            server,
+            config,
+            slug,
+            filename,
+            content_type,
+            Some(bytes.len()),
+            bytes,
+        )
+    }
+
+    /// The same request with the header and the declared length under the test's
+    /// own control, since the interesting cases are the ones where they disagree
+    /// with the bytes: the window path sends a `Content-Type` dioxus invented
+    /// from the extension and declares no length (hyper enforces its
+    /// `Content-Length` instead).
+    fn upload_request(
+        server: &axum_test::TestServer,
+        config: &str,
+        slug: &str,
+        filename: &str,
+        content_type: &str,
+        declared_size: Option<usize>,
+        bytes: &[u8],
+    ) -> axum_test::TestRequest {
+        let request = server.post(&format!(
+            "/api/upload?file_type={config}&slug={slug}&filename={filename}"
+        ));
+        let request = match declared_size {
+            Some(size) => request.add_header("X-Content-Size", size.to_string()),
+            None => request,
+        };
+        request
             .content_type(content_type)
             .add_header(
                 "Content-Disposition",
@@ -669,7 +882,7 @@ mod tests {
             "test-1",
             "holiday.png",
             "image/png",
-            b"png bytes",
+            PNG_BODY,
         )
         .await;
 
@@ -684,7 +897,7 @@ mod tests {
         assert_eq!(stored_names(&avatars), vec![stored_name.clone()]);
         assert_eq!(
             std::fs::read(avatars.join(&stored_name)).expect("stored bytes"),
-            b"png bytes"
+            PNG_BODY
         );
         assert_eq!(
             stored_names(&upload_root.join("tmp")),
@@ -731,7 +944,7 @@ mod tests {
             "jimi-hendrix",
             "live.png",
             "image/png",
-            b"png bytes",
+            PNG_BODY,
         )
         .await;
 
@@ -792,9 +1005,9 @@ mod tests {
             &server,
             "Release",
             "areta-now",
-            "cover.png",
+            "cover.jpg",
             "image/jpeg",
-            b"jpeg bytes",
+            JPEG_BODY,
         )
         .await;
 
@@ -836,7 +1049,7 @@ mod tests {
             "test-1",
             "holiday.png",
             "image/png",
-            b"png bytes",
+            PNG_BODY,
         )
         .await;
 
@@ -869,6 +1082,123 @@ mod tests {
             stored_names(&upload_root.join("avatars")),
             Vec::<String>::new(),
             "a rejected upload stores nothing"
+        );
+    }
+
+    /// A `.png` name and an `image/png` claim cannot carry a text file: the
+    /// first bytes decide, and the file is gone again before anything points at
+    /// it.
+    #[sqlx::test]
+    async fn upload_rejects_bytes_that_are_not_an_image(pool: PgPool) {
+        create_test_user_with_permissions(&pool, 8, vec![])
+            .await
+            .expect("plain user");
+        let (_root, upload_root) = upload_dirs();
+        let server = api_server_with_uploads(&pool, upload_root.clone()).await;
+        post_args(&server, "/api/login", &login_args("test-8"))
+            .await
+            .assert_status_ok();
+
+        let response = post_file(
+            &server,
+            "Avatar",
+            "test-8",
+            "portrait.png",
+            "image/png",
+            b"not an image at all",
+        )
+        .await;
+
+        response.assert_status(axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE);
+        assert_eq!(
+            stored_names(&upload_root.join("avatars")),
+            Vec::<String>::new(),
+            "a file with the wrong bytes stores nothing"
+        );
+        assert_eq!(
+            stored_names(&upload_root.join("tmp")),
+            Vec::<String>::new(),
+            "the temp file is undone"
+        );
+        let user = User::get_by_username(&pool, "test-8".to_string())
+            .await
+            .expect("user after the rejected upload");
+        assert_eq!(user.avatar, None, "and the row is left alone");
+    }
+
+    /// The window build sends the type it worked out from the extension in the
+    /// argument, a `Content-Type` dioxus invented from a table of web asset
+    /// types, and no length of its own. That is the shape that must still work.
+    #[sqlx::test]
+    async fn upload_accepts_the_window_builds_shape(pool: PgPool) {
+        create_test_user_with_permissions(&pool, 9, vec![])
+            .await
+            .expect("plain user");
+        let (_root, upload_root) = upload_dirs();
+        let server = api_server_with_uploads(&pool, upload_root.clone()).await;
+        post_args(&server, "/api/login", &login_args("test-9"))
+            .await
+            .assert_status_ok();
+
+        let response = upload_request(
+            &server,
+            "Avatar",
+            "test-9",
+            "portrait.jpeg",
+            "text/html; charset=utf-8",
+            None,
+            JPEG_BODY,
+        )
+        .await;
+
+        response.assert_status_ok();
+        let stored_name: String = response.json();
+        assert_eq!(
+            stored_names(&upload_root.join("avatars")),
+            vec![stored_name],
+            "the extension carries the upload past the header check"
+        );
+    }
+
+    /// A body that stops short of the declared length must not be stored and
+    /// attached as if it were the whole file.
+    #[sqlx::test]
+    async fn upload_rejects_a_body_shorter_than_declared(pool: PgPool) {
+        create_test_user_with_permissions(&pool, 10, vec![])
+            .await
+            .expect("plain user");
+        let (_root, upload_root) = upload_dirs();
+        let server = api_server_with_uploads(&pool, upload_root.clone()).await;
+        post_args(&server, "/api/login", &login_args("test-10"))
+            .await
+            .assert_status_ok();
+
+        let response = upload_request(
+            &server,
+            "Avatar",
+            "test-10",
+            "cut-off.png",
+            "image/png",
+            Some(PNG_BODY.len() + 100),
+            PNG_BODY,
+        )
+        .await;
+
+        response.assert_status_bad_request();
+        assert!(
+            response.text().contains("did not finish"),
+            "the reason is explained: {}",
+            response.text()
+        );
+        assert_eq!(
+            stored_names(&upload_root.join("avatars")),
+            Vec::<String>::new(),
+            "a truncated upload stores nothing"
+        );
+        assert_eq!(
+            stored_names(&upload_root.join("tmp")),
+            Vec::<String>::new(),
+            "the partial file is undone"
         );
     }
 
@@ -933,7 +1263,7 @@ mod tests {
             "test-artist-4",
             "cover.png",
             "image/png",
-            b"png bytes",
+            PNG_BODY,
         )
         .await;
 
@@ -993,6 +1323,122 @@ mod tests {
         );
         assert_eq!(response.text(), "5\n8\n");
         publisher.await.expect("publisher task");
+    }
+
+    /// The window build asks dioxus for a file's type, and dioxus answers from
+    /// a table of web asset types that has no images in it, so a `.png` comes
+    /// back claiming to be html. The extension has to win.
+    #[test]
+    fn the_window_builds_invented_type_gives_way_to_the_extension() {
+        assert_eq!(
+            declared_mime_from("text/html; charset=utf-8", "portrait.png"),
+            "image/png"
+        );
+        assert_eq!(
+            declared_mime_from("application/octet-stream", "portrait.JPG"),
+            "image/jpeg"
+        );
+        // A browser's own answer is already right, and stays untouched.
+        assert_eq!(declared_mime_from("image/webp", "cover.webp"), "image/webp");
+        // Nothing to work with: the request's own type is all there is.
+        assert_eq!(
+            declared_mime_from("application/octet-stream", "no-extension"),
+            "application/octet-stream"
+        );
+        assert_eq!(
+            declared_mime_from("text/html; charset=utf-8", "notes.txt"),
+            "text/html; charset=utf-8"
+        );
+    }
+
+    /// The window build sends a `Content-Type` dioxus invented from a table of
+    /// web asset types, so a header that is not one of the accepted types has to
+    /// fall back to the file's extension.
+    #[test]
+    fn a_claim_the_window_invented_falls_back_to_the_extension() {
+        let accepted = UploadConfiguration::Avatar.get_details().mime_types;
+        // A browser's own type is already one of them, so it stands.
+        assert_eq!(
+            claimed_upload_type("image/gif", "animation.gif", &accepted),
+            "image/gif"
+        );
+        assert_eq!(
+            claimed_upload_type("text/html; charset=utf-8", "cover.PNG", &accepted),
+            "image/png"
+        );
+        assert_eq!(
+            claimed_upload_type("application/octet-stream", "cover.webp", &accepted),
+            "image/webp"
+        );
+        // Nothing to fall back to: the claim itself is what gets rejected.
+        assert_eq!(
+            claimed_upload_type("text/plain", "notes.txt", &accepted),
+            "text/plain"
+        );
+        assert_eq!(
+            claimed_upload_type("text/html; charset=utf-8", "no-extension", &accepted),
+            "text/html; charset=utf-8"
+        );
+    }
+
+    #[test]
+    fn the_signature_check_decides_what_is_stored() {
+        let details = UploadConfiguration::Avatar.get_details();
+
+        let real_png = tempfile::NamedTempFile::new().expect("temp file");
+        std::fs::write(real_png.path(), PNG_BODY).expect("write");
+        check_upload_signature(
+            &real_png.path().to_string_lossy(),
+            "portrait.png",
+            "image/png",
+            &details,
+        )
+        .expect("a png is accepted");
+
+        // Renamed, but still a real png: stored, with a note in the log.
+        check_upload_signature(
+            &real_png.path().to_string_lossy(),
+            "portrait.jpg",
+            "image/jpeg",
+            &details,
+        )
+        .expect("the bytes decide, and they are a png");
+
+        let text_file = tempfile::NamedTempFile::new().expect("temp file");
+        std::fs::write(text_file.path(), b"a letter to the label").expect("write");
+        let rejected = check_upload_signature(
+            &text_file.path().to_string_lossy(),
+            "portrait.png",
+            "image/png",
+            &details,
+        )
+        .expect_err("a text file is not an image");
+        assert_eq!(
+            rejected.status,
+            axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE
+        );
+
+        // A file too short to hold a signature cannot be one either.
+        let empty = tempfile::NamedTempFile::new().expect("temp file");
+        assert!(
+            check_upload_signature(
+                &empty.path().to_string_lossy(),
+                "nothing.png",
+                "image/png",
+                &details,
+            )
+            .is_err(),
+            "an empty file is refused"
+        );
+
+        // A missing temp file is a write failure, not a mime problem.
+        let unreadable =
+            check_upload_signature("/no/such/upload.png", "upload.png", "image/png", &details)
+                .expect_err("a missing file cannot be checked");
+        assert_eq!(
+            unreadable.status,
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]
@@ -1060,8 +1506,9 @@ mod tests {
             "daisy file input: {html}"
         );
         assert!(
-            html.contains(r#"accept="image/jpeg,image/png,image/gif,image/webp""#),
-            "the accept list comes from the config: {html}"
+            html.contains(r#"accept=".jpg,.jpeg,.png,.gif,.webp""#),
+            "the accept list comes from the config, as extension tokens a \
+             window's file dialog can also read: {html}"
         );
         assert!(html.contains("Upload"), "the button says Upload: {html}");
     }
@@ -1114,6 +1561,10 @@ mod tests {
             Some("Choose a file to upload.")
         );
         assert_eq!(upload_message(Some("bad_mime")), Some("Invalid mime type."));
+        assert_eq!(
+            upload_message(Some("bad_image")),
+            Some("The file is not one of the accepted image types.")
+        );
         assert_eq!(upload_message(Some("too_large")), Some("File too large."));
         assert_eq!(upload_message(Some("server")), Some("Upload failed."));
         assert_eq!(upload_message(Some("made_up")), None);

@@ -33,7 +33,7 @@ use crate::server::current_user::{CurrentUser, Db};
 use crate::services::authentication_helpers::user_with_permissions;
 use crate::services::files::progress::{FILES, add_chunk};
 use crate::services::files::upload::{UploadedFile, finalise_upload};
-use crate::utils::files::valid_file_name;
+use crate::utils::files::{SIGNATURE_BYTES, first_bytes, image_mime_in_bytes, valid_file_name};
 
 /// Where the widget's javascript-off form posts.
 pub const PATH_UPLOAD_FORM: &str = "/forms/upload";
@@ -43,8 +43,11 @@ pub const PATH_UPLOAD_FORM: &str = "/forms/upload";
 /// Field order is fixed by the widget's markup: `file_type` (`Artist`,
 /// `Avatar` or `Release`), `slug`, then `artist_slug` (releases only), then
 /// the `file_to_upload` part. The bytes stream to `<root>/tmp/<name>` under
-/// the configuration's size limit and are then handed to
-/// [`finalise_upload`], exactly as the streaming server fn does them.
+/// the configuration's size limit, their first bytes have to match one of the
+/// configuration's image types (the part's own content type is the browser's
+/// guess, taken from the file name), and then
+/// [`finalise_upload`] moves and attaches them — exactly as the streaming
+/// server fn does them.
 ///
 /// Like the other form handlers the answer is a 303 to a literal page:
 /// `?uploaded=1` on success, `?bad_upload=<code>` on failure
@@ -168,6 +171,15 @@ pub(super) async fn upload_image(
 
     let tmp_path = format!("{root}/tmp/{stored_name}");
     tracing::info!("Uploading {stored_name} (form) to {tmp_path}");
+    // Undoing a rejected upload is the same two steps every time: take the
+    // partial file away, and let any progress stream watching it end.
+    let progress_key = format!("{}-{original_file_name}", uploader.username);
+    let undo_upload = || {
+        if let Err(error) = std::fs::remove_file(&tmp_path) {
+            tracing::error!("could not remove the partial upload {tmp_path}: {error}");
+        }
+        FILES.remove(progress_key.as_str());
+    };
     let streamed = write_multipart_file(
         &mut field,
         &tmp_path,
@@ -177,12 +189,28 @@ pub(super) async fn upload_image(
     )
     .await;
     if let Err(code) = streamed {
-        // Undo the partial upload, and let any progress watcher end.
-        if let Err(error) = std::fs::remove_file(&tmp_path) {
-            tracing::error!("could not remove the partial upload {tmp_path}: {error}");
-        }
-        FILES.remove(format!("{}-{original_file_name}", uploader.username).as_str());
+        undo_upload();
         return failed_upload(&page, code);
+    }
+
+    // The part's content type is the browser's claim, which it takes from the
+    // file's name. The first bytes are what actually arrived, and they decide.
+    let actual_type = match first_bytes(&tmp_path, SIGNATURE_BYTES) {
+        Ok(signature) => image_mime_in_bytes(&signature),
+        Err(error) => {
+            tracing::error!("cannot read back {tmp_path}: {error}");
+            undo_upload();
+            return failed_upload(&page, "server");
+        }
+    };
+    if !actual_type.is_some_and(|actual| details.mime_types.iter().any(|allowed| allowed == actual))
+    {
+        tracing::warn!(
+            "upload form rejected {original_file_name}: declared {mime_type}, \
+             which is not what its bytes are"
+        );
+        undo_upload();
+        return failed_upload(&page, "bad_image");
     }
 
     match finalise_upload(
@@ -324,6 +352,11 @@ mod tests {
 
     const BOUNDARY: &str = "white-label-upload-form-test-boundary";
 
+    /// A real png signature followed by filler: the handler checks the
+    /// signature and stores the rest as it came, so a test that is not about
+    /// image contents can keep the body short.
+    const PNG_BODY: &[u8] = b"\x89PNG\r\n\x1a\npng body";
+
     /// The exact field order the widget renders: configuration, slug,
     /// artist slug, then the file part.
     fn form_body(fields: &[(&str, &str)], file: Option<(&str, &str, &[u8])>) -> Vec<u8> {
@@ -418,7 +451,7 @@ mod tests {
             &server,
             &form_body(
                 &[("file_type", "Artist"), ("slug", "test-artist-1")],
-                Some(("image/png", "cover.png", b"png bytes")),
+                Some(("image/png", "cover.png", PNG_BODY)),
             ),
         )
         .await;
@@ -448,7 +481,7 @@ mod tests {
         );
         assert_eq!(
             std::fs::read(artists_dir.join(&stored_name)).expect("stored bytes"),
-            b"png bytes"
+            PNG_BODY
         );
         let artist = Artist::get_by_slug(&pool, "test-artist-1".to_string())
             .await
@@ -472,7 +505,7 @@ mod tests {
             &server,
             &form_body(
                 &[("file_type", "Artist"), ("slug", "test-artist-1")],
-                Some(("image/png", "cover.png", b"png bytes")),
+                Some(("image/png", "cover.png", PNG_BODY)),
             ),
         )
         .await;
@@ -518,6 +551,52 @@ mod tests {
                 .is_none(),
             "a rejected mime must not store anything"
         );
+    }
+
+    /// A part may arrive claiming `image/png` while holding anything at all: a
+    /// browser takes that claim from the file's name, so the bytes have to be
+    /// checked before the file is moved into place.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn upload_form_rejects_bytes_that_are_not_an_image(pool: PgPool) {
+        let upload_dir = tempfile::tempdir().expect("upload dir");
+        let server = signed_in_server(&pool, upload_dir.path()).await;
+
+        let response = post_form(
+            &server,
+            &form_body(
+                &[("file_type", "Artist"), ("slug", "test-artist-1")],
+                Some(("image/png", "portrait.png", b"a letter to the label")),
+            ),
+        )
+        .await;
+
+        response.assert_status(axum::http::StatusCode::SEE_OTHER);
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/images?bad_upload=bad_image"
+        );
+        assert!(
+            std::fs::read_dir(upload_dir.path().join("artists"))
+                .expect("artists dir readable")
+                .next()
+                .is_none(),
+            "wrong bytes must not be stored"
+        );
+        assert!(
+            std::fs::read_dir(upload_dir.path().join("tmp"))
+                .expect("tmp dir readable")
+                .next()
+                .is_none(),
+            "the temp file is undone"
+        );
+        let artist = Artist::get_by_slug(&pool, "test-artist-1".to_string())
+            .await
+            .expect("artist after the rejected upload");
+        assert_eq!(artist.primary_image, None, "and the row is left alone");
     }
 
     #[test]

@@ -103,8 +103,10 @@ without failing anything:
 sh end2end/run-dioxus-gate.sh
 ```
 
-(`end2end`'s Playwright is 1.44.1; run `npx playwright install chromium` in
-`end2end/` once if the `chromium-1117` browser build is missing.)
+(`end2end`'s Playwright is 1.44.1; run `npx playwright install chromium firefox`
+in `end2end/` once if the `chromium-1117` / `firefox-1449` builds are missing —
+the client spec runs in both browsers now, and an `npx` from elsewhere installs
+builds this version cannot launch.)
 
 ### Uploads with progress (slices 5f–5g)
 
@@ -121,6 +123,30 @@ editor (`EditRelease`):
   the stored file name.
 - `GET /api/file_progress?filename` — the running byte totals of your own
   in-flight upload, one per line, until it finishes. Needs only a session.
+
+What a file _is_ is settled by its first bytes, not by what the client said. A
+browser derives a file's mime from its name, and the window's `Content-Type` is
+invented by dioxus from a table of _web asset_ types that holds no images at all
+(a `.png` arrives as `text/html; charset=utf-8`), so a header that is not one of
+the accepted types falls back to the file's extension. Both upload paths then
+read back the first bytes of the temp file and demand one of the configuration's
+image signatures (`utils::files::image_mime_in_bytes`), and the streaming path
+also insists that the byte count the client declared in `X-Content-Size` matches
+what arrived, so a body that stops short is removed rather than stored and
+attached.
+
+The progress request is a task of its own on the client, never a step the upload
+waits for: Firefox does not resolve a stream response before its first byte, so
+awaiting it means the file body is never sent at all. The totals stream ends by
+itself in every case — its upload finishing, the upload never arriving (15 s), or
+the upload stalling (30 s) — because a stream still open when the page navigates
+is aborted by the browser, and dioxus turns an aborted request into a panic of
+the whole client. An entry in the progress registry belongs to the upload that
+`add_chunk` started, so a watcher never creates one.
+
+The widget's `accept` list is extension tokens (`.jpg,.jpeg,.png,.gif,.webp`)
+rather than the config's mime types: a browser takes either, but the window's
+file dialog reads only extensions and would otherwise offer every file on disk.
 
 Two things a deployment has to know:
 

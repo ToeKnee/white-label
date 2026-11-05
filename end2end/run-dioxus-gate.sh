@@ -200,7 +200,7 @@ if [ "$admin_ok" -eq 1 ]; then
       -w "artist images status=%{http_code}\n" "$base/admin/artist/e2e-tabs/images"
     pin "$OUT/artist_images.html" 'E2E Tabs Artist Images'
     pin "$OUT/artist_images.html" 'name="file_to_upload"'
-    pin "$OUT/artist_images.html" 'accept="image/jpeg,image/png,image/gif,image/webp"'
+    pin "$OUT/artist_images.html" 'accept=".jpg,.jpeg,.png,.gif,.webp"'
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.
@@ -263,9 +263,30 @@ else
     DIOXUS_URL="$base_client" npx playwright test tests/dioxus_client.spec.ts --project=chromium --reporter=list || status=$?
 fi
 
+# The same spec in Firefox, which is where the upload protocol broke once:
+# Firefox does not resolve a stream response until its first byte, so a client
+# that waits for its progress request before sending the file body never sends
+# it at all, and a stream left open when the page navigates is reported to the
+# wasm client as an aborted request. Neither shows up in chromium.
+# The browser builds are pinned by `@playwright/test` in this directory, so run
+# `npx playwright install firefox` from here (a newer npx pulls a build this
+# version cannot launch).
+echo "== playwright client hydration smoke (firefox, 8131) =="
+if [ "$admin_ok" -eq 1 ]; then
+    E2E_ADMIN_OK=1 DIOXUS_URL="$base_client" npx playwright test tests/dioxus_client.spec.ts --project=firefox --reporter=list || status=$?
+else
+    DIOXUS_URL="$base_client" npx playwright test tests/dioxus_client.spec.ts --project=firefox --reporter=list || status=$?
+fi
+
 if [ "$pin_failed" -ne 0 ]; then
     echo "== gate page pins FAILED =="
     status=1
+fi
+
+# A marker to grep for: the playwright runs print their own summaries, but a
+# filtered or skipped suite looks the same as a passing one in the log.
+if [ "$status" -eq 0 ]; then
+    echo "== GATE OK =="
 fi
 
 if [ "$status" -ne 0 ]; then

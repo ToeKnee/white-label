@@ -2601,8 +2601,9 @@ mod tests {
                 "name=\"file_to_upload\"",
                 "class=\"w-full file-input file-input-primary\"",
                 ">Upload</button>",
-                // The Artist configuration drives the accept list.
-                "accept=\"image/jpeg,image/png,image/gif,image/webp\"",
+                // The Artist configuration drives the accept list, as extension
+                // tokens (a window's file dialog cannot read mime types).
+                "accept=\".jpg,.jpeg,.png,.gif,.webp\"",
                 // Nothing stored yet: the model's default logo.
                 "src=\"/Logo.svg\"",
                 "alt=\"Test Artist 1\"",
@@ -2656,7 +2657,7 @@ mod tests {
             &[
                 "name=\"file_to_upload\"",
                 // The Release configuration, addressed by the release slug.
-                "accept=\"image/jpeg,image/png,image/gif,image/webp\"",
+                "accept=\".jpg,.jpeg,.png,.gif,.webp\"",
                 "src=\"/Logo.svg\"",
                 "alt=\"Test Release 1\"",
             ],
