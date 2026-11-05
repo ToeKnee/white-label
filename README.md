@@ -27,6 +27,12 @@ server serve `public/main.css`, the favicon and the images (dioxus mounts
 each top-level public-dir file at its own path). The `dx` CLI is pinned to
 the dioxus crate version (currently 0.7.10).
 
+That SSR-only shape serves **no wasm bundle**: the pages render, navigate with
+full reloads, log in and save through the plain-HTML forms, but the reactive
+features — including every upload (see the uploads note below) — need the
+client build. `sh end2end/run-dioxus-web.sh` builds it and serves the hydrated
+site, which is the shape the deployed site will have.
+
 ### The wasm client (slice 5e)
 
 `src/ui` also builds for the browser; that bundle is what hydrates the
@@ -48,13 +54,24 @@ DIOXUS_PUBLIC_PATH=target/dx/dioxus-web/debug/web/public \
 The gate starts a second `dioxus-server` whose `DIOXUS_PUBLIC_PATH` is that
 `dx` output — the bundle's `index.html` is what makes the SSR renderer
 inject the wasm bootstrap into every page — so the gate runs two servers:
-8127 (SSR-only, `public/`) and 8131 (hydrated). `dx serve --platform web
---bin dioxus-web --features web --no-default-features` is the watch-mode
-equivalent; expect it to also compile a native "server build" of the crate,
-which is harmless here and ignored. Debug bundles are large (~39 MB) because
-the Leptos modules (`src/routes`, `src/components`) are still compiled
+8127 (SSR-only, `public/`) and 8131 (hydrated). `sh end2end/run-dioxus-web.sh`
+does the build-and-serve pair for manual work. Debug bundles are large (~39 MB)
+because the Leptos modules (`src/routes`, `src/components`) are still compiled
 unconditionally — cfg-gating them out of `web` builds is a Phase 8 cleanup
 item.
+
+There is **no `dx serve` web watch mode** for this crate (verified, 0.7.10):
+`dx serve --fullstack` builds a _native_ "server build" of the selected bin, so
+`dx serve --platform web --bin dioxus-web --features web --no-default-features`
+compiles the wasm entry with the web-sys renderer for the host target. The
+server then starts and dies at once — `cannot access imported statics on
+non-wasm targets` (js-sys) — and the dev server only answers
+`500 Backend not ready`. A real watch mode needs either the web target's server
+side launched by dioxus itself (`dioxus::launch` under the `server` feature,
+which would also have to be handed our axum router for sessions, uploads and
+statics) or per-build features (`dx serve`'s `@client`/`@server` argument
+lists). Both are open questions in MIGRATION.md; until one lands, the
+build-and-serve commands above are the dev flow.
 
 `cargo test --features server` covers the SSR side; the hydrated client side
 is covered by `end2end/tests/dioxus_client.spec.ts` (SPA nav issues no extra
@@ -115,7 +132,13 @@ Two things a deployment has to know:
 
 The upload is javascript-only by design: the protocol has no form-post twin, so
 SSR renders the picker and the button, and uploading needs the client build
-above.
+above. That includes the SSR-only server: its profile and images pages show a
+plain `<input type="file" name="file_to_upload">`, and submitting that reloads
+the page without transferring the file. Uploads are not broken there, they are
+not possible — run `end2end/run-dioxus-web.sh` (or point `DIOXUS_PUBLIC_PATH`
+at the `dx` output) to use them. The Leptos site this replaces had the same
+shape (its uploader was a reactive `#[server]` call), so the hydrated site keeps
+feature parity.
 
 Attaching the file is deliberately narrow. The shared tail
 (`services::files::upload`) writes **one column** — `primary_image` for an
