@@ -37,6 +37,7 @@ use crate::config::upload::UploadConfiguration;
 use crate::models::artist::Artist;
 use crate::models::release::Release;
 use crate::models::track::Track;
+use crate::ui::assets::display_image_url;
 use crate::ui::data::{get_artist, get_label_artists, get_release, get_releases};
 use crate::ui::page_data;
 use crate::ui::upload::{FileUploadWithProgress, stored_file_url};
@@ -184,7 +185,7 @@ fn ReleaseRow(release: Release, artist_slug: String) -> Element {
                         div { class: "w-12 rounded-full not-prose",
                             img {
                                 class: "m-0",
-                                src: release.primary_image_url(),
+                                src: display_image_url(&release.primary_image_url()),
                                 alt: release.name,
                             }
                         }
@@ -404,7 +405,7 @@ fn EditReleaseBody(
     let release = result.release;
     // Read the image URL and alt text before the form takes the row apart
     // field by field (the uploader's `<img>` needs both).
-    let current_image_url = release.primary_image_url();
+    let current_image_url = display_image_url(&release.primary_image_url());
     let image_alt = release.name.clone();
     // The sidebar track list shares this fetch (Leptos made a second
     // `get_tracks` request for it).
@@ -645,7 +646,7 @@ fn ArtistCheckbox(artist: Artist, selected: bool) -> Element {
             }
             div { class: "avatar not-prose",
                 div { class: "w-8 rounded-full",
-                    img { src: artist.primary_image_url(), alt: artist.name }
+                    img { src: display_image_url(&artist.primary_image_url()), alt: artist.name }
                 }
             }
             "{artist.name}"

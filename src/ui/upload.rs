@@ -34,6 +34,7 @@ use dioxus::html::FileData;
 use dioxus::prelude::*;
 
 use crate::config::upload::UploadConfiguration;
+use crate::ui::assets::served_file_url;
 use crate::ui::utils::{InlineError, Success};
 
 #[cfg(feature = "server")]
@@ -359,9 +360,15 @@ struct UploadOutcome {
 
 /// The public URL an upload is served from, matching the models'
 /// `primary_image_url` (`/uploads/<config directory>/<stored name>`).
+///
+/// Absolute against the API origin in a desktop window, where the page's own
+/// origin has no uploads at all (see [`crate::ui::assets`]).
 #[must_use]
 pub fn stored_file_url(config: UploadConfiguration, stored_name: &str) -> String {
-    format!("/uploads/{}/{stored_name}", config.get_details().path)
+    served_file_url(&format!(
+        "/uploads/{}/{stored_name}",
+        config.get_details().path
+    ))
 }
 
 /// Runs one attempt: the progress request is established before the file

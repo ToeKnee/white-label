@@ -14,6 +14,7 @@ use dioxus::prelude::*;
 
 use crate::models::track_with_artists::TrackWithArtists;
 use crate::ui::Route;
+use crate::ui::assets::display_image_url;
 use crate::ui::data::{get_artist, get_release};
 use crate::ui::markdown_html;
 use crate::ui::page_data;
@@ -88,7 +89,7 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
                     dangerous_inner_html: markdown_html(&release.description),
                 }
                 img {
-                    src: release.primary_image_url(),
+                    src: display_image_url(&release.primary_image_url()),
                     alt: release.name.clone(),
                     class: "pl-6 w-1/2 h-auto",
                 }
@@ -134,7 +135,7 @@ fn Track(
             div {
                 img {
                     class: "not-prose size-10",
-                    src: track.track.primary_image_url(),
+                    src: display_image_url(&track.track.primary_image_url()),
                     alt: track.track.name,
                 }
             }

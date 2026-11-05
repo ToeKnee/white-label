@@ -8,6 +8,7 @@ use dioxus::prelude::*;
 
 use crate::models::auth::User;
 use crate::ui::Route;
+use crate::ui::assets::display_image_url;
 use crate::ui::use_label;
 use crate::ui::use_user;
 
@@ -70,7 +71,7 @@ pub fn UserMenu() -> Element {
 
     let username = user.username.clone();
     let is_admin = user.permissions.contains("admin");
-    let avatar_url = user.avatar_url();
+    let avatar_url = display_image_url(&user.avatar_url());
     rsx! {
         div { class: "flex-none",
             ul { class: "px-1 menu menu-horizontal",

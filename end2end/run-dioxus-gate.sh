@@ -50,6 +50,13 @@ dx build --platform web --bin dioxus-web --features web --no-default-features >"
 }
 DX_PUBLIC="$ROOT/target/dx/dioxus-web/debug/web/public"
 
+# The desktop target shares `src/ui`, so it is compiled here as a regression
+# pin (the window itself is a manual smoke test: `run-dioxus-desktop.sh`).
+echo "== desktop target compiles =="
+cargo check --offline --no-default-features --features desktop --bin dioxus-desktop >"$OUT/desktop-check.log" 2>&1 || {
+    echo "DESKTOP CHECK FAILED"; tail -n 30 "$OUT/desktop-check.log"; exit 1
+}
+
 IP=127.0.0.1 PORT=8127 DIOXUS_PUBLIC_PATH="$ROOT/public" ./target/debug/dioxus-server >"$OUT/server.log" 2>&1 &
 SERVER=$!
 IP=127.0.0.1 PORT=8131 DIOXUS_PUBLIC_PATH="$DX_PUBLIC" ./target/debug/dioxus-server >"$OUT/server-client.log" 2>&1 &

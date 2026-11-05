@@ -21,6 +21,7 @@ use dioxus::prelude::*;
 
 use crate::store::GlobalState;
 use crate::ui::Route;
+use crate::ui::assets::bundled_asset;
 use crate::ui::footer::LabelFooter;
 use crate::ui::header::LabelHeader;
 
@@ -41,8 +42,9 @@ pub fn App() -> Element {
         }
         document::Title { "White Label" }
         // Tailwind + daisyUI build (`npm run css`). The server mounts
-        // `public/main.css` at this exact path, ahead of the SSR fallback.
-        document::Stylesheet { href: "/main.css" }
+        // `public/main.css` at this exact path, ahead of the SSR fallback; a
+        // desktop window loads it from its own bundle instead (slice 6b).
+        document::Stylesheet { href: bundled_asset("/main.css") }
         Router::<Route> {}
     }
 }

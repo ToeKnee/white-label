@@ -19,6 +19,7 @@ use crate::models::release::Release;
 use crate::models::social_media::SocialMediaService;
 use crate::routes::links::LinksResult;
 use crate::ui::Route;
+use crate::ui::assets::{bundled_asset, display_image_url};
 use crate::ui::data::{get_artist, get_label_artists, get_links, get_releases};
 use crate::ui::markdown_html;
 use crate::ui::page_data;
@@ -112,7 +113,7 @@ fn ArtistBox(
                     published_at: artist.published_at,
                 }
                 figure {
-                    img { src: artist.primary_image_url(), alt }
+                    img { src: display_image_url(&artist.primary_image_url()), alt }
                 }
                 div { class: "card-body",
                     h2 { class: "card-title", "{artist.name}" }
@@ -204,7 +205,7 @@ fn ArtistBody(slug: String) -> Element {
                 div { class: "w-1/2",
                     img {
                         class: "ml-6",
-                        src: artist.primary_image_url(),
+                        src: display_image_url(&artist.primary_image_url()),
                         alt: artist.name.clone(),
                     }
                 }
@@ -242,10 +243,10 @@ fn SocialLinks(
                         target: "_blank",
                         div { class: "w-8 rounded-full",
                             img {
-                                src: format!(
+                                src: bundled_asset(&format!(
                                     "/images/social_media_services/{platform}.svg",
                                     platform = social_media.platform,
-                                ),
+                                )),
                                 alt: social_media.platform.to_string(),
                             }
                         }
@@ -282,10 +283,10 @@ fn MusicLinks(
                                 figure {
                                     img {
                                         class: "m-2 w-auto h-6",
-                                        src: format!(
+                                        src: bundled_asset(&format!(
                                             "/images/music_services/{platform}.svg",
                                             platform = music_service.platform,
-                                        ),
+                                        )),
                                         alt: music_service.platform.to_string(),
                                     }
                                 }
@@ -345,7 +346,7 @@ fn ReleaseCard(
             div { class: "shadow-sm not-prose card bg-neutral text-neutral-content",
                 figure { class: "not-prose",
                     img {
-                        src: release.primary_image_url(),
+                        src: display_image_url(&release.primary_image_url()),
                         alt,
                     }
                 }

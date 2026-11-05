@@ -18,6 +18,8 @@
 pub mod admin;
 /// Artist index and artist page, plus the shared artist card.
 pub mod artist;
+/// Static file URLs: bundle paths vs files the API server holds.
+pub mod assets;
 /// Auth pages (login/register/logout/profile/change-password).
 ///
 /// Phase 4 slice 3; form posts are handled by `crate::server::forms`.

@@ -130,14 +130,22 @@ and pages that show the image pass `on_uploaded` to the widget and swap their
 page cannot refetch its own page data, since `use_page` never exposes its
 resource.
 
-### The desktop window (slice 6a)
+### The desktop window (slices 6a–6b)
 
 The same `src/ui` page tree also builds as a native window (`dioxus-desktop`:
 a tao window around the system webview — on Linux that means `webkit2gtk-4.1`,
-`gtk+-3.0` and `libsoup-3.0` must be installed):
+`gtk+-3.0` and `libsoup-3.0` must be installed). The easiest way to run it is
+the dev launcher, which builds, stages the statics and opens the window:
+
+```bash
+sh end2end/run-dioxus-desktop.sh   # WHITE_LABEL_API_URL overrides the API (default 127.0.0.1:8127)
+```
+
+By hand that is:
 
 ```bash
 dx build --platform desktop --bin dioxus-desktop --features desktop --no-default-features
+cp -R public/. target/dx/dioxus-desktop/debug/linux/app/assets/
 WHITE_LABEL_API_URL=http://127.0.0.1:8127 \
   ./target/dx/dioxus-desktop/debug/linux/app/dioxus-desktop
 ```
@@ -146,15 +154,23 @@ WHITE_LABEL_API_URL=http://127.0.0.1:8127 \
 compiles the same binary (handy for `cargo check`), but only `dx` gathers the
 app's assets next to it, so run the copy under `target/dx`.
 
+The `cp -R` is not decoration — `dx` puts only `asset!()`-registered files in a
+native bundle, so without it the `assets/` directory is empty and the window
+renders unstyled. The native resolver (`dioxus-asset-resolver::native`) reads
+`/assets/<path>` from the executable's own directory, so `ui::assets`
+(`bundled_asset`, `served_file_url`, `display_image_url`) gives bundled statics
+the bundle address `/assets/main.css` on desktop while web and SSR keep
+`/main.css`, and gives `/uploads/…` images the absolute API origin (plain `<img>`
+subresources, so no CORS). Repeat the copy after every `dx build --platform
+desktop` — the build recreates that directory; `dx bundle` will take the same
+files from `[bundle] resources` in `Dioxus.toml` (slice 6e).
+
 There is no SSR in this target: the app boots client-side and every server fn
 in `ui/data.rs` is an HTTP call made by dioxus' own `reqwest` client, which
 keeps a process-wide cookie jar, so the session cookie round-trips without any
-CORS or `SameSite` work. Two things the desktop build does **not** do yet
-(Phase 6 slices 6b–6c):
+CORS or `SameSite` work. What the desktop build still does **not** do
+(Phase 6 slice 6c):
 
-- The window's own origin is `http://dioxus.index.html/`, so root-relative
-  server files (`/uploads/…`) are not the API's — they need absolute URLs.
-  Bundled statics (`/main.css`, `/images/…`) are fine.
 - dioxus blocks in-app navigation after the first load, so the plain-HTML
   303 form fallbacks the SSR pages use are inert in the window: forms need the
   reactive `use_action` + JSON-twin path (the links editor already has it).
@@ -166,7 +182,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 490 lib tests, includes src/server/ + src/ui/ tests
+cargo test --features server   # 500 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
 cargo test --features server -- ui::          # just the route-table + UI component tests
 ```

@@ -21,6 +21,7 @@
 use dioxus::prelude::*;
 
 use crate::models::track::Track;
+use crate::ui::assets::display_image_url;
 use crate::ui::data::{get_artist, get_release, get_track};
 use crate::ui::page_data;
 use crate::ui::use_page;
@@ -166,7 +167,7 @@ fn TrackRow(track: Track, artist_slug: String, release_slug: String) -> Element 
                         div { class: "w-12 rounded-full not-prose",
                             img {
                                 class: "m-0",
-                                src: track.primary_image_url(),
+                                src: display_image_url(&track.primary_image_url()),
                                 alt: track.name,
                             }
                         }

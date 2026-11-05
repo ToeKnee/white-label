@@ -29,6 +29,7 @@ use dioxus::prelude::*;
 use crate::forms::links::LinksForm;
 use crate::models::music_service::{MusicService, Platform};
 use crate::models::social_media::{SocialMedia, SocialMediaService};
+use crate::ui::assets::bundled_asset;
 use crate::ui::data::{get_artist, get_links, update_links};
 use crate::ui::page_data;
 use crate::ui::use_page;
@@ -219,7 +220,7 @@ fn MusicServiceCards(
             } else {
                 "fieldset-legend text-secondary-content"
             },
-            format!("/images/music_services/{name}.svg"),
+            bundled_asset(&format!("/images/music_services/{name}.svg")),
             name.to_case(Case::Title),
             name.to_case(Case::Snake),
             saved.map(|service| service.url.clone()).unwrap_or_default(),
@@ -278,7 +279,7 @@ fn SocialMediaCards(
             } else {
                 "fieldset-legend text-secondary-content"
             },
-            format!("/images/social_media_services/{name}.svg"),
+            bundled_asset(&format!("/images/social_media_services/{name}.svg")),
             name.to_case(Case::Title),
             name.to_case(Case::Snake),
             saved.map(|service| service.url.clone()).unwrap_or_default(),

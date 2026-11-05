@@ -19,6 +19,7 @@
 use dioxus::prelude::*;
 
 use crate::config::upload::UploadConfiguration;
+use crate::ui::assets::display_image_url;
 use crate::ui::data::get_artist;
 use crate::ui::upload::{FileUploadWithProgress, stored_file_url};
 use crate::ui::utils::Loading;
@@ -67,7 +68,7 @@ fn EditArtistImagesBody(artist_slug: String) -> Element {
         }
     };
     // Read the current URL before the name moves into the header.
-    let current_image_url = artist.primary_image_url();
+    let current_image_url = display_image_url(&artist.primary_image_url());
     let artist_name = artist.name;
 
     // Set once an upload lands; the image below then shows the new file
