@@ -304,18 +304,24 @@ pub fn DateField(
     }
 }
 
-/// Markdown textarea beside a server-rendered preview (the Leptos
-/// `admin::shared` `MarkdownField`; slice 5 imports it). The live preview
-/// while typing needs the client build.
+/// Markdown textarea beside a preview (the Leptos `admin::shared`
+/// `MarkdownField`; slice 5 imports it). The preview tracks what is typed:
+/// a reactive draft starts from the saved text and a `markdown_html` re-render
+/// follows every keystroke. With javascript off (or before hydration) the
+/// preview shows the saved text, as the SSR render left it.
 #[component]
 pub fn MarkdownField(
     /// The title of the field, also the textarea's placeholder.
     title: String,
     /// The field name for the textarea.
     field: String,
-    /// The saved markdown text, previewed from the server.
+    /// The saved markdown text, and the draft's starting value.
     markdown_text: String,
 ) -> Element {
+    // The live preview reads this; the textarea drives it. `markdown_text` is
+    // both the SSR preview and the draft's initial value, so the hydrated and
+    // un-hydrated pages look identical until the user types.
+    let mut draft = use_signal(|| markdown_text.clone());
     rsx! {
         div { class: "flex gap-6",
             div { class: "w-1/2",
@@ -327,7 +333,8 @@ pub fn MarkdownField(
                         id: field.clone(),
                         name: field.clone(),
                         placeholder: title,
-                        value: markdown_text.clone(),
+                        value: "{draft}",
+                        oninput: move |event| draft.set(event.value()),
                     }
                     label { class: "flex justify-between label", r#for: field,
                         span {}
@@ -338,7 +345,7 @@ pub fn MarkdownField(
             div { class: "w-1/2",
                 h2 { "Preview" }
                 div { class: "w-full textarea",
-                    dangerous_inner_html: markdown_html(&markdown_text)
+                    dangerous_inner_html: markdown_html(&draft())
                 }
             }
         }

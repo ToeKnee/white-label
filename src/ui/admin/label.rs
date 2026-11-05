@@ -6,8 +6,9 @@
 //! the handler's fixed query codes: `?updated=1` after a successful save,
 //! `?bad=<code>` after a failure. Deviations from the Leptos editor:
 //!
-//! - The markdown preview is rendered server-side from the *saved*
-//!   description; live preview while typing needs the client build.
+//! - The markdown preview tracks what is typed (a reactive draft re-rendered
+//!   through `markdown_html`); before hydration, or with javascript off, it
+//!   shows the saved description as the SSR render left it.
 //! - The success alert's name comes from the freshly loaded label (the
 //!   redirect reload re-fetches it), where the original updated its store
 //!   from the action result.
@@ -113,13 +114,15 @@ fn EditLabelBody(
     }
 }
 
-/// The description textarea beside a server-rendered markdown preview (the
-/// Leptos `DescriptionFields`; its live preview needs the client build).
+/// The description textarea beside a markdown preview (the Leptos
+/// `DescriptionFields`). The preview tracks what is typed from a reactive
+/// draft; with javascript off it shows the saved description, as SSR left it.
 #[component]
 fn DescriptionFields(
-    /// The saved description, as the textarea's value and preview source.
+    /// The saved description, as the textarea's value and the draft's start.
     description: String,
 ) -> Element {
+    let mut draft = use_signal(|| description.clone());
     rsx! {
         div { class: "flex gap-6",
             label { class: "w-1/2 fieldset",
@@ -129,7 +132,8 @@ fn DescriptionFields(
                     rows: "15",
                     name: "description",
                     placeholder: "Description",
-                    value: description.clone(),
+                    value: "{draft}",
+                    oninput: move |event| draft.set(event.value()),
                 }
                 p { class: "flex justify-between label",
                     span {}
@@ -138,7 +142,7 @@ fn DescriptionFields(
             }
             div { class: "w-1/2",
                 h2 { "Preview" }
-                div { dangerous_inner_html: markdown_html(&description) }
+                div { dangerous_inner_html: markdown_html(&draft()) }
             }
         }
     }

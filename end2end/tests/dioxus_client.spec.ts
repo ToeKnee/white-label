@@ -322,3 +322,33 @@ test("the artist images tab uploads and shows the new image", async ({ page }) =
 
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
+
+test("the markdown editor's preview renders live while typing", async ({ page }) => {
+  // The reported gap: on Firefox the preview never updated as the admin typed
+  // (it only showed the server-saved text). The `MarkdownField` preview now
+  // tracks a reactive draft, so it re-renders `markdown_html` per keystroke in
+  // every browser. Run in chromium and firefox by the gate.
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+  await page.goto(`${base}/admin/page`);
+  await expect(h1(page)).toHaveText("Create Page");
+  await clientIsLive(page);
+
+  const body = page.locator('textarea[name="body"]');
+  // The preview is the `div.textarea` (the editor itself is a <textarea> tag,
+  // so this selector matches only the preview).
+  const preview = page.locator("div.textarea");
+
+  // A fresh create starts with an empty preview.
+  await expect(preview).toBeEmpty();
+
+  // Typing renders markdown live, rather than echoing the raw source.
+  await body.fill("# Heading\n\nSome **bold** text.");
+  await expect(preview.locator("h1")).toHaveText("Heading", { timeout: 10000 });
+  await expect(preview.locator("strong")).toHaveText("bold");
+  await expect(preview).not.toContainText("**bold**");
+
+  // Clearing it live empties the preview again (the draft, not the saved text).
+  await body.fill("");
+  await expect(preview).toBeEmpty();
+});
