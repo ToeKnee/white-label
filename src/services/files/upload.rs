@@ -105,8 +105,8 @@ async fn store_artist_primary_image(
 /// Point the logged-in user's own avatar at the uploaded file. A slug
 /// that doesn't match the uploader's username is a silent no-op, as in the
 /// Leptos route. (It also refreshed Leptos' client-side user context —
-/// dioxus clients re-fetch, except the profile page, which answers the
-/// navbar through `SessionHint::ProfileUpdated` instead.)
+/// dioxus clients re-fetch, except the profile page, which hands the navbar a
+/// fresh `SessionHint::SignedIn` carrying the updated user instead.)
 async fn store_avatar(
     pool: &PgPool,
     file_name: &str,

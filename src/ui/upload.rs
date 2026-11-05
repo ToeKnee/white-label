@@ -1506,7 +1506,7 @@ mod tests {
             "daisy file input: {html}"
         );
         assert!(
-            html.contains(r#"accept=".jpg,.jpeg,.png,.gif,.webp""#),
+            html.contains(r#"accept=".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP""#),
             "the accept list comes from the config, as extension tokens a \
              window's file dialog can also read: {html}"
         );

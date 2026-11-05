@@ -214,24 +214,19 @@ pub enum SessionHint {
     /// Nothing has been signed in or out in this client session: show the
     /// session the server resolved when the page was rendered.
     Unknown,
-    /// A login or register twin signed this user in. It carries the whole
-    /// user, permissions included, so the menu renders without a refetch.
-    /// (Boxed: the other variants are bare, and `User` is far bigger than
-    /// they are.)
+    /// The account the menu should render, with the whole user (permissions
+    /// included) so it needs no refetch. (Boxed: the other variants are bare,
+    /// and `User` is far bigger than they are.) Written by a login/register
+    /// twin, and by the profile page when a reactive change (an avatar upload)
+    /// carries on to the chrome.
+    ///
+    /// This is what keeps the navbar right on a desktop window: its own
+    /// `use_user` page resource resolved once at launch, before anyone had
+    /// signed in, so it stays a guest for the life of the client — the menu
+    /// rides this hint instead of that stale resource.
     SignedIn(Box<User>),
     /// The logout twin ended the session.
     SignedOut,
-    /// A reactive profile change carried on to the chrome: today that is
-    /// the avatar upload on the profile page, whose stored name the menu
-    /// swaps into the session user's avatar. It is keyed by username, so
-    /// an upload made by one account can never rename another account's
-    /// picture.
-    ProfileUpdated {
-        /// The account the change belongs to.
-        username: String,
-        /// The avatar file the upload stored, under the config's directory.
-        avatar_file: String,
-    },
 }
 
 /// The [`SessionHint`] that [`App`] provides: written by the auth twins,

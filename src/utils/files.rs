@@ -75,7 +75,7 @@ fn extensions_for_mime(mime_type: &str) -> &'static [&'static str] {
 }
 
 /// Builds a file picker's `accept` list from the mime types a configuration
-/// allows, as extension tokens (`.png,.jpg,…`).
+/// allows, as extension tokens (`.png,.PNG,…`).
 ///
 /// Browsers accept both mime types and extensions here, but the file dialog in
 /// a dioxus window only understands extensions (and the `image/*` shorthand):
@@ -83,31 +83,43 @@ fn extensions_for_mime(mime_type: &str) -> &'static [&'static str] {
 /// A mime type with no extension of its own is passed through unchanged, so an
 /// unusual configuration cannot silently lose a type.
 ///
+/// Every extension is listed twice, lower- and upper-case. A dioxus window's
+/// native filter (rfd's GTK backend) matches the filename extension verbatim
+/// with a case-sensitive `*.ext` pattern, so a lowercase-only list hides
+/// `PHOTO.JPG`; browsers ignore the case, so the extra tokens change nothing
+/// there.
+///
 /// # Example
 /// ```
 /// use white_label::utils::files::accept_extensions;
 /// let accepted = ["image/jpeg".to_string(), "image/png".to_string()];
-/// assert_eq!(accept_extensions(&accepted), ".jpg,.jpeg,.png");
+/// assert_eq!(accept_extensions(&accepted), ".jpg,.JPG,.jpeg,.JPEG,.png,.PNG");
 /// ```
 #[must_use]
 pub fn accept_extensions(mime_types: &[String]) -> String {
     let mut tokens: Vec<String> = Vec::new();
     for mime_type in mime_types {
         let mapped = extensions_for_mime(mime_type);
-        let from_this_type: Vec<String> = if mapped.is_empty() {
-            vec![mime_type.clone()]
-        } else {
-            mapped
-                .iter()
-                .map(|extension| format!(".{extension}"))
-                .collect()
-        };
+        if mapped.is_empty() {
+            // An unknown type keeps its mime token rather than disappearing.
+            if !tokens.contains(mime_type) {
+                tokens.push(mime_type.clone());
+            }
+            continue;
+        }
         // A picker that lists a type twice is confusing, and two accepted mimes
         // can share an extension (a configuration that allowed both
         // `image/jpeg` and `.jpe`, say).
-        for token in from_this_type {
-            if !tokens.contains(&token) {
-                tokens.push(token);
+        for extension in mapped {
+            // Lower- and upper-case variants (see the note above); the exact
+            // `contains` keeps both cases but drops a repeat of either.
+            for token in [
+                format!(".{extension}"),
+                format!(".{}", extension.to_uppercase()),
+            ] {
+                if !tokens.contains(&token) {
+                    tokens.push(token);
+                }
             }
         }
     }
@@ -291,11 +303,14 @@ mod tests {
             "image/gif".to_string(),
             "image/webp".to_string(),
         ];
-        assert_eq!(accept_extensions(&accepted), ".jpg,.jpeg,.png,.gif,.webp");
+        assert_eq!(
+            accept_extensions(&accepted),
+            ".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP"
+        );
         // A type this helper does not know keeps its mime token rather than
         // quietly disappearing from the picker.
         let odd = ["application/pdf".to_string(), "image/png".to_string()];
-        assert_eq!(accept_extensions(&odd), "application/pdf,.png");
+        assert_eq!(accept_extensions(&odd), "application/pdf,.png,.PNG");
         assert_eq!(accept_extensions(&[]), "");
     }
 

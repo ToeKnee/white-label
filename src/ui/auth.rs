@@ -33,8 +33,10 @@
 //! ([`crate::ui::upload::FileUploadWithProgress`], Phase 5 slice 5f); like
 //! the Leptos original it needs the client build, since its upload is a
 //! request body rather than a form post. A stored avatar also reaches the
-//! navbar through [`crate::ui::SessionHint::ProfileUpdated`], so the menu
-//! avatar changes without a page load (the navbar outlives the upload).
+//! navbar through a fresh [`crate::ui::SessionHint::SignedIn`], so the menu
+//! avatar changes without a page load (the navbar outlives the upload, and on
+//! a desktop window its own session resource stays the guest it resolved to at
+//! launch).
 //!
 //! Example — a failed login round trip:
 //!
@@ -359,10 +361,15 @@ pub fn EditProfile(
 /// login page; the boundary's spinner only shows while the session
 /// resource is in flight (never during the redirect itself).
 ///
-/// A finished avatar upload is reported to the navbar as a
-/// [`SessionHint::ProfileUpdated`]: the avatar config renames the file to
-/// the uploader's username, so the profile page can swap the stored name
-/// straight into the menu without a refetch.
+/// A finished avatar upload is handed to the navbar as a fresh
+/// [`SessionHint::SignedIn`] carrying the updated user: the avatar config
+/// renames the file to the uploader's username, and the upload stores it,
+/// so the profile page (whose own session resource resolved against the live
+/// session) can put the new avatar straight into the menu without a refetch.
+/// The hint carries the whole user, not just the filename, because the
+/// navbar cannot supply the rest: on a desktop window its own session
+/// resource resolved to a guest at launch and never reloads, so a hint that
+/// depended on it would sign the user out.
 #[component]
 fn ProfileForm(
     /// Set when the profile has just been saved.
@@ -394,7 +401,9 @@ fn ProfileForm(
 
     let success_message = format!("{} Updated!", user.username);
     let avatar_username = user.username.clone();
-    let hint_username = user.username.clone();
+    // A copy for the upload callback: it hands the navbar the whole updated
+    // user (see the note above), while `user_for_fields` moves into the form.
+    let hint_user = user.clone();
     let user_for_fields = user;
     rsx! {
         // Leptos placed the avatar picker between the heading and the form.
@@ -407,16 +416,13 @@ fn ProfileForm(
             uploaded,
             bad_upload,
             // Tell the navbar about the stored file: it outlives this page,
-            // and its own session resource resolved before the upload, so
-            // this hint is the only way the new avatar reaches it without a
-            // page load. The javascript-off form reloads the page instead,
-            // which re-resolves the session on its own.
+            // and its own session resource resolved before the upload (a guest
+            // at a desktop window's launch, never reloaded), so a signed-in
+            // answer is the only thing that reaches it without a page load.
+            // The javascript-off form reloads the page instead, which
+            // re-resolves the session on its own.
             on_uploaded: move |stored_name: String| {
-                record_profile_update(
-                    session_hint,
-                    hint_username.clone(),
-                    stored_name,
-                );
+                record_profile_update(session_hint, hint_user.clone(), stored_name);
             },
         }
         form { method: "post", action: "/auth/profile",
@@ -697,17 +703,17 @@ fn record_session_hint(hint: Option<Signal<SessionHint>>, answer: SessionHint) {
     }
 }
 
-/// Report a finished avatar upload to the navbar's session hint (see
-/// [`SessionHint::ProfileUpdated`] and the note in [`ProfileForm`]).
+/// Report a finished avatar upload to the navbar as the new current user (see
+/// the note in [`ProfileForm`]). The stored file name becomes the user's avatar;
+/// the rest of the user is what the profile page already had, and it travels in
+/// the hint so the menu never falls back to its own (possibly stale) session.
 fn record_profile_update(
     mut hint: Signal<SessionHint>,
-    username: String,
+    mut updated_user: User,
     stored_avatar_file: String,
 ) {
-    hint.set(SessionHint::ProfileUpdated {
-        username,
-        avatar_file: stored_avatar_file,
-    });
+    updated_user.avatar = Some(stored_avatar_file);
+    hint.set(SessionHint::SignedIn(Box::new(updated_user)));
 }
 
 /// The action's outcome, out of the signal dioxus keeps an action's value in.

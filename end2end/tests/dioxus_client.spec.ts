@@ -154,7 +154,8 @@ test("the profile avatar upload runs through the server fns with a progress bar"
   await expect(page.locator("progress")).toHaveCount(0);
 
   // The navbar avatar before the upload (a placeholder or an earlier file).
-  // The upload must swap this without a page load (SessionHint::ProfileUpdated).
+  // The upload must swap it without a page load: the profile page hands the
+  // navbar a fresh SessionHint::SignedIn carrying the updated user.
   const navbarAvatar = page.locator(".navbar .avatar img");
   const beforeAvatarSrc = await navbarAvatar.getAttribute("src");
 

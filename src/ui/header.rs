@@ -61,26 +61,18 @@ fn BrandLink() -> Element {
 /// The navbar menu's account, picked from the page's session and whatever
 /// reactive auth/profile events the client has since had.
 ///
-/// A [`SessionHint::ProfileUpdated`] only swaps the avatar of the account it
-/// names (the avatar upload renames the file to its uploader, so the username
-/// already matches; the guard leaves any other session's avatar — and a guest
-/// — exactly as the page render had them).
+/// A [`SessionHint::SignedIn`] wins outright: it carries the authoritative
+/// user (a login, a register, or the profile page handing an updated avatar to
+/// the chrome), which on a desktop window is the only thing standing between
+/// the menu and that window's one-time page resource — resolved before anyone
+/// had signed in, so a stale guest for the rest of the client's life.
 fn menu_user(hint: &SessionHint, page_session: Option<User>) -> Option<User> {
     match hint {
-        // The twin's answer carries the whole user (permissions included), so
-        // the menu can render the real thing without another round trip.
-        // (Cloned out of the box: this match only borrows the hint.)
+        // The answer carries the whole user (permissions included), so the
+        // menu renders the real thing without another round trip. (Cloned out
+        // of the box: this match only borrows the hint.)
         SessionHint::SignedIn(user) => Some((**user).clone()),
         SessionHint::SignedOut => None,
-        SessionHint::ProfileUpdated {
-            username,
-            avatar_file,
-        } => page_session.map(|mut user| {
-            if user.username == *username {
-                user.avatar = Some(avatar_file.clone());
-            }
-            user
-        }),
         // Nothing reactive has happened: show the session the server resolved
         // for this page (or, in a client build with no page load to carry it,
         // the one this component's own load fetched).
@@ -92,12 +84,11 @@ fn menu_user(hint: &SessionHint, page_session: Option<User>) -> Option<User> {
 /// dropdown once signed in, the guest links otherwise.
 ///
 /// These are the two branches the Leptos `UserMenu` picked from its user
-/// context. A sign-in or sign-out that never reloaded the page (the reactive
-/// twins in [`crate::ui::auth`]) answers through the [`SessionHint`] context
-/// instead: the chrome outlives client navigations, and a page resource
-/// resolves once per component, so the menu needs the twin's own outcome to
-/// catch up — and so it does for the profile page's avatar upload, which
-/// answers through [`SessionHint::ProfileUpdated`] rather than reloading.
+/// context. A sign-in, sign-out, or profile change that never reloaded the
+/// page answers through the [`SessionHint`] context instead: the chrome
+/// outlives client navigations, and a page resource resolves once per
+/// component (a desktop window's resolves to a guest at launch, before anyone
+/// has signed in), so the menu needs the action's own answer to catch up.
 #[component]
 pub fn UserMenu() -> Element {
     // Read the hint first so the hook order stays put when the session
@@ -220,7 +211,7 @@ mod tests {
         let menu = menu_user(&hint, Some(user("someone-else", None)));
         assert!(
             menu.is_some_and(|menu| menu.username == "jimi"),
-            "the twin's user wins"
+            "the signed-in answer wins over the page session"
         );
 
         assert_eq!(
@@ -230,22 +221,14 @@ mod tests {
     }
 
     #[test]
-    fn a_profile_update_swaps_the_avatar_of_the_account_it_names() {
-        let hint = SessionHint::ProfileUpdated {
-            username: "jimi".to_string(),
-            avatar_file: "42-new.png".to_string(),
-        };
-        let menu = menu_user(&hint, Some(user("jimi", Some("1-old.png")))).expect("menu user");
-        assert_eq!(menu.avatar.as_deref(), Some("42-new.png"));
-        // Everything else about the session user is untouched.
+    fn a_signed_in_hint_survives_a_stale_page_session() {
+        // The desktop logout bug: the navbar's page resource resolved to a
+        // guest at launch (before anyone had signed in) and never refetched,
+        // so a menu that fell back to it would sign the user out. The
+        // signed-in answer carries the user, so the page session is moot.
+        let hint = SessionHint::SignedIn(Box::new(user("jimi", Some("42-new.png"))));
+        let menu = menu_user(&hint, None).expect("the hint carries the user");
         assert_eq!(menu.username, "jimi");
-
-        // A hint from another account (e.g. left over from an earlier session
-        // in the same client) never renames this one's avatar.
-        let other = user("other", Some("1-old.png"));
-        assert_eq!(menu_user(&hint, Some(other.clone())), Some(other));
-
-        // No session to update (guest) stays a guest.
-        assert_eq!(menu_user(&hint, None), None);
+        assert_eq!(menu.avatar.as_deref(), Some("42-new.png"));
     }
 }

@@ -200,7 +200,7 @@ if [ "$admin_ok" -eq 1 ]; then
       -w "artist images status=%{http_code}\n" "$base/admin/artist/e2e-tabs/images"
     pin "$OUT/artist_images.html" 'E2E Tabs Artist Images'
     pin "$OUT/artist_images.html" 'name="file_to_upload"'
-    pin "$OUT/artist_images.html" 'accept=".jpg,.jpeg,.png,.gif,.webp"'
+    pin "$OUT/artist_images.html" 'accept=".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP"'
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.
