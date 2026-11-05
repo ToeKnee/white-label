@@ -28,7 +28,12 @@ const clientIsLive = async (page: import("@playwright/test").Page) => {
   });
 };
 
-/** Log in through the login form; success 303s home with the user menu. */
+/**
+ * Logs in through the login form. Whether that submit is the no-JS 303 or
+ * the reactive twin (`/api/client/login`) depends on whether the wasm client
+ * has hydrated yet — either way the visitor ends up home with the user menu
+ * in the navbar, which is what these tests need before they browse.
+ */
 const loginAs = async (page: import("@playwright/test").Page, username: string) => {
   await page.goto(`${base}/login`);
   await page.fill('input[name="username"]', username);
@@ -195,6 +200,64 @@ test("the profile avatar upload runs through the server fns with a progress bar"
   // The bar retires when the outcome lands, so the page keeps only the alert.
   await expect(page.locator("progress")).toHaveCount(0);
 
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
+test("auth submits reactively: same document, navbar follows the session", async ({ page }) => {
+  // The slice 6d twins (`/api/client/login|logout`) rather than the 303 form
+  // handlers. A marker set on the live document is the proof: a form post
+  // would load a fresh document and take it with it.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await page.goto(`${base}/login`);
+  await expect(h1(page)).toHaveText("Login");
+  await clientIsLive(page);
+  await page.evaluate(() => {
+    (window as unknown as { authMarker?: string }).authMarker = "live document";
+  });
+  const loadsBefore = documentLoads;
+
+  // A reactive failure: the twin answers with the `password` code and the
+  // page's own alert table renders it — no redirect, so no `?bad=` in the URL.
+  await page.fill('input[name="username"]', "e2e-dioxus");
+  await page.fill('input[name="password"]', "definitely-wrong");
+  await page.getByRole("button", { name: "Login" }).click();
+  await expect(page.locator(".alert-error")).toContainText("Password does not match.", {
+    timeout: 15000,
+  });
+  await expect(page).not.toHaveURL(/bad=/);
+  expect(documentLoads, "a failed login is a fetch, not a form post").toBe(loadsBefore);
+
+  // The right password: the twin answers with the user, and the navbar menu
+  // renders that user straight away (the chrome outlives the navigation, so
+  // this is how it catches up).
+  await page.fill('input[name="password"]', "password");
+  await page.getByRole("button", { name: "Login" }).click();
+  await expect(page).toHaveURL(/\/$/, { timeout: 15000 });
+  await expect(page.locator(".navbar summary")).toContainText("e2e-dioxus", { timeout: 15000 });
+
+  // And back out again: the menu item is an SPA navigation to the logout
+  // page, whose button ends the session — then the session hint puts the
+  // guest links back without the logout 303 (`?done`) ever running.
+  await page.locator(".navbar summary").click();
+  await page.getByRole("link", { name: "Log out" }).click();
+  await expect(h1(page)).toHaveText("Log out", { timeout: 15000 });
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page.locator(".navbar").getByRole("link", { name: "Login" })).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(page).not.toHaveURL(/done=/);
+
+  expect(documentLoads, "three submits, no document load").toBe(loadsBefore);
+  expect(
+    await page.evaluate(() => (window as unknown as { authMarker?: string }).authMarker),
+    "the live document should survive all three submits",
+  ).toBe("live document");
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
 

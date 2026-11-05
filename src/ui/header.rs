@@ -8,8 +8,10 @@ use dioxus::prelude::*;
 
 use crate::models::auth::User;
 use crate::ui::Route;
+use crate::ui::SessionHint;
 use crate::ui::assets::display_image_url;
 use crate::ui::use_label;
+use crate::ui::use_session_hint;
 use crate::ui::use_user;
 
 /// Renders the page header.
@@ -60,15 +62,38 @@ fn BrandLink() -> Element {
 /// dropdown once signed in, the guest links otherwise.
 ///
 /// These are the two branches the Leptos `UserMenu` picked from its user
-/// context.
+/// context. A sign-in or sign-out that never reloaded the page (the reactive
+/// twins in [`crate::ui::auth`]) answers through the [`SessionHint`] context
+/// instead: the chrome outlives client navigations, and a page resource
+/// resolves once per component, so the menu needs the twin's own outcome to
+/// catch up.
 #[component]
 pub fn UserMenu() -> Element {
+    // Read the hint first so the hook order stays put when the session
+    // resource below suspends the boundary and this component re-runs.
+    let hint = use_session_hint();
     let session = use_user()?;
-    let user = session().ok().flatten();
+    let user = match hint() {
+        // The twin's answer carries the whole user (permissions included), so
+        // the menu can render the real thing without another round trip.
+        SessionHint::SignedIn(user) => Some(*user),
+        SessionHint::SignedOut => None,
+        // Nothing reactive has happened: show the session the server resolved
+        // for this page (or, in a client build with no page load to carry it,
+        // the one this component's own load fetched).
+        SessionHint::Unknown => session().ok().flatten(),
+    };
     let Some(user) = user.filter(User::is_authenticated) else {
         return rsx! { GuestMenu {} };
     };
 
+    rsx! { SignedInMenu { user } }
+}
+
+/// The signed-in branch of the menu: the avatar dropdown with the profile,
+/// password and (for admins) admin links, plus log out.
+#[component]
+fn SignedInMenu(user: User) -> Element {
     let username = user.username.clone();
     let is_admin = user.permissions.contains("admin");
     let avatar_url = display_image_url(&user.avatar_url());

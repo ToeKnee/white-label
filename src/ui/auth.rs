@@ -1,21 +1,33 @@
 //! The auth pages (MIGRATION.md Phase 4 slice 3), ported from the Leptos
 //! `components::auth` group.
 //!
-//! Dioxus has no Leptos `ActionForm`, and the web client's wasm bundle
-//! arrives only in the later client-target phases — so these pages submit
-//! through plain HTML forms. The forms post to the axum handlers in
-//! `crate::server::forms` (namespaced under `/auth`, so the SSR pages keep
-//! their own GET paths): the handlers run the service call, start or end
-//! the session, then answer a real 303 — to the home page on success, or
-//! back to the form with a fixed code in the query string (`?bad=<code>`,
-//! `?saved=1`, `?updated=1`, `?done=1`) on the other outcomes. The mapping
-//! from code to the on-screen message lives here (`login_message` and
-//! friends); the parameter value itself is never echoed, so a crafted URL
-//! cannot inject alert text.
+//! Each page carries both submit paths, exactly like the upload widget.
 //!
-//! With JS enabled the same flow works unchanged (no app JS is needed for
-//! it); when the client builds land, `use_action` interception can layer
-//! on top of these endpoints without changing them.
+//! - The markup is a real `<form method="post" action="/auth/…">`, posting to
+//!   the axum handlers in `crate::server::forms` (namespaced under `/auth`, so
+//!   the SSR pages keep their own GET paths). Those handlers run the service
+//!   call, start or end the session, then answer a real 303 — home on success,
+//!   or back to the form with a fixed code in the query string (`?bad=<code>`,
+//!   `?saved=1`, `?updated=1`, `?done=1`). That is the path the SSR-only
+//!   server takes, and it needs no javascript.
+//! - `onsubmit` prevents that post and calls the JSON twins at the bottom of
+//!   this module (`/api/client/*`) through `use_action`, so the hydrated web
+//!   client and the desktop window submit without a page load. For the window
+//!   this is not an optimisation but the only path: a webview cannot follow a
+//!   303, which is why it could not log in before slice 6d.
+//!
+//! Both paths fail identically. The twins answer with
+//! [`crate::api_types::auth::AuthOutcome`], carrying the same fixed codes
+//! `crate::server::forms` puts in the redirect, and the
+//! tables at the bottom of this module (`login_message` and friends) decide
+//! what the visitor reads; the parameter value itself is never echoed, so a
+//! crafted URL cannot inject alert text.
+//!
+//! A reactive sign-in or sign-out also tells the shell's chrome what happened
+//! through the [`crate::ui::SessionHint`] context: page components load the
+//! session when they mount, but the shell's navbar outlives client
+//! navigations, and a page resource resolves once per component, so the menu
+//! needs the action's own answer rather than another fetch.
 //!
 //! The profile page also carries the avatar upload widget
 //! ([`crate::ui::upload::FileUploadWithProgress`], Phase 5 slice 5f); like
@@ -30,30 +42,86 @@
 //! GET  /login?bad=password                            → alert "Password does not match."
 //! ```
 
+use dioxus::CapturedError;
 use dioxus::prelude::*;
+use dioxus::router::RouterContext;
 
+use crate::api_types::auth::AuthOutcome;
 use crate::config::upload::UploadConfiguration;
+use crate::forms::auth::{ClientLoginForm, ClientRegisterForm};
 use crate::models::auth::User;
 use crate::ui::Route;
+use crate::ui::SessionHint;
 use crate::ui::redirect;
 use crate::ui::upload::FileUploadWithProgress;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success};
 
-/// The login page. `bad` carries the code from a failed attempt; the
-/// daisy fieldset and icons are kept 1:1 with the Leptos original.
+// Server-only: the twins' bodies run in the server half of the macros, next to
+// the same services and session records the form handlers use.
+#[cfg(feature = "server")]
+use crate::forms::user::RegisterUserForm;
+#[cfg(feature = "server")]
+use crate::server::current_user::{
+    login as record_login, logout as record_logout, remember_session,
+};
+#[cfg(feature = "server")]
+use crate::server::forms::{login_code, register_code};
+#[cfg(feature = "server")]
+use crate::services;
+
+/// The login page. `bad` carries the code from a javascript-off attempt; a
+/// reactive failure stays in the action instead. The daisy fieldset and icons
+/// are kept 1:1 with the Leptos original.
 #[component]
 pub fn Login(
     /// Error code from a failed login attempt.
     bad: Option<String>,
 ) -> Element {
+    // Looked up rather than hooked (`use_context`/`use_navigator` would panic)
+    // because the SSR markup tests render this page on its own, with no app
+    // shell and no router to provide either one.
+    let router = try_use_context::<RouterContext>();
+    let session_hint = try_use_context::<Signal<SessionHint>>();
+    let mut submit =
+        use_action(move |form: ClientLoginForm| async move { login_client(form).await });
+
+    // Leaving the page happens in an effect: the action only resolves after the
+    // submit handler has already returned.
+    use_effect(move || {
+        if let Some(AuthOutcome::LoggedIn { user }) = answered(submit.value()) {
+            record_session_hint(session_hint, SessionHint::SignedIn(Box::new(user)));
+            go_home(router);
+        }
+    });
+
+    let answer = answered(submit.value());
+    let reactive_message = match &answer {
+        // Same fixed-code table the `?bad=` redirect path uses.
+        Some(AuthOutcome::Failed { code }) => Some(
+            login_message(Some(code.as_str()))
+                .unwrap_or("Login failed, try again later.")
+                .to_string(),
+        ),
+        _ => transport_message(submit.value()),
+    };
+
     rsx! {
         article { class: "my-6 md:container md:mx-auto prose",
             h1 { "Login" }
-            form { method: "post", action: "/auth/login",
+            form {
+                method: "post",
+                action: "/auth/login",
+                onsubmit: move |evt| {
+                    evt.prevent_default();
+                    submit.call(login_form_from_values(&evt));
+                },
                 div { class: "grid gap-6",
                     if let Some(message) = login_message(bad.as_deref()) {
                         InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = reactive_message {
+                        InlineError { message }
                     }
 
                     fieldset { class: "flex flex-col gap-6 fieldset",
@@ -96,22 +164,52 @@ pub fn Login(
     }
 }
 
-/// The register page; `bad` carries the code from a failed attempt.
+/// The register page; `bad` carries the code from a javascript-off attempt.
 ///
-/// A successful register logs the new user in and 303s home (as the
-/// Leptos page did).
+/// A successful register logs the new user in and lands home (as the Leptos
+/// register page did) — by 303 without a client build, by navigation with one.
 #[component]
 pub fn Register(
     /// Error code from a failed registration attempt.
     bad: Option<String>,
 ) -> Element {
+    let router = try_use_context::<RouterContext>();
+    let session_hint = try_use_context::<Signal<SessionHint>>();
+    let mut submit =
+        use_action(move |form: ClientRegisterForm| async move { register_client(form).await });
+
+    use_effect(move || {
+        if let Some(AuthOutcome::LoggedIn { user }) = answered(submit.value()) {
+            record_session_hint(session_hint, SessionHint::SignedIn(Box::new(user)));
+            go_home(router);
+        }
+    });
+
+    let reactive_message = match &answered(submit.value()) {
+        Some(AuthOutcome::Failed { code }) => Some(
+            register_message(Some(code.as_str()))
+                .unwrap_or("Registration failed. Check the details and try again.")
+                .to_string(),
+        ),
+        _ => transport_message(submit.value()),
+    };
+
     rsx! {
         article { class: "my-6 md:container md:mx-auto prose",
             h1 { "Register" }
-            form { method: "post", action: "/auth/register",
+            form {
+                method: "post",
+                action: "/auth/register",
+                onsubmit: move |evt| {
+                    evt.prevent_default();
+                    submit.call(register_form_from_values(&evt));
+                },
                 div { class: "grid gap-6",
                     if let Some(message) = register_message(bad.as_deref()) {
                         InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = reactive_message {
+                        InlineError { message }
                     }
 
                     fieldset { class: "flex flex-col gap-6 fieldset",
@@ -174,16 +272,29 @@ pub fn Register(
     }
 }
 
-/// The logout page. Before a logout it shows the button (posting ends the
-/// session, then 303s back with `?done`).
+/// The logout page. Before a logout it shows the button — posting ends the
+/// session and 303s back with `?done`, and the reactive twin ends it and
+/// reports `Done` instead.
 ///
-/// After a logout it shows the Leptos page's "Logged out" line instead.
+/// After a logout it shows the Leptos page's "Logged out" line instead, and the
+/// navbar menu goes back to the guest links through the session hint.
 #[component]
 pub fn Logout(
     /// Set when the session has just ended.
     done: Option<String>,
 ) -> Element {
-    let finished = done.is_some();
+    let session_hint = try_use_context::<Signal<SessionHint>>();
+    let mut submit = use_action(move |(): ()| async move { logout_client().await });
+
+    use_effect(move || {
+        if matches!(answered(submit.value()), Some(AuthOutcome::Done)) {
+            record_session_hint(session_hint, SessionHint::SignedOut);
+        }
+    });
+
+    let finished = done.is_some() || matches!(answered(submit.value()), Some(AuthOutcome::Done));
+    let failure_message = transport_message(submit.value());
+
     rsx! {
         article { class: "my-6 md:container md:mx-auto prose",
             h1 { "Log out" }
@@ -191,9 +302,18 @@ pub fn Logout(
                 if finished {
                     p { "Logged out" }
                 } else {
-                    form { method: "post", action: "/auth/logout",
+                    form {
+                        method: "post",
+                        action: "/auth/logout",
+                        onsubmit: move |evt| {
+                            evt.prevent_default();
+                            submit.call(());
+                        },
                         button { class: "btn btn-primary", "Log out" }
                     }
+                }
+                if let Some(message) = failure_message {
+                    InlineError { message }
                 }
             }
         }
@@ -432,6 +552,163 @@ fn PasswordForm(
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Reactive twins of the `/auth/*` handlers (MIGRATION.md Phase 6 slice 6d)
+// ---------------------------------------------------------------------------
+//
+// Same services, same session records and same fixed failure codes as the form
+// handlers in `crate::server::forms`; only the delivery differs, because a
+// client build has no page load to carry a `?bad=` query and a webview window
+// cannot follow a 303 at all.
+//
+// They live under `/api/client/*` rather than on the Leptos server-fn paths
+// (`POST /api/login`, …) because the live Leptos site still owns those until
+// Phase 8 retires it, and axum panics on two handlers for one method and path.
+
+/// Logs in and starts the session, answering `LoggedIn` with the user so the
+/// client can show them without a second round trip.
+///
+/// # Errors
+/// 500 with a retry message when the session store will not take the session.
+#[post("/api/client/login",
+    db: crate::server::current_user::Db,
+    session: tower_sessions::Session
+)]
+pub async fn login_client(form: ClientLoginForm) -> core::result::Result<AuthOutcome, HttpError> {
+    let user = match services::user::login_user(&db.0, form.username, form.password).await {
+        Ok(user) => user,
+        Err(error) => {
+            tracing::warn!("login twin rejected: {error}");
+            return Ok(AuthOutcome::Failed {
+                code: login_code(&error).to_string(),
+            });
+        }
+    };
+
+    if let Err(error) = record_login(&session, user.id).await {
+        tracing::error!("login twin: could not store the session: {error}");
+        return HttpError::internal_server_error("Could not start the session, try again later");
+    }
+    remember_session(&session, form.remember.as_deref());
+
+    Ok(AuthOutcome::LoggedIn { user })
+}
+
+/// Creates the account, then logs the new user in (the register form's order).
+///
+/// # Errors
+/// 500 with a retry message when the session store will not take the session.
+#[post("/api/client/register",
+    db: crate::server::current_user::Db,
+    session: tower_sessions::Session
+)]
+pub async fn register_client(
+    form: ClientRegisterForm,
+) -> core::result::Result<AuthOutcome, HttpError> {
+    let user = match services::user::register_user_service(
+        &db.0,
+        RegisterUserForm {
+            username: form.username,
+            email: form.email,
+            password: form.password,
+            password_confirmation: form.password_confirmation,
+        },
+    )
+    .await
+    {
+        Ok(user) => user,
+        Err(error) => {
+            tracing::warn!("register twin rejected: {error}");
+            return Ok(AuthOutcome::Failed {
+                code: register_code(&error).to_string(),
+            });
+        }
+    };
+
+    if let Err(error) = record_login(&session, user.id).await {
+        tracing::error!("register twin: could not store the session: {error}");
+        return HttpError::internal_server_error("Could not start the session, try again later");
+    }
+    remember_session(&session, form.remember.as_deref());
+
+    Ok(AuthOutcome::LoggedIn { user })
+}
+
+/// Ends the signed-in session, answering `Done` (the javascript-off handler
+/// gets there with `?done=1` instead).
+///
+/// # Errors
+/// 500 with a retry message when the session store will not flush the session.
+#[post("/api/client/logout", session: tower_sessions::Session)]
+pub async fn logout_client() -> core::result::Result<AuthOutcome, HttpError> {
+    if let Err(error) = record_logout(&session).await {
+        tracing::error!("logout twin: could not end the session: {error}");
+        return HttpError::internal_server_error("Could not end the session, try again later");
+    }
+    Ok(AuthOutcome::Done)
+}
+
+// ---------------------------------------------------------------------------
+// Reactive plumbing shared by the three pages
+// ---------------------------------------------------------------------------
+
+/// Navigates home from an auth action's success path. The router handle was
+/// looked up during render, so the routerless SSR markup tests stay put.
+fn go_home(router: Option<RouterContext>) {
+    if let Some(router) = router {
+        // The only kind of failure is an external URL, which a `Route` is not.
+        let _failure = router.replace(Route::RecordLabelHome {});
+    }
+}
+
+/// Tells the shell's chrome what an auth action decided about the session (see
+/// [`crate::ui::SessionHint`]); absent in the routerless markup tests.
+fn record_session_hint(hint: Option<Signal<SessionHint>>, answer: SessionHint) {
+    if let Some(mut hint) = hint {
+        hint.set(answer);
+    }
+}
+
+/// The action's outcome, out of the signal dioxus keeps an action's value in.
+fn answered(value: Option<Result<ReadSignal<AuthOutcome>, CapturedError>>) -> Option<AuthOutcome> {
+    value.and_then(|result| result.ok().map(|value| value.cloned()))
+}
+
+/// A transport failure from an auth action (the API was unreachable, or the
+/// twin answered 500): the captured error's own text, as the links editor
+/// shows it — for these endpoints the message is always ours, never the
+/// database's.
+fn transport_message(
+    value: Option<Result<ReadSignal<AuthOutcome>, CapturedError>>,
+) -> Option<String> {
+    value.and_then(|result| result.err().map(|error| error.to_string()))
+}
+
+/// A form submit's text inputs as a JSON object. Dioxus' `parsed_values`
+/// deserializer sits behind a dioxus-html feature the meta crate does not
+/// expose, so the fields are mapped by hand, as in `ui::admin::links`.
+fn text_fields(evt: &FormEvent) -> serde_json::Map<String, serde_json::Value> {
+    let mut fields = serde_json::Map::new();
+    for (name, value) in evt.values() {
+        if let FormValue::Text(text) = value {
+            fields.insert(name, serde_json::Value::String(text));
+        }
+    }
+    fields
+}
+
+/// The login page's fields for the reactive path. `remember` only arrives when
+/// the box is ticked, exactly as in the form-encoded post; an unparsable body
+/// becomes an empty form, which the service rejects as `required`.
+fn login_form_from_values(evt: &FormEvent) -> ClientLoginForm {
+    serde_json::from_value(serde_json::Value::Object(text_fields(evt))).unwrap_or_default()
+}
+
+/// The register page's fields for the reactive path.
+fn register_form_from_values(evt: &FormEvent) -> ClientRegisterForm {
+    serde_json::from_value(serde_json::Value::Object(text_fields(evt))).unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------

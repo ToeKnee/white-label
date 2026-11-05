@@ -280,9 +280,11 @@ fn optional(text: String) -> Option<String> {
 
 // The fixed codes `crate::ui::auth` maps onto alert text. Service messages
 // are constants in `crate::services`, so comparing them is stable;
-// anything unrecognised gets the generic `server`/`invalid` code.
+// anything unrecognised gets the generic `server`/`invalid` code. The
+// reactive twins (`ui::auth`'s `/api/client/*` server fns) answer the same
+// codes, so both paths keep failing identically.
 
-fn login_code(error: &AppError) -> &'static str {
+pub fn login_code(error: &AppError) -> &'static str {
     match error {
         AppError::BadRequest(_) => "required",
         AppError::Unauthorized(message) if message == "User does not exist." => "not_found",
@@ -291,7 +293,7 @@ fn login_code(error: &AppError) -> &'static str {
     }
 }
 
-fn register_code(error: &AppError) -> &'static str {
+pub fn register_code(error: &AppError) -> &'static str {
     match error {
         AppError::BadRequest(message) if message == "Username and password are required." => {
             "required"

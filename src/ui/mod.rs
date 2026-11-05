@@ -201,3 +201,31 @@ pub fn use_global_state() -> Signal<GlobalState> {
 pub fn use_user() -> core::result::Result<PageValue<Option<User>>, RenderError> {
     use_page(move || page_data(crate::ui::data::get_current_user()))
 }
+
+/// What the last reactive auth action told the shell's chrome.
+///
+/// The navbar outlives client navigation, and a page resource resolves once
+/// per component (see [`use_page`]), so a sign-in that never reloaded the page
+/// would otherwise leave the menu showing the session from the original page
+/// render. The auth twins in [`crate::ui::auth`] answer with the outcome they
+/// just computed, and the menu renders that instead of guessing.
+#[derive(Clone, Debug)]
+pub enum SessionHint {
+    /// Nothing has been signed in or out in this client session: show the
+    /// session the server resolved when the page was rendered.
+    Unknown,
+    /// A login or register twin signed this user in. It carries the whole
+    /// user, permissions included, so the menu renders without a refetch.
+    /// (Boxed: the other variants are bare, and `User` is far bigger than
+    /// they are.)
+    SignedIn(Box<User>),
+    /// The logout twin ended the session.
+    SignedOut,
+}
+
+/// The [`SessionHint`] that [`App`] provides: written by the auth twins,
+/// read by the navbar menu.
+#[must_use]
+pub fn use_session_hint() -> Signal<SessionHint> {
+    use_context()
+}

@@ -78,9 +78,10 @@ build-and-serve commands above are the dev flow.
 
 `cargo test --features server` covers the SSR side; the hydrated client side
 is covered by `end2end/tests/dioxus_client.spec.ts` (SPA nav issues no extra
-document loads, the links editor submits without a round trip, the profile
-avatar upload and the artist image upload both run through the server fns
-with a progress bar) — it needs the
+document loads, the links editor submits without a round trip, login and logout
+submit through the `/api/client/*` twins so the navbar follows the session
+without a reload, the profile avatar upload and the artist image upload both
+run through the server fns with a progress bar) — it needs the
 wasm bundle, so it only runs through the gate script below.
 
 The gate script boots that server against the dev database and adds curl
@@ -133,9 +134,9 @@ Two things a deployment has to know:
   body limit raised to match — nginx's `client_max_body_size` defaults to
   1 MB, which would reject these uploads before the app ever sees them.
 
-Uploads have two paths, and both work in every mode. The reactive one streams
-the file through the `/api/upload` server fn (with the progress bar) and needs
-the client build above. The widget's markup is also a real
+Uploads have two paths, and both work in the browser modes. The reactive one
+streams the file through the `/api/upload` server fn (with the progress bar) and
+needs the client build above. The widget's markup is also a real
 `multipart/form-data` form — `method="post"`, `enctype`, and hidden
 `file_type`/`slug`/`artist_slug` fields ahead of the file part — so with
 javascript off, or on the SSR-only server (which serves no wasm bundle), the
@@ -197,16 +198,24 @@ files from `[bundle] resources` in `Dioxus.toml` (slice 6f).
 There is no SSR in this target: the app boots client-side and every server fn
 in `ui/data.rs` is an HTTP call made by dioxus' own `reqwest` client, which
 keeps a process-wide cookie jar, so the session cookie round-trips without any
-CORS or `SameSite` work. What the desktop build still does **not** do
-(Phase 6 slice 6c):
+CORS or `SameSite` work.
 
-- dioxus blocks in-app navigation after the first load, so the plain-HTML
-  303 form fallbacks the SSR pages use are inert in the window: forms need the
-  reactive `use_action` + JSON-twin path (the links editor already has it).
-  `http(s)://` links, by contrast, correctly open in the system browser. That is
-  why a window pointed at the API cannot log in, register or upload yet — the
-  javascript-off upload form works in a browser, not in the webview (Phase 6
-  slices 6d–6e).
+dioxus blocks in-app navigation after the first load, so the plain-HTML 303 form
+fallbacks the SSR pages use are inert in the window: every form a user needs to
+submit natively goes through the reactive `use_action` + JSON-twin path (the
+links editor already had it). `http(s)://` links, by contrast, correctly open in
+the system browser. Login, register and logout joined them in slice 6d: three
+server fns under `/api/client/*`, next to the `/auth/*` handlers rather than on
+the same paths (the Leptos site still owns `POST /api/login` until Phase 8, and
+axum refuses a path twice), answering an `AuthOutcome` — `LoggedIn { user }`,
+`Done`, or `Failed { code }` with the same fixed codes the `?bad=` query carries.
+The navbar learns what happened from the `ui::SessionHint` context: the chrome
+outlives the navigation and a page resource resolves once per component, so the
+menu renders the action's own answer instead of guessing (dioxus ignores `key:`
+on a single node, so re-keying the menu would not have rebuilt it).
+Still open in slice 6e: the upload widget's reactive path has never run in the
+window, and its javascript-off multipart post is precisely the navigation the
+webview blocks.
 
 The `server`-gated modules (router assembly, sessions, current-user
 extractor, ported API endpoints) have their own tests, but plain `cargo test`
@@ -214,7 +223,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 509 lib tests, includes src/server/ + src/ui/ tests
+cargo test --features server   # 513 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
 cargo test --features server -- ui::          # just the route-table + UI component tests
 ```

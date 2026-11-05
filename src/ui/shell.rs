@@ -21,6 +21,7 @@ use dioxus::prelude::*;
 
 use crate::store::GlobalState;
 use crate::ui::Route;
+use crate::ui::SessionHint;
 use crate::ui::assets::bundled_asset;
 use crate::ui::footer::LabelFooter;
 use crate::ui::header::LabelHeader;
@@ -31,8 +32,13 @@ use crate::ui::header::LabelHeader;
 /// Provides the `GlobalState` context and sets up the document head. (The
 /// current user is not a context: every component that needs it reads the
 /// session through `super::use_user`.)
+///
+/// The session hint is the exception: it is what a reactive sign-in or
+/// sign-out hands the chrome, which outlives the navigation and cannot
+/// re-read its own page resource (see [`SessionHint`]).
 pub fn App() -> Element {
     use_context_provider(|| Signal::new(GlobalState::default()));
+    use_context_provider(|| Signal::new(SessionHint::Unknown));
 
     rsx! {
         document::Meta { charset: "utf-8" }

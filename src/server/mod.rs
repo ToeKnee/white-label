@@ -8,7 +8,7 @@
 
 pub(crate) mod api;
 pub mod current_user;
-mod forms;
+pub(crate) mod forms;
 pub(crate) mod upload_form;
 
 use anyhow::Context;
@@ -632,6 +632,191 @@ mod tests {
         assert_shell(&done_page, &[CHROME[0], "Logged out"]);
         let home = server.get("/").await.text();
         assert!(home.contains("Register"), "session should be gone:\n{home}");
+    }
+
+    // --- Reactive auth twins (`/api/client/*`, Phase 6 slice 6d) -----------
+    //
+    // The desktop window and the wasm client cannot post a form and follow the
+    // 303, so these JSON twins carry the same flows as data. They share the
+    // services and the session records with the handlers above, so the tests
+    // check the outcome shape and that the session really is shared.
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn login_twin_answers_with_the_user_and_starts_the_session(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+
+        let answered = server
+            .post("/api/client/login")
+            .json(&serde_json::json!({
+                "form": { "username": "test-5", "password": "password", "remember": "on" }
+            }))
+            .await;
+        answered.assert_status_ok();
+        let body = answered.text();
+        assert!(
+            body.contains("LoggedIn"),
+            "outcome should be a session:\n{body}"
+        );
+        assert!(body.contains("test-5"), "and carry the user:\n{body}");
+
+        // The session cookie that answer set is the one every other twin reads:
+        // the JSON session endpoint and the SSR chrome's menu both see it.
+        let user = server.get("/api/user").await.text();
+        assert!(
+            user.contains("test-5"),
+            "the session should be live:\n{user}"
+        );
+        let home = server.get("/").await.text();
+        assert!(home.contains("Log out"), "signed-in navbar:\n{home}");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn login_twin_reports_the_forms_fixed_codes(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+
+        // A refused login is still a plain answer: the client maps the code
+        // through the same alert table the `?bad=` redirect path uses.
+        for (username, password, code) in [
+            ("test-5", "nope", "password"),
+            ("nobody", "password", "not_found"),
+            ("", "", "required"),
+        ] {
+            let answered = server
+                .post("/api/client/login")
+                .json(&serde_json::json!({
+                    "form": { "username": username, "password": password }
+                }))
+                .await;
+            answered.assert_status_ok();
+            let body = answered.text();
+            assert!(
+                body.contains("Failed") && body.contains(code),
+                "expected {code} for {username:?}, got:\n{body}"
+            );
+        }
+
+        // Nothing was signed in along the way.
+        let user = server.get("/api/user").await.text();
+        assert_eq!(user.trim(), "null", "no session should exist:\n{user}");
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn logout_twin_ends_the_session(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+
+        server
+            .post("/api/client/login")
+            .json(&serde_json::json!({
+                "form": { "username": "test-5", "password": "password" }
+            }))
+            .await
+            .assert_status_ok();
+        assert!(
+            server.get("/api/user").await.text().contains("test-5"),
+            "the login twin should have started a session"
+        );
+
+        // A unit variant arrives as the bare string "Done".
+        let ended = server
+            .post("/api/client/logout")
+            .json(&serde_json::json!({}))
+            .await;
+        ended.assert_status_ok();
+        assert_eq!(ended.text().trim(), "\"Done\"", "logout outcome");
+
+        let user = server.get("/api/user").await.text();
+        assert_eq!(user.trim(), "null", "session should be gone:\n{user}");
+        let home = server.get("/").await.text();
+        assert!(
+            home.contains("Register"),
+            "guest menu should be back:\n{home}"
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn register_twin_creates_the_user_and_signs_them_in(pool: PgPool) {
+        let server = api_server(pool).await;
+
+        let answered = server
+            .post("/api/client/register")
+            .json(&serde_json::json!({
+                "form": {
+                    "username": "twin-user",
+                    "email": "twin-user@example.com",
+                    "password": "password",
+                    "password_confirmation": "password",
+                    "remember": "on",
+                }
+            }))
+            .await;
+        answered.assert_status_ok();
+        let body = answered.text();
+        assert!(
+            body.contains("LoggedIn"),
+            "register logs the new user in:\n{body}"
+        );
+        assert!(body.contains("twin-user"), "and returns them:\n{body}");
+        assert!(
+            server.get("/api/user").await.text().contains("twin-user"),
+            "the session should belong to the new user"
+        );
+
+        // The same fixed codes the register form reports go back out.
+        let duplicate = server
+            .post("/api/client/register")
+            .json(&serde_json::json!({
+                "form": {
+                    "username": "twin-user",
+                    "email": "twin-user@example.com",
+                    "password": "password",
+                    "password_confirmation": "password",
+                }
+            }))
+            .await;
+        duplicate.assert_status_ok();
+        let body = duplicate.text();
+        assert!(
+            body.contains("Failed") && body.contains("taken"),
+            "the taken code should come back:\n{body}"
+        );
+
+        // Mismatched confirmations report `mismatch`.
+        let mismatch = server
+            .post("/api/client/register")
+            .json(&serde_json::json!({
+                "form": {
+                    "username": "another-user",
+                    "email": "another-user@example.com",
+                    "password": "password",
+                    "password_confirmation": "nope",
+                }
+            }))
+            .await;
+        mismatch.assert_status_ok();
+        let body = mismatch.text();
+        assert!(
+            body.contains("Failed") && body.contains("mismatch"),
+            "the mismatch code should come back:\n{body}"
+        );
     }
 
     #[expect(

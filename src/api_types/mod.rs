@@ -21,6 +21,7 @@
 
 pub mod artist;
 pub mod artists;
+pub mod auth;
 pub mod links;
 pub mod menu;
 pub mod page;
