@@ -15,9 +15,11 @@
 //! percent-encoded on the server.
 //!
 //! Deviations from the Leptos original:
-//! - No plain-HTML fallback: `/api/upload` speaks dioxus' body protocol, so an
-//!   upload needs the client build. The Leptos widget was javascript-only too,
-//!   but it left a form-post twin behind; there is none here.
+//! - No plain-HTML *body* twin: `/api/upload` speaks dioxus' body protocol, so
+//!   the reactive path needs the client build. The widget also renders a real
+//!   `multipart/form-data` form, so a browser with javascript off posts to
+//!   `/forms/upload` instead (`crate::server::upload_form` answers it); the two
+//!   paths share the filename rules and the `finalise_upload` tail.
 //! - [`file_progress`](crate::ui::upload::file_progress) needs only a session,
 //!   not `admin` + `label_owner`: the
 //!   registry key already carries the requester's username, so the extra
@@ -220,8 +222,14 @@ pub async fn file_progress(filename: String) -> core::result::Result<TextStream,
 // ---------------------------------------------------------------------------
 
 /// File picker, Upload button and progress bar (the Leptos
-/// `FileUploadWithProgress`). Only the wasm client can upload, so SSR shows
-/// the controls without a fallback target.
+/// `FileUploadWithProgress`).
+///
+/// Two submission paths share one markup. The reactive one (`onsubmit`, so
+/// `prevent_default`) streams the file through the server fn and draws the
+/// progress bar. The javascript-off one posts the same form as
+/// `multipart/form-data` to `server::upload_form`, which 303s back to this page
+/// with `?uploaded=1` or `?bad_upload=<code>`; those codes come in as props and
+/// render through [`upload_message`].
 #[component]
 pub fn FileUploadWithProgress(
     /// Which slot to upload to: chooses the directory, mime types, size limit
@@ -230,6 +238,17 @@ pub fn FileUploadWithProgress(
     /// The item the file belongs to: an artist or release slug, or the
     /// uploader's own username for [`UploadConfiguration::Avatar`].
     slug: String,
+    /// The artist slug, needed only by the javascript-off form when uploading
+    /// for a release: its editor lives under the artist.
+    #[props(optional)]
+    artist_slug: Option<String>,
+    /// This page's `?uploaded=1` code, set by a javascript-off upload.
+    #[props(optional)]
+    uploaded: Option<String>,
+    /// This page's `?bad_upload=<code>` code, set by a failed javascript-off
+    /// upload.
+    #[props(optional)]
+    bad_upload: Option<String>,
     /// Runs after a file is stored, with the name it was stored under. The
     /// artist and release pages use it to point their `<img>` at the new
     /// file, so the user does not have to reload (Leptos left the old image
@@ -240,6 +259,10 @@ pub fn FileUploadWithProgress(
     let details = config.get_details();
     let accepted_types = details.mime_types.join(",");
     let size_limit_mb = details.size_limit / (1024 * 1024);
+    // The javascript-off form has to name the row it belongs to, and the slug
+    // is moved into the action's future below, so keep a copy.
+    let form_slug = slug.clone();
+    let form_artist_slug = artist_slug;
     // `max`/`value` are written as plain attributes: dioxus types them as
     // `f64` on `<progress>`, and byte counts read better as strings.
     let mut uploading = use_signal(|| None::<String>);
@@ -275,9 +298,19 @@ pub fn FileUploadWithProgress(
     };
     let in_flight = submit.pending();
     let show_progress = in_flight || (max_bytes().is_some() && outcome.is_none());
+    // The query-code alerts stand in for the outcome when there is no reactive
+    // one, so decide that before `outcome` is moved into the markup below.
+    let no_reactive_outcome = outcome.is_none();
 
     rsx! {
         form {
+            // A file input needs a POST + multipart target even when javascript
+            // runs: without one the browser refuses to send the file (and says
+            // so in the console). `onsubmit` below prevents the post for the
+            // reactive path, and `server::upload_form` answers it for the rest.
+            method: "post",
+            action: "/forms/upload",
+            enctype: "multipart/form-data",
             onsubmit: move |evt| {
                 // The upload protocol is a request body, not a form post.
                 evt.prevent_default();
@@ -288,6 +321,26 @@ pub fn FileUploadWithProgress(
                     submit.call(file);
                 }
             },
+            // The javascript-off path needs them: `file_type` picks the
+            // configuration, `slug` (and `artist_slug`) the row and the page to
+            // come back to. Order is the protocol — the file part comes last.
+            input {
+                r#type: "hidden",
+                name: "file_type",
+                value: format!("{config}"),
+            }
+            input {
+                r#type: "hidden",
+                name: "slug",
+                value: form_slug,
+            }
+            if let Some(artist) = form_artist_slug {
+                input {
+                    r#type: "hidden",
+                    name: "artist_slug",
+                    value: artist,
+                }
+            }
             div {
                 class: "grid gap-6",
                 div {
@@ -312,6 +365,17 @@ pub fn FileUploadWithProgress(
                 InlineError { message: outcome.message }
             }
         }
+        // A javascript-off upload has no client state to hold its outcome, so
+        // the handler carried it in the page's query codes instead. The
+        // reactive path never sets those, so the two cannot both alert.
+        if no_reactive_outcome {
+            if uploaded.is_some() {
+                Success { message: "Image uploaded.", show: true }
+            }
+            if let Some(message) = upload_message(bad_upload.as_deref()) {
+                InlineError { message }
+            }
+        }
         if show_progress {
             if in_flight {
                 if let Some(filename) = uploading() {
@@ -334,6 +398,24 @@ pub fn FileUploadWithProgress(
 fn picked_file(evt: &FormEvent) -> Option<FileData> {
     match evt.get_first("file_to_upload") {
         Some(FormValue::File(file)) => file.filter(|file| !file.name().is_empty()),
+        _ => None,
+    }
+}
+
+/// The on-screen message for the javascript-off upload form's fixed error
+/// codes; unknown and absent codes render nothing. `server::upload_form` picks
+/// the codes, mirroring how the other editors' `*_message` tables pair with the
+/// handlers in `server::forms`.
+fn upload_message(code: Option<&str>) -> Option<&'static str> {
+    match code? {
+        "forbidden" => Some("You do not have permission."),
+        "not_found" => Some("The item to attach the file to was not found."),
+        "bad_form" => Some("The upload form was incomplete."),
+        "missing_file" => Some("Choose a file to upload."),
+        "bad_mime" => Some("Invalid mime type."),
+        "bad_file_name" => Some("Invalid file name."),
+        "too_large" => Some("File too large."),
+        "server" => Some("Upload failed."),
         _ => None,
     }
 }
@@ -982,5 +1064,59 @@ mod tests {
             "the accept list comes from the config: {html}"
         );
         assert!(html.contains("Upload"), "the button says Upload: {html}");
+    }
+
+    /// The same markup has to be a working form without javascript: a POST to
+    /// the upload handler, multipart encoding, and the hidden fields the
+    /// handler needs (a file input in a form that posts none of that is
+    /// dropped by the browser, with a console warning).
+    #[test]
+    fn widget_renders_a_form_that_works_without_javascript() {
+        let html = dioxus::ssr::render_element(rsx! {
+            FileUploadWithProgress {
+                config: UploadConfiguration::Release,
+                slug: "test-release-1",
+                artist_slug: Some("test-artist-1".to_string()),
+            }
+        });
+        for expected in [
+            r#"method="post""#,
+            r#"enctype="multipart/form-data""#,
+            r#"action="/forms/upload""#,
+            r#"name="file_type""#,
+            r#"value="test-release-1""#,
+            r#"name="artist_slug""#,
+            r#"value="test-artist-1""#,
+        ] {
+            assert!(html.contains(expected), "expected {expected} in: {html}");
+        }
+        assert!(
+            html.contains(r#"name="file_type" value="Release""#),
+            "the configuration travels as a hidden field: {html}"
+        );
+        // The markup's action and the router's route are the same path, and
+        // that only holds while this pin matches `server::upload_form`.
+        assert_eq!(
+            crate::server::upload_form::PATH_UPLOAD_FORM,
+            "/forms/upload",
+            "the form action above is the handler's route"
+        );
+    }
+
+    #[test]
+    fn upload_messages_cover_the_known_codes() {
+        assert_eq!(
+            upload_message(Some("forbidden")),
+            Some("You do not have permission.")
+        );
+        assert_eq!(
+            upload_message(Some("missing_file")),
+            Some("Choose a file to upload.")
+        );
+        assert_eq!(upload_message(Some("bad_mime")), Some("Invalid mime type."));
+        assert_eq!(upload_message(Some("too_large")), Some("File too large."));
+        assert_eq!(upload_message(Some("server")), Some("Upload failed."));
+        assert_eq!(upload_message(Some("made_up")), None);
+        assert_eq!(upload_message(None), None);
     }
 }

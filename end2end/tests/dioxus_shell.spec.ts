@@ -13,13 +13,18 @@ import { expect, test } from "@playwright/test";
  * own register handler (idempotent across runs); admin tests need an
  * `e2e-admin` account seeded with the admin/label_owner permissions
  * out-of-band and are skipped unless the gate reports `E2E_ADMIN_OK`.
- * The artist images tab is real since Phase 5 slice 5g; uploading needs the
- * wasm client, so this spec only pins its SSR markup (the client spec uploads
- * for real).
- * There is no wasm bundle yet, so clicks are full page loads (hydration smoke
- * coverage comes once the client targets land, Phases 4-7).
+ * The artist images tab is real since Phase 5 slice 5g. Since Phase 6 the
+ * upload widget also renders a plain multipart form, so this spec (which runs
+ * against the server with no wasm bundle) uploads for real the way a
+ * javascript-off browser does; the client spec covers the streaming path.
+ * There is no wasm bundle on this server, so clicks are full page loads
+ * (hydration smoke coverage comes once the client targets land, Phases 4-7).
  */
 const base = process.env.DIOXUS_URL ?? "http://127.0.0.1:8127";
+
+/** The smallest real PNG, used by the javascript-off upload test. */
+const PNG_1X1_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 /** The navbar brand link, which shows the record label's name. */
 const brandLink = (page: import("@playwright/test").Page) => page.locator(".navbar-start a");
@@ -217,12 +222,52 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
   await expect(page.getByRole("tab", { name: "Links" })).toHaveClass(/tab-active/);
 
   await page.getByRole("tab", { name: "Images" }).click();
-  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\/?$/);
-  // Slice 5g made the images tab real: header + the upload picker (the upload
-  // itself is the client's job, asserted in dioxus_client.spec.ts).
+  // The images tab carries the upload form's query codes too, so its link
+  // renders the trailing `?` like the links tab above.
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\/?\??$/);
+  // Slice 5g made the images tab real: header + the upload picker; the
+  // javascript-off upload below and the client spec cover the upload itself.
   await expect(h1(page)).toHaveText("E2E Tabs Artist Images");
   await expect(page.getByRole("tab", { name: "Images" })).toHaveClass(/tab-active/);
   await expect(page.locator('input[name="file_to_upload"]')).toHaveCount(1);
+});
+
+test("an upload works without javascript, as a multipart form post", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // Phase 6: this server serves no wasm bundle, so clicking Upload is exactly
+  // what a javascript-off browser does — a multipart POST to /forms/upload,
+  // which stores the file and 303s back to the images tab with ?uploaded=1.
+  await page.goto(`${base}/admin/artist/e2e-tabs/images`);
+  await expect(h1(page)).toHaveText("E2E Tabs Artist Images");
+  const stamp = Date.now();
+  await page.setInputFiles('input[name="file_to_upload"]', {
+    name: `e2e-nojs-${stamp}.png`,
+    mimeType: "image/png",
+    buffer: Buffer.from(PNG_1X1_BASE64, "base64"),
+  });
+  await page.getByRole("button", { name: "Upload" }).click();
+
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\?uploaded=1$/);
+  await expect(page.getByText("Image uploaded.")).toBeVisible();
+  // The tab stays active despite the query codes, and the page now shows the
+  // stored file (the handler attached it to the row before redirecting).
+  await expect(page.getByRole("tab", { name: "Images" })).toHaveClass(/tab-active/);
+  await expect(page.locator('img[src^="/uploads/artists/"]')).toHaveCount(1);
+});
+
+test("an upload with nothing chosen comes back with an error code", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // An untouched file input is not an upload: the browser sends an empty part
+  // and the handler sends the user back with a code (`ui::upload`'s
+  // upload_message turns it into the alert). Which code depends on what the
+  // browser puts in the empty part, so the URL is the assertion here.
+  await page.goto(`${base}/admin/artist/e2e-tabs/images`);
+  await page.getByRole("button", { name: "Upload" }).click();
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\?bad_upload=/);
 });
 
 test("the admin dashboard renders cards and the side menu", async ({ page }) => {

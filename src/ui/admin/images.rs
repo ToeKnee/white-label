@@ -31,17 +31,29 @@ use crate::ui::{Route, page_data, redirect, use_page, use_user};
 pub fn EditArtistImages(
     /// The artist slug from the URL.
     artist_slug: String,
+    /// Set when an image arrived through the javascript-off upload form.
+    uploaded: Option<String>,
+    /// Error code from a failed javascript-off upload.
+    bad_upload: Option<String>,
 ) -> Element {
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            EditArtistImagesBody { artist_slug }
+            EditArtistImagesBody {
+                artist_slug,
+                uploaded,
+                bad_upload,
+            }
         }
     }
 }
 
 #[component]
-fn EditArtistImagesBody(artist_slug: String) -> Element {
+fn EditArtistImagesBody(
+    artist_slug: String,
+    uploaded: Option<String>,
+    bad_upload: Option<String>,
+) -> Element {
     // The upload configuration carries the permissions itself, but the page
     // is gated like the other artist editors (`label_owner`), so an
     // `admin`-only session never sees a picker it cannot use.
@@ -89,6 +101,8 @@ fn EditArtistImagesBody(artist_slug: String) -> Element {
             FileUploadWithProgress {
                 config: UploadConfiguration::Artist,
                 slug: upload_slug,
+                uploaded,
+                bad_upload,
                 on_uploaded: move |stored_name: String| uploaded_image.set(Some(stored_name)),
             }
             img {

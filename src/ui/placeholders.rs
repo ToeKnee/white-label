@@ -35,9 +35,9 @@ use crate::ui::Route;
 /// is a plain comparison of the current route — Phase 5 may refine it.
 #[component]
 pub fn AdminArtistRoot(artist_slug: String) -> Element {
-    // Query codes carried by the profile and links editors (`?updated=1`,
-    // `?bad=`) must not un-highlight their tabs, so the comparison value
-    // drops them.
+    // Query codes carried by the profile, links and images editors (`?updated=1`,
+    // `?bad=`, `?uploaded=1`, `?bad_upload=`) must not un-highlight their tabs,
+    // so the comparison value drops them.
     let current = match use_route::<Route>() {
         Route::EditArtist {
             artist_slug: ref slug,
@@ -55,6 +55,14 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
             updated: None,
             bad: None,
         },
+        Route::EditArtistImages {
+            artist_slug: ref slug,
+            ..
+        } => Route::EditArtistImages {
+            artist_slug: slug.clone(),
+            uploaded: None,
+            bad_upload: None,
+        },
         other => other,
     };
     let profile = Route::EditArtist {
@@ -70,7 +78,11 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
         updated: None,
         bad: None,
     };
-    let images = Route::EditArtistImages { artist_slug };
+    let images = Route::EditArtistImages {
+        artist_slug,
+        uploaded: None,
+        bad_upload: None,
+    };
 
     let tab_class = |tab: &Route| {
         if tab == &current {

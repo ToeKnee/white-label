@@ -130,15 +130,18 @@ Two things a deployment has to know:
   body limit raised to match — nginx's `client_max_body_size` defaults to
   1 MB, which would reject these uploads before the app ever sees them.
 
-The upload is javascript-only by design: the protocol has no form-post twin, so
-SSR renders the picker and the button, and uploading needs the client build
-above. That includes the SSR-only server: its profile and images pages show a
-plain `<input type="file" name="file_to_upload">`, and submitting that reloads
-the page without transferring the file. Uploads are not broken there, they are
-not possible — run `end2end/run-dioxus-web.sh` (or point `DIOXUS_PUBLIC_PATH`
-at the `dx` output) to use them. The Leptos site this replaces had the same
-shape (its uploader was a reactive `#[server]` call), so the hydrated site keeps
-feature parity.
+Uploads have two paths, and both work in every mode. The reactive one streams
+the file through the `/api/upload` server fn (with the progress bar) and needs
+the client build above. The widget's markup is also a real
+`multipart/form-data` form — `method="post"`, `enctype`, and hidden
+`file_type`/`slug`/`artist_slug` fields ahead of the file part — so with
+javascript off, or on the SSR-only server (which serves no wasm bundle), the
+click is a browser form post to `/forms/upload` (`server::upload_form`), which
+stores the file, attaches it to the row and 303s back with `?uploaded=1` or
+`?bad_upload=<code>`. A file input in a form with neither POST nor multipart was
+exactly what made uploads do nothing before slice 6c — the browser drops the file
+and says so in the console. The javascript-off path has no progress bar: the
+browser's own network UI is the feedback.
 
 Attaching the file is deliberately narrow. The shared tail
 (`services::files::upload`) writes **one column** — `primary_image` for an
@@ -186,7 +189,7 @@ the bundle address `/assets/main.css` on desktop while web and SSR keep
 `/main.css`, and gives `/uploads/…` images the absolute API origin (plain `<img>`
 subresources, so no CORS). Repeat the copy after every `dx build --platform
 desktop` — the build recreates that directory; `dx bundle` will take the same
-files from `[bundle] resources` in `Dioxus.toml` (slice 6e).
+files from `[bundle] resources` in `Dioxus.toml` (slice 6f).
 
 There is no SSR in this target: the app boots client-side and every server fn
 in `ui/data.rs` is an HTTP call made by dioxus' own `reqwest` client, which
@@ -197,7 +200,10 @@ CORS or `SameSite` work. What the desktop build still does **not** do
 - dioxus blocks in-app navigation after the first load, so the plain-HTML
   303 form fallbacks the SSR pages use are inert in the window: forms need the
   reactive `use_action` + JSON-twin path (the links editor already has it).
-  `http(s)://` links, by contrast, correctly open in the system browser.
+  `http(s)://` links, by contrast, correctly open in the system browser. That is
+  why a window pointed at the API cannot log in, register or upload yet — the
+  javascript-off upload form works in a browser, not in the webview (Phase 6
+  slices 6d–6e).
 
 The `server`-gated modules (router assembly, sessions, current-user
 extractor, ported API endpoints) have their own tests, but plain `cargo test`
@@ -205,7 +211,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 500 lib tests, includes src/server/ + src/ui/ tests
+cargo test --features server   # 508 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
 cargo test --features server -- ui::          # just the route-table + UI component tests
 ```

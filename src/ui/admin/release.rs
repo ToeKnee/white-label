@@ -169,6 +169,8 @@ fn ReleaseRow(release: Release, artist_slug: String) -> Element {
         release_slug: release.slug.clone(),
         updated: None,
         bad: None,
+        uploaded: None,
+        bad_upload: None,
     };
 
     rsx! {
@@ -324,7 +326,8 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
 }
 
 /// Edit a release; `updated` and `bad` carry the handler codes from
-/// update/delete/restore redirects.
+/// update/delete/restore redirects, `uploaded`/`bad_upload` those from the
+/// image upload form.
 #[component]
 pub fn EditRelease(
     /// The artist slug from the URL.
@@ -335,6 +338,10 @@ pub fn EditRelease(
     updated: Option<String>,
     /// Error code from a failed save/delete/restore.
     bad: Option<String>,
+    /// Set when an image arrived through the javascript-off upload form.
+    uploaded: Option<String>,
+    /// Error code from a failed javascript-off upload.
+    bad_upload: Option<String>,
 ) -> Element {
     rsx! {
         SuspenseBoundary {
@@ -344,6 +351,8 @@ pub fn EditRelease(
                 release_slug,
                 updated,
                 bad,
+                uploaded,
+                bad_upload,
             }
         }
     }
@@ -355,6 +364,8 @@ fn EditReleaseBody(
     release_slug: String,
     updated: Option<String>,
     bad: Option<String>,
+    uploaded: Option<String>,
+    bad_upload: Option<String>,
 ) -> Element {
     let session = use_user()?;
     let user = session().ok().flatten();
@@ -506,6 +517,11 @@ fn EditReleaseBody(
         FileUploadWithProgress {
             config: UploadConfiguration::Release,
             slug: current_slug.clone(),
+            // The javascript-off handler needs the artist too: its editor sits
+            // under the artist route.
+            artist_slug: Some(artist_slug.clone()),
+            uploaded,
+            bad_upload,
             on_uploaded: move |stored_name: String| uploaded_image.set(Some(stored_name)),
         }
         img { src: shown_image, alt: image_alt }

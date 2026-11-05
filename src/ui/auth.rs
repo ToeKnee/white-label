@@ -208,6 +208,10 @@ pub fn EditProfile(
     saved: Option<String>,
     /// Error code from a failed save.
     bad: Option<String>,
+    /// Set when an avatar arrived through the javascript-off upload form.
+    uploaded: Option<String>,
+    /// Error code from a failed javascript-off upload.
+    bad_upload: Option<String>,
 ) -> Element {
     rsx! {
         document::Title { "Edit Profile" }
@@ -215,7 +219,12 @@ pub fn EditProfile(
             h1 { "Edit Profile" }
             SuspenseBoundary {
                 fallback: |_context: SuspenseContext| rsx! { Loading {} },
-                ProfileForm { saved, bad }
+                ProfileForm {
+                    saved,
+                    bad,
+                    uploaded,
+                    bad_upload,
+                }
             }
         }
     }
@@ -232,6 +241,10 @@ fn ProfileForm(
     saved: Option<String>,
     /// Error code from a failed save.
     bad: Option<String>,
+    /// Set when an avatar arrived through the javascript-off upload form.
+    uploaded: Option<String>,
+    /// Error code from a failed javascript-off upload.
+    bad_upload: Option<String>,
 ) -> Element {
     let session = use_user()?;
     let user = match session() {
@@ -257,6 +270,8 @@ fn ProfileForm(
         FileUploadWithProgress {
             config: UploadConfiguration::Avatar,
             slug: avatar_username,
+            uploaded,
+            bad_upload,
         }
         form { method: "post", action: "/auth/profile",
             div { class: "grid gap-6",

@@ -9,6 +9,7 @@
 pub(crate) mod api;
 pub mod current_user;
 mod forms;
+pub(crate) mod upload_form;
 
 use anyhow::Context;
 use axum::Router;

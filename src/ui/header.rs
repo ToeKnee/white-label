@@ -91,7 +91,12 @@ pub fn UserMenu() -> Element {
                         ul { class: "p-2 rounded-t-none bg-base-100", "data-theme": "light",
                             li {
                                 Link {
-                                    to: Route::EditProfile { saved: None, bad: None },
+                                    to: Route::EditProfile {
+                                        saved: None,
+                                        bad: None,
+                                        uploaded: None,
+                                        bad_upload: None,
+                                    },
                                     class: "btn btn-ghost",
                                     "Profile"
                                 }

@@ -86,13 +86,18 @@ pub enum Route {
         done: Option<String>,
     },
     /// Edit the signed-in user's profile. `saved` and `bad` carry fixed
-    /// codes from the profile form's redirect.
-    #[route("/profile?:saved&:bad")]
+    /// codes from the profile form's redirect; `uploaded` and `bad_upload`
+    /// carry the avatar upload form's (Phase 6: uploading without javascript).
+    #[route("/profile?:saved&:bad&:uploaded&:bad_upload")]
     EditProfile {
         /// Set when the profile has just been saved.
         saved: Option<String>,
         /// Error code from a failed save.
         bad: Option<String>,
+        /// Set when an avatar has just been uploaded without javascript.
+        uploaded: Option<String>,
+        /// Error code from a failed javascript-off upload.
+        bad_upload: Option<String>,
     },
     /// Change the signed-in user's password. `updated` and `bad` carry
     /// fixed codes from the password form's redirect.
@@ -158,11 +163,17 @@ pub enum Route {
         /// Error code from a failed save.
         bad: Option<String>,
     },
-    /// Upload/replace an artist's images.
-    #[route("/images")]
+    /// Upload/replace an artist's images. `uploaded`/`bad_upload` carry the
+    /// upload form's codes (posts to `/forms/upload`; see
+    /// `crate::server::upload_form`).
+    #[route("/images?:uploaded&:bad_upload")]
     EditArtistImages {
         /// The artist slug.
         artist_slug: String,
+        /// Set when an image has just been uploaded without javascript.
+        uploaded: Option<String>,
+        /// Error code from a failed javascript-off upload.
+        bad_upload: Option<String>,
     },
     /// List an artist's releases.
     #[route("/releases")]
@@ -180,8 +191,9 @@ pub enum Route {
         bad: Option<String>,
     },
     /// Edit a release. `updated`/`bad` carry the release form's codes
-    /// (posts to `/admin/forms/release/*`; see `crate::server::forms`).
-    #[route("/release/:release_slug?:updated&:bad")]
+    /// (posts to `/admin/forms/release/*`; see `crate::server::forms`),
+    /// `uploaded`/`bad_upload` the image upload form's (`/forms/upload`).
+    #[route("/release/:release_slug?:updated&:bad&:uploaded&:bad_upload")]
     EditRelease {
         /// The artist slug.
         artist_slug: String,
@@ -191,6 +203,10 @@ pub enum Route {
         updated: Option<String>,
         /// Error code from a failed save/delete/restore.
         bad: Option<String>,
+        /// Set when an image has just been uploaded without javascript.
+        uploaded: Option<String>,
+        /// Error code from a failed javascript-off upload.
+        bad_upload: Option<String>,
     },
     /// List a release's tracks.
     #[route("/release/:release_slug/tracks")]
@@ -313,7 +329,20 @@ mod tests {
             parse("/profile"),
             Route::EditProfile {
                 saved: None,
-                bad: None
+                bad: None,
+                uploaded: None,
+                bad_upload: None,
+            }
+        );
+        // The javascript-off avatar upload 303s back to these codes
+        // (`upload_form_codes_parse` covers the admin pages).
+        assert_eq!(
+            parse("/profile?uploaded=1"),
+            Route::EditProfile {
+                saved: None,
+                bad: None,
+                uploaded: Some("1".into()),
+                bad_upload: None,
             }
         );
         assert_eq!(
@@ -346,14 +375,18 @@ mod tests {
             parse("/profile?saved=1"),
             Route::EditProfile {
                 saved: Some("1".into()),
-                bad: None
+                bad: None,
+                uploaded: None,
+                bad_upload: None,
             }
         );
         assert_eq!(
             parse("/profile?bad=taken"),
             Route::EditProfile {
                 saved: None,
-                bad: Some("taken".into())
+                bad: Some("taken".into()),
+                uploaded: None,
+                bad_upload: None,
             }
         );
         assert_eq!(
@@ -361,6 +394,48 @@ mod tests {
             Route::ChangePassword {
                 updated: Some("1".into()),
                 bad: None
+            }
+        );
+    }
+
+    /// The codes `server::upload_form` puts on its 303s parse back into the
+    /// pages that host the upload widget.
+    #[test]
+    fn upload_form_codes_parse() {
+        assert_eq!(
+            parse("/admin/artist/jimi/images?uploaded=1"),
+            Route::EditArtistImages {
+                artist_slug: "jimi".into(),
+                uploaded: Some("1".into()),
+                bad_upload: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/images?bad_upload=bad_mime"),
+            Route::EditArtistImages {
+                artist_slug: "jimi".into(),
+                uploaded: None,
+                bad_upload: Some("bad_mime".into()),
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/release/axis?uploaded=1"),
+            Route::EditRelease {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                updated: None,
+                bad: None,
+                uploaded: Some("1".into()),
+                bad_upload: None,
+            }
+        );
+        assert_eq!(
+            parse("/profile?bad_upload=too_large"),
+            Route::EditProfile {
+                saved: None,
+                bad: None,
+                uploaded: None,
+                bad_upload: Some("too_large".into()),
             }
         );
     }
@@ -395,7 +470,9 @@ mod tests {
         assert_eq!(
             parse("/admin/artist/jimi/images"),
             Route::EditArtistImages {
-                artist_slug: "jimi".into()
+                artist_slug: "jimi".into(),
+                uploaded: None,
+                bad_upload: None,
             }
         );
         assert_eq!(
@@ -418,6 +495,8 @@ mod tests {
                 release_slug: "axis".into(),
                 updated: None,
                 bad: None,
+                uploaded: None,
+                bad_upload: None,
             }
         );
         assert_eq!(
@@ -539,6 +618,8 @@ mod tests {
                 release_slug: "axis".into(),
                 updated: Some("1".into()),
                 bad: None,
+                uploaded: None,
+                bad_upload: None,
             }
         );
         assert_eq!(
@@ -548,6 +629,8 @@ mod tests {
                 release_slug: "axis".into(),
                 updated: None,
                 bad: Some("catalogue_taken".into()),
+                uploaded: None,
+                bad_upload: None,
             }
         );
         assert_eq!(
@@ -652,6 +735,8 @@ mod tests {
                 release_slug: "axis".into(),
                 updated: Some("1".into()),
                 bad: None,
+                uploaded: None,
+                bad_upload: None,
             },
             Route::CreateTrack {
                 artist_slug: "jimi".into(),

@@ -88,6 +88,12 @@ pub fn form_routes() -> Router {
         .route("/admin/forms/track/delete", post(delete_track))
         .route("/admin/forms/track/restore", post(restore_track))
         .route("/admin/forms/links", post(submit_links))
+        // The upload widget's javascript-off form (Phase 6). Not under
+        // `/admin/forms` because the avatar upload lives on `/profile`.
+        .route(
+            super::upload_form::PATH_UPLOAD_FORM,
+            post(super::upload_form::upload_image),
+        )
 }
 
 /// Fields of the login form. Every field defaults so a missing one is a
