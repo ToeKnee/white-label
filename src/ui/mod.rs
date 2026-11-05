@@ -221,6 +221,17 @@ pub enum SessionHint {
     SignedIn(Box<User>),
     /// The logout twin ended the session.
     SignedOut,
+    /// A reactive profile change carried on to the chrome: today that is
+    /// the avatar upload on the profile page, whose stored name the menu
+    /// swaps into the session user's avatar. It is keyed by username, so
+    /// an upload made by one account can never rename another account's
+    /// picture.
+    ProfileUpdated {
+        /// The account the change belongs to.
+        username: String,
+        /// The avatar file the upload stored, under the config's directory.
+        avatar_file: String,
+    },
 }
 
 /// The [`SessionHint`] that [`App`] provides: written by the auth twins,

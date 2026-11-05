@@ -1111,7 +1111,7 @@ mod tests {
             "Test Page 1",
             // The label card and its Edit link (label_owner sessions only).
             "Test Record Label 1",
-            "href=\"/admin/label\"",
+            "href=\"/admin/label?\"",
             // The upcoming-release countdown card (values are daisy CSS
             // custom properties).
             "Upcoming Release — Test Release 1",
@@ -1119,10 +1119,10 @@ mod tests {
             // The side menu: label, artist submenu and page link.
             "w-56 menu bg-base-200 rounded-box",
             "href=\"/admin\"",
-            "href=\"/admin/artist/test-artist-1\"",
+            "href=\"/admin/artist/test-artist-1/?\"",
             "All Releases",
             "Test Release 1",
-            "href=\"/admin/page/test-page-1\"",
+            "href=\"/admin/page/test-page-1?\"",
             "Create Artist",
             "Create Page",
         ] {
@@ -1697,8 +1697,8 @@ mod tests {
             &[
                 "Test Artist 1 Releases",
                 "TEST-1",
-                "href=\"/admin/artist/test-artist-1/release/test-release-1\"",
-                "href=\"/admin/artist/test-artist-1/releases/new\"",
+                "href=\"/admin/artist/test-artist-1/release/test-release-1?\"",
+                "href=\"/admin/artist/test-artist-1/releases/new?\"",
             ],
         );
 

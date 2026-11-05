@@ -18,6 +18,7 @@ use crate::models::artist::Artist;
 use crate::models::page::Page;
 use crate::models::record_label::RecordLabel;
 use crate::models::release::Release;
+use crate::ui::Route;
 use crate::ui::data::{get_label_artists, get_label_pages, get_next_scheduled_release};
 use crate::ui::page_data;
 use crate::ui::use_label;
@@ -25,6 +26,7 @@ use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{Loading, StatusBadge};
 use crate::utils::shorten_string::shorten_string;
+use dioxus::router::Link;
 
 /// The dashboard: the card row the Leptos `Dashboard` rendered.
 #[component]
@@ -84,7 +86,11 @@ fn RecordLabelCardBody() -> Element {
                 p { "ISRC: {label.isrc_base} YY XXXXX" }
                 p { "{description_summary}" }
                 div { class: "justify-end card-actions",
-                    a { href: "/admin/label", class: "btn btn-primary", "Edit" }
+                    Link {
+                        to: Route::EditLabel { updated: None, bad: None },
+                        class: "btn btn-primary",
+                        "Edit"
+                    }
                 }
             }
         }
@@ -146,7 +152,11 @@ fn ArtistsTableBody() -> Element {
             td { colspan: "2" }
             td {
                 if is_owner {
-                    a { href: "/admin/artist", class: "btn btn-primary", "Add" }
+                    Link {
+                        to: Route::CreateArtist { bad: None },
+                        class: "btn btn-primary",
+                        "Add"
+                    }
                 }
             }
         }
@@ -165,8 +175,12 @@ fn ArtistRow(artist: Artist) -> Element {
                 }
             }
             td {
-                a {
-                    href: format!("/admin/artist/{}", artist.slug),
+                Link {
+                    to: Route::EditArtist {
+                        artist_slug: artist.slug,
+                        updated: None,
+                        bad: None,
+                    },
                     class: "btn btn-primary",
                     "Edit"
                 }
@@ -243,7 +257,11 @@ fn PagesTableBody() -> Element {
             td { colspan: "2" }
             td {
                 if is_owner {
-                    a { href: "/admin/page", class: "btn btn-primary", "Add" }
+                    Link {
+                        to: Route::CreatePage { bad: None },
+                        class: "btn btn-primary",
+                        "Add"
+                    }
                 }
             }
         }
@@ -262,8 +280,12 @@ fn PageRow(page: Page) -> Element {
                 }
             }
             td {
-                a {
-                    href: format!("/admin/page/{}", page.slug),
+                Link {
+                    to: Route::EditPage {
+                        slug: page.slug,
+                        updated: None,
+                        bad: None,
+                    },
                     class: "btn btn-primary",
                     "Edit"
                 }

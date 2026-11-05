@@ -32,7 +32,9 @@
 //! The profile page also carries the avatar upload widget
 //! ([`crate::ui::upload::FileUploadWithProgress`], Phase 5 slice 5f); like
 //! the Leptos original it needs the client build, since its upload is a
-//! request body rather than a form post.
+//! request body rather than a form post. A stored avatar also reaches the
+//! navbar through [`crate::ui::SessionHint::ProfileUpdated`], so the menu
+//! avatar changes without a page load (the navbar outlives the upload).
 //!
 //! Example — a failed login round trip:
 //!
@@ -54,6 +56,7 @@ use crate::ui::Route;
 use crate::ui::SessionHint;
 use crate::ui::redirect;
 use crate::ui::upload::FileUploadWithProgress;
+use crate::ui::use_session_hint;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success};
 
@@ -355,6 +358,11 @@ pub fn EditProfile(
 /// Guests hit the session guard below and the router redirects them to the
 /// login page; the boundary's spinner only shows while the session
 /// resource is in flight (never during the redirect itself).
+///
+/// A finished avatar upload is reported to the navbar as a
+/// [`SessionHint::ProfileUpdated`]: the avatar config renames the file to
+/// the uploader's username, so the profile page can swap the stored name
+/// straight into the menu without a refetch.
 #[component]
 fn ProfileForm(
     /// Set when the profile has just been saved.
@@ -366,6 +374,10 @@ fn ProfileForm(
     /// Error code from a failed javascript-off upload.
     bad_upload: Option<String>,
 ) -> Element {
+    // Read the hint before the session resource can suspend the boundary,
+    // so the hook order stays put on the re-run (the navbar's `UserMenu`
+    // follows the same order).
+    let session_hint = use_session_hint();
     let session = use_user()?;
     let user = match session() {
         Ok(Some(user)) if user.is_active() => user,
@@ -382,6 +394,8 @@ fn ProfileForm(
 
     let success_message = format!("{} Updated!", user.username);
     let avatar_username = user.username.clone();
+    let hint_username = user.username.clone();
+    let user_for_fields = user;
     rsx! {
         // Leptos placed the avatar picker between the heading and the form.
         // The slug follows the session user, so after a rename the next
@@ -392,6 +406,18 @@ fn ProfileForm(
             slug: avatar_username,
             uploaded,
             bad_upload,
+            // Tell the navbar about the stored file: it outlives this page,
+            // and its own session resource resolved before the upload, so
+            // this hint is the only way the new avatar reaches it without a
+            // page load. The javascript-off form reloads the page instead,
+            // which re-resolves the session on its own.
+            on_uploaded: move |stored_name: String| {
+                record_profile_update(
+                    session_hint,
+                    hint_username.clone(),
+                    stored_name,
+                );
+            },
         }
         form { method: "post", action: "/auth/profile",
             div { class: "grid gap-6",
@@ -399,7 +425,7 @@ fn ProfileForm(
                 if let Some(message) = profile_message(bad.as_deref()) {
                     InlineError { message: message.to_string() }
                 }
-                ProfileFields { user }
+                ProfileFields { user: user_for_fields }
             }
         }
     }
@@ -669,6 +695,19 @@ fn record_session_hint(hint: Option<Signal<SessionHint>>, answer: SessionHint) {
     if let Some(mut hint) = hint {
         hint.set(answer);
     }
+}
+
+/// Report a finished avatar upload to the navbar's session hint (see
+/// [`SessionHint::ProfileUpdated`] and the note in [`ProfileForm`]).
+fn record_profile_update(
+    mut hint: Signal<SessionHint>,
+    username: String,
+    stored_avatar_file: String,
+) {
+    hint.set(SessionHint::ProfileUpdated {
+        username,
+        avatar_file: stored_avatar_file,
+    });
 }
 
 /// The action's outcome, out of the signal dioxus keeps an action's value in.

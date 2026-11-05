@@ -153,6 +153,11 @@ test("the profile avatar upload runs through the server fns with a progress bar"
   await expect(page.locator('input[name="file_to_upload"]')).toHaveCount(1);
   await expect(page.locator("progress")).toHaveCount(0);
 
+  // The navbar avatar before the upload (a placeholder or an earlier file).
+  // The upload must swap this without a page load (SessionHint::ProfileUpdated).
+  const navbarAvatar = page.locator(".navbar .avatar img");
+  const beforeAvatarSrc = await navbarAvatar.getAttribute("src");
+
   // The bar only exists while an upload is in flight, so its sightings are
   // recorded by an observer installed before the click instead of polled.
   await page.evaluate(() => {
@@ -186,6 +191,19 @@ test("the profile avatar upload runs through the server fns with a progress bar"
   });
   await expect(page.locator(".alert-error")).toHaveCount(0);
   expect(documentLoads, "an upload is a fetch, not a form post").toBe(loadsBeforeUpload);
+
+  // The navbar avatar follows the upload on the same live document: the
+  // profile page hands the stored name to the chrome, which points the
+  // `<img>` at `/uploads/avatars/<stored>` (the cache-busting timestamp in the
+  // stored name is what makes the browser fetch the new bytes).
+  const stored = /Uploaded (\S+-e2e-dioxus\.png)/.exec((await page.locator(".alert-success").textContent()) ?? "")?.[1];
+  expect(stored, "the alert names the stored file").toBeTruthy();
+  await expect(navbarAvatar).toHaveAttribute("src", `/uploads/avatars/${stored}`, {
+    timeout: 15000,
+  });
+  expect(beforeAvatarSrc, "the avatar url should actually change so the browser refetches it").not.toBe(
+    `/uploads/avatars/${stored}`,
+  );
 
   const sightings: Sighting[] = await page.evaluate(
     () =>

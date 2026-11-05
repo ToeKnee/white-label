@@ -10,9 +10,13 @@
 //!   `permissions.contains("admin")` — guests and non-admins get the login
 //!   page rendered inline (`ui::redirect` swaps the SSR content; dioxus has
 //!   no 303 from inside SSR components — same deviation as slice 3).
-//! - Menu links use the URLs the `admin_menu` service produces, as plain
-//!   `href` anchors. The typed `Link` would fight the nest/slug URLs the
-//!   service builds as strings; revisit once the client router lands.
+//! - Menu links are typed `Link`s built from the menu data's slugs (the
+//!   route table's own paths), not the `url` strings the `admin_menu`
+//!   service builds: on a desktop window the document origin is `file://`,
+//!   so a plain `href` anchor resolves outside the app and the window hands
+//!   it to the system browser, while a typed `Link` navigates inside it.
+//!   The service's `url` fields stay for the Leptos admin menu until
+//!   Phase 8 deletes it.
 //! - `Artists`/`Pages` summary links pointed at `/admin/artists` and
 //!   `/admin/pages`, which the dioxus route table does not (and the Leptos
 //!   one did not either, for `/admin/pages`) — they are plain text here.
@@ -50,6 +54,7 @@ use crate::ui::redirect;
 use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::Loading;
+use dioxus::router::Link;
 
 /// The admin layout: menu + permission gate around every admin page.
 #[component]
@@ -110,9 +115,9 @@ fn AdminMenuBody() -> Element {
 
     rsx! {
         ul { class: "w-56 menu bg-base-200 rounded-box",
-            li { a { href: "/admin", "Dashboard" } }
+            li { Link { to: Route::Dashboard {}, "Dashboard" } }
             li {
-                a { href: menu.url,
+                Link { to: Route::EditLabel { updated: None, bad: None },
                     "{menu.record_label.name}"
                 }
             }
@@ -143,7 +148,7 @@ fn ArtistsMenu(artists: Vec<MenuArtist>) -> Element {
                         }
                     }
                 }
-                li { a { href: "/admin/artist", "Create Artist" } }
+                li { Link { to: Route::CreateArtist { bad: None }, "Create Artist" } }
             }
         }
     }
@@ -155,33 +160,53 @@ fn ArtistsMenu(artists: Vec<MenuArtist>) -> Element {
 #[component]
 fn ArtistMenuRow(menu_artist: MenuArtist) -> Element {
     let artist_slug = menu_artist.artist.slug.clone();
-    let releases_url = format!("/admin/artist/{artist_slug}/releases");
-    let create_release_url = format!("/admin/artist/{artist_slug}/releases/new");
+    let artist_id = menu_artist.artist.id;
 
     rsx! {
         details {
             summary {
-                a { href: menu_artist.url,
+                Link {
+                    to: Route::EditArtist {
+                        artist_slug: menu_artist.artist.slug,
+                        updated: None,
+                        bad: None,
+                    },
                     "{menu_artist.artist.name}"
                 }
             }
             ul {
-                li { a { href: releases_url, "All Releases" } }
+                li {
+                    Link { to: Route::Releases { artist_slug: artist_slug.clone() }, "All Releases" }
+                }
                 if menu_artist.releases.is_empty() {
                     // The original linked the empty-state text to the
                     // create-release page; kept as-is.
-                    li { a { href: create_release_url.clone(), "No releases yet..." } }
+                    li {
+                        Link {
+                            to: Route::CreateRelease {
+                                artist_slug: artist_slug.clone(),
+                                bad: None,
+                            },
+                            "No releases yet..."
+                        }
+                    }
                 } else {
                     for menu_release in menu_artist.releases {
                         li {
                             ReleaseMenuRow {
                                 menu_release,
-                                artist_id: menu_artist.artist.id,
+                                artist_id,
+                                artist_slug: artist_slug.clone(),
                             }
                         }
                     }
                 }
-                li { a { href: create_release_url, "Create Release" } }
+                li {
+                    Link {
+                        to: Route::CreateRelease { artist_slug, bad: None },
+                        "Create Release"
+                    }
+                }
             }
         }
     }
@@ -198,14 +223,25 @@ const fn artist_role(primary_artist_id: i64, artist_id: i64) -> (&'static str, &
 }
 
 /// One release row: a filled dot marks the artist as the release's primary
-/// artist, a hollow one means featured (the Leptos `ReleaseMenuRow`).
+/// artist, a hollow one means featured (the Leptos `ReleaseMenuRow`). The
+/// artist slug comes from the row above: the route table nests a release
+/// under its artist, and the menu's `url` string is no longer what the
+/// link points at.
 #[component]
-fn ReleaseMenuRow(menu_release: MenuRelease, artist_id: i64) -> Element {
+fn ReleaseMenuRow(menu_release: MenuRelease, artist_id: i64, artist_slug: String) -> Element {
     let (icon_title, icon) = artist_role(menu_release.release.primary_artist_id, artist_id);
     let name = menu_release.release.name;
 
     rsx! {
-        a { href: menu_release.url,
+        Link {
+            to: Route::EditRelease {
+                artist_slug,
+                release_slug: menu_release.release.slug,
+                updated: None,
+                bad: None,
+                uploaded: None,
+                bad_upload: None,
+            },
             span { title: icon_title, "{icon}" }
             " {name}"
         }
@@ -225,13 +261,18 @@ fn PagesMenu(pages: Vec<MenuPage>) -> Element {
                 } else {
                     for menu_page in pages {
                         li {
-                            a { href: menu_page.url,
+                            Link {
+                                to: Route::EditPage {
+                                    slug: menu_page.page.slug,
+                                    updated: None,
+                                    bad: None,
+                                },
                                 "{menu_page.page.name}"
                             }
                         }
                     }
                 }
-                li { a { href: "/admin/page", "Create Page" } }
+                li { Link { to: Route::CreatePage { bad: None }, "Create Page" } }
             }
         }
     }
@@ -239,11 +280,82 @@ fn PagesMenu(pages: Vec<MenuPage>) -> Element {
 
 #[cfg(test)]
 mod tests {
-    use super::artist_role;
+    use super::*;
 
     #[test]
     fn primary_and_featured_roles() {
         assert_eq!(artist_role(7, 7), ("Primary artist", "●"));
         assert_eq!(artist_role(3, 7), ("Featured artist", "○"));
+    }
+
+    /// The menu's typed targets address the same pages the `admin_menu`
+    /// service names (which the Leptos admin menu still links by its `url`
+    /// strings).
+    ///
+    /// Dioxus renders a canonical href for an optional-query route: a bare
+    /// `?` when the query is empty, and a nest-base path keeps its trailing
+    /// slash (so the artist editor is `…/jimi/?`). Those hrefs parse back to
+    /// the same route, and the e2e pins allow the optional `?`/`/?`, so the
+    /// menu now links the canonical forms — a deliberate change from the
+    /// service's clean strings.
+    #[test]
+    fn menu_routes_address_the_pages_the_service_names() {
+        let cases = [
+            (Route::Dashboard {}, "/admin"),
+            (
+                Route::EditLabel {
+                    updated: None,
+                    bad: None,
+                },
+                "/admin/label?",
+            ),
+            (Route::CreateArtist { bad: None }, "/admin/artist?"),
+            (Route::CreatePage { bad: None }, "/admin/page?"),
+            (
+                Route::EditArtist {
+                    artist_slug: "jimi".to_string(),
+                    updated: None,
+                    bad: None,
+                },
+                "/admin/artist/jimi/?",
+            ),
+            (
+                Route::Releases {
+                    artist_slug: "jimi".to_string(),
+                },
+                "/admin/artist/jimi/releases",
+            ),
+            (
+                Route::CreateRelease {
+                    artist_slug: "jimi".to_string(),
+                    bad: None,
+                },
+                "/admin/artist/jimi/releases/new?",
+            ),
+            (
+                Route::EditRelease {
+                    artist_slug: "jimi".to_string(),
+                    release_slug: "axis".to_string(),
+                    updated: None,
+                    bad: None,
+                    uploaded: None,
+                    bad_upload: None,
+                },
+                "/admin/artist/jimi/release/axis?",
+            ),
+            (
+                Route::EditPage {
+                    slug: "social-tips".to_string(),
+                    updated: None,
+                    bad: None,
+                },
+                "/admin/page/social-tips?",
+            ),
+        ];
+        for (route, canonical) in cases {
+            assert_eq!(route.to_string(), canonical, "canonical href for {route:?}");
+            let href: Route = canonical.parse().expect("canonical menu href parses back");
+            assert_eq!(href, route, "{canonical} should parse back to {route:?}");
+        }
     }
 }
