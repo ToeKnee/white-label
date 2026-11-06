@@ -3,18 +3,18 @@
 //! The Track struct is used to represent a record track in the database.
 
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use sqlx::{FromRow, PgPool};
 
 use super::traits::Validate;
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use super::{artist::Artist, release::Release};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
 
 /// The Track struct is used to represent a record track in the database.
 #[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "ssr", derive(FromRow))]
+#[cfg_attr(feature = "server", derive(FromRow))]
 pub struct Track {
     /// The unique identifier of the track
     pub id: i64,
@@ -57,7 +57,7 @@ pub struct Track {
 }
 
 impl Validate for Track {
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     async fn validate(&self, pool: &PgPool) -> anyhow::Result<()> {
         if self.name.is_empty() {
             return Err(anyhow::anyhow!("Name is required."));
@@ -126,7 +126,7 @@ impl Validate for Track {
 impl Track {
     /// Validate that the track number is unique for the release
     /// This is broken out from the main validate function to simplify the code
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     async fn validate_track_number(&self, release: &Release, pool: &PgPool) -> anyhow::Result<()> {
         if let Ok(tracks) = release.get_tracks(pool).await {
             if tracks.iter().any(|tracks_with_artists| {
@@ -176,7 +176,7 @@ impl Track {
     /// If the track cannot be created, return an error
     /// If the record label is not found, return an error
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn create(
         pool: &PgPool,
         name: String,
@@ -240,7 +240,7 @@ impl Track {
     ///
     /// # Errors
     /// If the track cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
         Self::find_by_slug(pool, slug.clone())
             .await?
@@ -252,7 +252,7 @@ impl Track {
     ///
     /// # Errors
     /// If the database query fails, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn find_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM tracks WHERE slug = $1")
             .bind(&slug)
@@ -279,7 +279,7 @@ impl Track {
     ///
     /// # Errors
     /// If there is an error getting the tracks, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_release_and_artist_and_record_label_and_slug(
         pool: &PgPool,
         release_id: i64,
@@ -356,7 +356,7 @@ impl Track {
     ///
     /// # Errors
     /// If there is an error getting the tracks, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn list_by_release_and_artist_and_record_label(
         pool: &PgPool,
         release_id: i64,
@@ -421,7 +421,7 @@ impl Track {
     ///
     /// # Panics
     /// If the track cannot be updated, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn update(mut self, pool: &PgPool) -> anyhow::Result<Self> {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
@@ -469,7 +469,7 @@ impl Track {
     ///
     /// # Errors
     /// If the track cannot be deleted, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<Self> {
         let track = sqlx::query_as::<_, Self>(
             "UPDATE tracks SET deleted_at = $1 WHERE id = $2 RETURNING *",
@@ -502,7 +502,7 @@ impl Track {
     /// If the track cannot be updated, return an error
     /// # Panics
     /// If the track cannot be updated, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn set_artists(&self, pool: &PgPool, artist_ids: Vec<i64>) -> anyhow::Result<Self> {
         if artist_ids.is_empty() {
             return Err(anyhow::anyhow!("Artist IDs cannot be empty."));
@@ -552,7 +552,7 @@ impl Track {
     /// If the track cannot be found, return an error
     /// # Panics
     /// If the track cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_artists(&self, pool: &PgPool) -> anyhow::Result<Vec<Artist>> {
         let artists = sqlx::query_as::<_, Artist>(
             "SELECT artists.* FROM artists
@@ -570,9 +570,9 @@ impl Track {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::record_label::RecordLabel;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
     };

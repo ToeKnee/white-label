@@ -1,8 +1,5 @@
 //! The shared navbar: the record-label home link on the left, the user menu
 //! on the right.
-//!
-//! Dioxus port of the daisyUI structure from Leptos
-//! `components::record_label::header`.
 
 use dioxus::prelude::*;
 

@@ -22,8 +22,9 @@
 //!   SameSite=Lax, which blocks cross-site form posts from modern
 //!   browsers. `Secure`/`SameSite=None` decisions for deployment and an
 //!   optional CSRF-token pass are tracked as a follow-up in MIGRATION.md.
-//! - Login failures answer the same fixed messages as the wire endpoint;
-//!   bcrypt work happens only for an existing username.
+//! - Login and register failures answer fixed codes (see [`login_code`]
+//!   and [`register_code`]), the same ones the Dioxus auth server fns
+//!   return; bcrypt work happens only for an existing username.
 //!
 //! Example flow (curl):
 //!

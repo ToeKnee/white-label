@@ -51,7 +51,7 @@ async fn find_artist_by_slug(pool: &PgPool, slug: &str) -> Result<Artist, AppErr
 /// If the name is empty, return an error
 /// If the artist cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_artist_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -94,7 +94,7 @@ pub async fn create_artist_service(
 /// If the name is empty, return an error
 /// If the artist cannot be updated, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_artist_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -133,7 +133,7 @@ pub async fn update_artist_service(
 /// # Errors
 /// If the artist cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn delete_artist_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -168,7 +168,7 @@ pub async fn delete_artist_service(
 /// # Errors
 /// If the artist cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn restore_artist_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -193,7 +193,7 @@ pub async fn restore_artist_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_user_with_permissions,
     };

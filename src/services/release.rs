@@ -9,7 +9,7 @@ use crate::models::{artist::Artist, auth::User, release::Release};
 
 /// `Release::find_by_slug` wired onto the service error ladder: a missing
 /// row is a 404 with the model's message, a database failure stays a 500.
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 async fn find_release_by_slug(pool: &PgPool, slug: &str) -> Result<Release, AppError> {
     Release::find_by_slug(pool, slug.to_string())
         .await
@@ -32,7 +32,7 @@ async fn find_release_by_slug(pool: &PgPool, slug: &str) -> Result<Release, AppE
 ///
 /// # Errors
 /// If there is an error querying the database, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn get_next_scheduled_release_service(
     pool: &PgPool,
     artist_id: Option<i64>,
@@ -84,7 +84,7 @@ pub async fn get_next_scheduled_release_service(
 /// If the artist cannot be found, return an error
 /// If the user cannot be found, return an error
 /// If the releases cannot be found, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn get_releases_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -143,7 +143,7 @@ pub async fn get_releases_service(
 /// If the artist cannot be found, return an error
 /// If the user cannot be found, return an error
 /// If the release cannot be found, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn get_release_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -207,7 +207,7 @@ pub async fn get_release_service(
 /// If the name is empty, return an error
 /// If the release cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_release_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -278,7 +278,7 @@ pub async fn create_release_service(
 /// If the name is empty, return an error
 /// If the release cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_release_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -345,7 +345,7 @@ pub async fn update_release_service(
 /// # Errors
 /// If the release cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn delete_release_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -390,7 +390,7 @@ pub async fn delete_release_service(
 /// # Errors
 /// If the release cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn restore_release_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -427,7 +427,7 @@ pub async fn restore_release_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
         create_test_user, create_test_user_with_permissions,

@@ -1,11 +1,9 @@
-//! Services for record-label operations (MIGRATION.md Phase 4 slice 4).
+//! Services for record-label operations.
 //!
-//! The Leptos `routes/record_label.rs` update handler never got a service
-//! layer, so the logic lived inline in both serving stacks. It now lives
-//! here: `crate::server::api::record_label` (the wire port) and
-//! `crate::server::forms` (the Dioxus `EditLabel` form) share one copy.
-//! The error messages are kept byte-identical to the Leptos route so the
-//! wire port's tests stay exact.
+//! Both label editors — the no-JS handler in `crate::server::forms` and the
+//! Dioxus server fn in `crate::ui::admin::label` — call
+//! [`update_record_label`], so the validation and error messages live in
+//! one place.
 use crate::error::AppError;
 use sqlx::PgPool;
 
@@ -27,7 +25,7 @@ use crate::models::record_label::RecordLabel;
 /// `Unauthorized` when there is no session user, `Forbidden` without the
 /// `label_owner` permission, `Internal` with the fixed retry messages when
 /// the label cannot be loaded or saved (details in the tracing log).
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_record_label(
     pool: &PgPool,
     user: Option<&User>,
@@ -61,7 +59,7 @@ pub async fn update_record_label(
     })
 }
 
-#[cfg(all(test, feature = "ssr"))]
+#[cfg(all(test, feature = "server"))]
 mod tests {
     use super::*;
     use crate::models::test_helpers::{

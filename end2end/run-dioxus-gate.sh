@@ -58,18 +58,11 @@ cargo check --offline --no-default-features --features desktop --bin dioxus-desk
 }
 
 # Clippy over the same window build (no `--all-targets`: the lib's test modules
-# need the server feature). This is the build that used to collect warnings
-# from the Leptos `#[server]` client stubs, so it is pinned separately.
+# need the server feature). The desktop cfg branches compile differently from
+# the server build, so they are pinned separately.
 echo "== desktop clippy =="
 cargo clippy --offline --no-default-features --features desktop -- -D warnings >"$OUT/desktop-clippy.log" 2>&1 || {
     echo "DESKTOP CLIPPY FAILED"; tail -n 30 "$OUT/desktop-clippy.log"; exit 1
-}
-
-# The shipped Leptos site (still the live app until Phase 8) builds its client
-# bundle with `hydrate` only, where the server-fn bodies are cfg-ed out.
-echo "== leptos hydrate build compiles =="
-cargo check --offline --no-default-features --features hydrate >"$OUT/hydrate-check.log" 2>&1 || {
-    echo "HYDRATE CHECK FAILED"; tail -n 30 "$OUT/hydrate-check.log"; exit 1
 }
 
 IP=127.0.0.1 PORT=8127 DIOXUS_PUBLIC_PATH="$ROOT/public" ./target/debug/dioxus-server >"$OUT/server.log" 2>&1 &

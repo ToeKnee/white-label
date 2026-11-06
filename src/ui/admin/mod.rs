@@ -15,8 +15,8 @@
 //!   service builds: on a desktop window the document origin is `file://`,
 //!   so a plain `href` anchor resolves outside the app and the window hands
 //!   it to the system browser, while a typed `Link` navigates inside it.
-//!   The service's `url` fields stay for the Leptos admin menu until
-//!   Phase 8 deletes it.
+//!   The `url` strings the `admin_menu` service builds now have no
+//!   consumers.
 //! - `Artists`/`Pages` summary links pointed at `/admin/artists` and
 //!   `/admin/pages`, which the dioxus route table does not (and the Leptos
 //!   one did not either, for `/admin/pages`) — they are plain text here.

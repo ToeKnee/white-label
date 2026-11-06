@@ -1,21 +1,22 @@
 # White Label - a record label management website
 
-> **Migration note:** The project is currently a Leptos 0.8 SSR app. A plan to migrate to
-> Dioxus (web + desktop + iOS/Android from one codebase) is in [MIGRATION.md](MIGRATION.md).
-> Until the migration lands, all notes below describe the Leptos setup.
+> **Status:** the app is now the Dioxus stack (branch `dioxus`, in
+> [MIGRATION.md](MIGRATION.md)): an axum server with Dioxus SSR pages, a wasm
+> client that hydrates them, and a desktop webview window — one codebase, with
+> iOS/Android still to come (Phase 7). The old Leptos site is gone. Notes below
+> describe the Dioxus setup.
 
 ## Migration checkpoint (branch `dioxus`)
 
-The Dioxus port (Phases 1–5 of MIGRATION.md, and now the desktop target of
-Phase 6) lives in
-`src/server/` (axum router: sessions, uploads, current-user extractor, and
-the `/api/*` endpoints — including raw-body `upload_file` and streaming
-`file_progress`, both in the Leptos server-fn wire format, so the shipped Leptos
-UI can call them during the overlap; both stacks finish their uploads through
-the shared `services::files::upload` tail) and `src/ui/` (the whole page tree: route
+The Dioxus app lives in
+`src/server/` (axum router: sessions, uploads, current-user extractor, the
+no-JS form handlers under `/auth/*`, `/admin/forms/*` and `/forms/upload`,
+the JSON server fns under `/api/*`, and the public-dir and `/uploads` static
+mounts; uploads finish through the shared
+`services::files::upload` tail) and `src/ui/` (the whole page tree: route
 table, layouts, header/footer chrome, public pages, auth pages, the admin
-dashboard and the artist/release/track/links/images editors). It boots as a second
-binary while the shipped site stays on Leptos (`cargo leptos watch`):
+dashboard and the artist/release/track/links/images editors). The old Leptos
+default binary is deleted, so this _is_ the app now:
 
 ```bash
 npm install && npm run css   # tailwind + daisyUI -> public/main.css
@@ -55,13 +56,10 @@ The gate starts a second `dioxus-server` whose `DIOXUS_PUBLIC_PATH` is that
 `dx` output — the bundle's `index.html` is what makes the SSR renderer
 inject the wasm bootstrap into every page — so the gate runs two servers:
 8127 (SSR-only, `public/`) and 8131 (hydrated). `sh end2end/run-dioxus-web.sh`
-does the build-and-serve pair for manual work. Debug bundles are still big
-(~27 MB of wasm) but no longer carry the Leptos UI: `src/app`,
-`src/components` and `src/routes` are gated to
-`any(feature = "ssr", feature = "hydrate")`, so only the Leptos site builds
-them. The rest of the weight is the non-optional `leptos*` dependencies
-themselves — `src/store` uses `reactive_stores` and `src/utils` still uses
-`leptos_router`/`ServerFnError` — which Phase 8 optionalizes or drops.
+does the build-and-serve pair for manual work. With the Leptos stack deleted
+(Phase 8) the bundle is pure Dioxus, and a debug bundle is still big
+(~25 MB of wasm): the whole app plus the dioxus runtime, compiled
+unoptimised — `dx build --release` is the shape that ships.
 
 A debug wasm bundle always tries one websocket we do not serve: `ws://<host
 the page came from>/_dioxus`, dioxus-web's hot-patch channel (`devtools::init`,
@@ -85,7 +83,7 @@ statics) or per-build features (`dx serve`'s `@client`/`@server` argument
 lists). Both are open questions in MIGRATION.md; until one lands, the
 build-and-serve commands above are the dev flow.
 
-`cargo test --features server` covers the SSR side; the hydrated client side
+`cargo test` covers the SSR side; the hydrated client side
 is covered by `end2end/tests/dioxus_client.spec.ts` (SPA nav issues no extra
 document loads, the links editor submits without a round trip, login and logout
 submit through the `/api/client/*` twins so the navbar follows the session
@@ -254,18 +252,18 @@ identifier is the permanent store identity on Android/iOS. No `dx bundle` has
 been run yet, so that table is staged rather than proven.
 
 There is no SSR in this target: the app boots client-side and every server fn
-in `ui/data.rs` is an HTTP call made by dioxus' own `reqwest` client, which
-keeps a process-wide cookie jar, so the session cookie round-trips without any
-CORS or `SameSite` work.
+in `ui/data.rs` is a dioxus server fn that becomes an HTTP call, made by
+dioxus' own `reqwest` client, which keeps a process-wide cookie jar, so the
+session cookie round-trips without any CORS or `SameSite` work.
 
 dioxus blocks in-app navigation after the first load, so the plain-HTML 303 form
 fallbacks the SSR pages use are inert in the window: every form a user needs to
 submit natively goes through the reactive `use_action` + JSON-twin path. Login,
 register and logout joined them in slice 6d: three server fns under
-`/api/client/*`, next to the `/auth/*` handlers rather than on the same paths
-(the Leptos site still owns `POST /api/login` until Phase 8, and axum refuses a
-path twice), answering an `AuthOutcome` — `LoggedIn { user }`, `Done`, or
-`Failed { code }` with the same fixed codes the `?bad=` query carries.
+`/api/client/*`, next to the `/auth/*` handlers rather than on the same path
+(axum refuses a method+path twice), answering an `AuthOutcome` —
+`LoggedIn { user }`, `Done`, or `Failed { code }` with the same fixed codes the
+`?bad=` query carries.
 
 Slice 6i finished the job for the rest of the app: the record-label, page,
 artist, release, track and links editors plus the profile and change-password
@@ -280,78 +278,89 @@ component, so the menu renders the action's own answer instead of guessing
 (dioxus ignores `key:` on a single node, so re-keying the menu would not have
 rebuilt it).
 
-The `server`-gated modules (router assembly, sessions, current-user
-extractor, ported API endpoints) have their own tests, but plain `cargo test`
-(and the pre-commit hook) only builds default features, so run them
-explicitly:
+The server-gated code (router assembly, sessions, current-user extractor,
+form handlers and server fns) and the whole `src/ui` suite build under the
+default `server` feature, so one command covers everything:
 
 ```bash
-cargo test --features server   # 539 lib tests, includes src/server/ + src/ui/ tests
-cargo test --features server -- server::api   # just the API wire tests
-cargo test --features server -- ui::          # just the route-table + UI component tests
+cargo test            # 477 lib tests + doc tests, src/server/ and src/ui/ included
+cargo test -- server::   # just the router/form-handler tests
+cargo test -- ui::       # just the route-table + UI component tests
 ```
 
 ## Running the project
 
+The dev flow is build-and-serve (there is no `dx serve` web watch mode for
+this crate — the note above and MIGRATION.md risk 10 explain why):
+
 ```bash
-cargo leptos watch
+sh end2end/run-dioxus-web.sh      # wasm client, served hydrated on 127.0.0.1:8131
+sh end2end/run-dioxus-desktop.sh  # window against the API on 127.0.0.1:8127
+```
+
+SSR-only (plain-HTML forms, full-reload navigation):
+
+```bash
+IP=127.0.0.1 PORT=8127 DIOXUS_PUBLIC_PATH=public \
+  cargo run --bin dioxus-server
 ```
 
 ## Compiling for Release
 
 ```bash
-cargo leptos build --release
+npm install && npm run css        # public/main.css, picked up by the web bundle
+cargo build --release --bin dioxus-server
+dx build --release --platform web --bin dioxus-web --features web --no-default-features
 ```
 
-Will generate your server binary in target/server/release and your site package in target/site
+The `dx` web bundle lands in `target/dx/dioxus-web/release/web/public`; the
+release deploys as that bundle plus the server binary, with
+`DIOXUS_PUBLIC_PATH` pointing at the bundle directory. Desktop packaging
+(`dx bundle`) is staged but unproven — see the note in the desktop section
+and Phase 7 in MIGRATION.md.
 
 ## Testing Your Project
 
 ```bash
-cargo leptos end-to-end
+cargo test                       # unit + doc tests (default features = server)
+sh end2end/run-dioxus-gate.sh    # curl pins + Playwright (chromium & firefox)
 ```
 
-```bash
-cargo leptos end-to-end --release
-```
-
-Cargo-leptos uses Playwright as the end-to-end test tool.
-Tests are located in end2end/tests directory.
+Playwright is the end-to-end tool; tests are in `end2end/tests/`. The gate
+needs the dev database and the Playwright 1.44.1 browser builds (once:
+`npx playwright install chromium firefox` inside `end2end/`); it prints
+`== GATE OK ==` when every pin passes.
 
 ### Running the tests with coverage
 
 ```bash
-cargo watch -c -x test
-```
-
-### Running the tests with coverage
-
-```bash
-cargo watch -c -x "llvm-cov --html"
+cargo llvm-cov --html            # needs `cargo install cargo-llvm-cov`
 ```
 
 ## Executing a Server on a Remote Machine Without the Toolchain
 
-After running a `cargo leptos build --release` the minimum files needed are:
+After the release build above, the minimum files needed are:
 
-1. The server binary located in `target/server/release`
-2. The `site` directory and all files within located in `target/site`
+1. The server binary (`target/release/dioxus-server`)
+2. The web bundle directory (`target/dx/dioxus-web/release/web/public`)
 
 Copy these files to your remote server. The directory structure should be:
 
 ```text
-white-label
-site/
+dioxus-server
+public/
 ```
 
 Set the following environment variables (updating for your project as needed):
 
 ```text
-LEPTOS_OUTPUT_NAME="white-label"
-LEPTOS_SITE_ROOT="site"
-LEPTOS_SITE_PKG_DIR="pkg"
-LEPTOS_SITE_ADDR="127.0.0.1:3000"
-LEPTOS_RELOAD_PORT="3001"
+IP=0.0.0.0
+PORT=8080
+DIOXUS_PUBLIC_PATH=public
+DATABASE_URL=postgres://user:pass@localhost/whitelabel
+UPLOAD_PATH=/var/lib/white-label/uploads
 ```
 
-Finally, run the server binary.
+`UPLOAD_PATH` needs its `tmp/`, `avatars/`, `artists/` and `releases/`
+directories, and any reverse proxy in front needs a body limit that matches
+the upload sizes (see the uploads note above). Then run the server binary.

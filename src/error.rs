@@ -3,14 +3,10 @@
 //! Services return `AppError`; the serving layer maps it to whatever the
 //! stack at the boundary expects:
 //!
-//! - Live Leptos server fns (today): the conversion is automatic —
-//!   `ServerFnError` implements `From<E: std::error::Error>` into its
-//!   `ServerError(String)` variant, the same variant every service error
-//!   used before this type existed, so the wire response is unchanged.
-//! - Phase 2 Dioxus endpoints: build `HttpError`s from [`AppError::status`]
+//! - Dioxus API endpoints: build `HttpError`s from [`AppError::status`]
 //!   plus the message, so these variants become real 400/401/403/404/500s.
 //!
-//! Example (Phase 2 handler shape):
+//! Example:
 //!
 //! ```ignore
 //! let artist = get_artist_service(&pool, slug).await?; // Err(AppError::NotFound(..))

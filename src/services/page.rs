@@ -60,7 +60,7 @@ async fn find_page_by_slug(
 /// # Errors
 /// If the page cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn restore_page_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -97,7 +97,7 @@ pub async fn restore_page_service(
 /// If the name is empty, return an error
 /// If the page cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_page_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -140,7 +140,7 @@ pub async fn create_page_service(
 /// If the name is empty, return an error
 /// If the page cannot be updated, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_page_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -180,7 +180,7 @@ pub async fn update_page_service(
 /// # Errors
 /// If the page cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn delete_page_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -206,7 +206,7 @@ pub async fn delete_page_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_page, create_test_record_label, create_test_user_with_permissions,
     };

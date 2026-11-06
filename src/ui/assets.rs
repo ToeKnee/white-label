@@ -138,8 +138,8 @@ mod tests {
     }
 
     // `display_image_url` is what the `<img>` call sites use: the models hand
-    // back either kind of path, and only the `web`/`ssr` feature combination
-    // is under test here, so this pins the sorting rule for those targets.
+    // back either kind of path, and this run only compiles the non-desktop
+    // branch, so it pins the sorting rule for the web-facing targets.
     #[test]
     fn image_urls_sort_uploads_from_placeholders() {
         assert_eq!(

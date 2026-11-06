@@ -30,8 +30,7 @@
 //!   not `admin` + `label_owner`: the
 //!   registry key already carries the requester's username, so the extra
 //!   check did nothing except hide the avatar progress bar behind a 403 for
-//!   everyone without those permissions. The legacy wire endpoint keeps its
-//!   original check for wire parity.
+//!   everyone without those permissions.
 //! - [`upload_file`](crate::ui::upload::upload_file) answers the stored file
 //!   name, which the widget shows;
 //!   the Leptos route answered nothing and its client logged a TODO about
@@ -75,7 +74,8 @@ use std::io::Write as _;
 /// have to match one of the configuration's image types
 /// ([`check_upload_signature`]), and only then does the shared
 /// `services::files::upload` tail move them into the config's directory and
-/// update the row — the same tail the Leptos wire endpoint uses, so storage and
+/// update the row — the same tail the no-JS form handler in
+/// `server::upload_form` uses, so storage and
 /// attachment cannot drift.
 ///
 /// What the client *claims* the file is (see [`claimed_upload_type`]) is only a
@@ -771,17 +771,8 @@ mod tests {
     use crate::models::test_helpers::{
         create_test_artist, create_test_release, create_test_user_with_permissions,
     };
-    use crate::routes::auth::Login;
-    use crate::server::api::test_support::{api_server, api_server_with_uploads, post_args};
+    use crate::server::test_support::{api_server, api_server_with_uploads, login_request};
     use crate::services::files::progress::{FILES, add_chunk};
-
-    fn login_args(username: &str) -> Login {
-        Login {
-            username: username.to_string(),
-            password: "password".to_string(),
-            remember: None,
-        }
-    }
 
     /// A real png signature followed by filler: the server checks the signature
     /// and stores the rest as it came, so tests that are not about image
@@ -872,9 +863,7 @@ mod tests {
             .expect("plain user");
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-1"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-1").await.assert_status_ok();
 
         let response = post_file(
             &server,
@@ -934,9 +923,7 @@ mod tests {
 
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-6"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-6").await.assert_status_ok();
 
         let response = post_file(
             &server,
@@ -997,9 +984,7 @@ mod tests {
 
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-7"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-7").await.assert_status_ok();
 
         let response = post_file(
             &server,
@@ -1063,9 +1048,7 @@ mod tests {
             .expect("plain user");
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-2"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-2").await.assert_status_ok();
 
         let response = post_file(
             &server,
@@ -1095,9 +1078,7 @@ mod tests {
             .expect("plain user");
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-8"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-8").await.assert_status_ok();
 
         let response = post_file(
             &server,
@@ -1136,9 +1117,7 @@ mod tests {
             .expect("plain user");
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-9"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-9").await.assert_status_ok();
 
         let response = upload_request(
             &server,
@@ -1169,9 +1148,7 @@ mod tests {
             .expect("plain user");
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-10"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-10").await.assert_status_ok();
 
         let response = upload_request(
             &server,
@@ -1210,9 +1187,7 @@ mod tests {
             .expect("plain user");
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-3"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-3").await.assert_status_ok();
 
         // `Avatar` allows 10 MiB.
         let oversized = vec![b'x'; 10 * 1024 * 1024 + 1];
@@ -1253,9 +1228,7 @@ mod tests {
             .expect("plain user");
         let (_root, upload_root) = upload_dirs();
         let server = api_server_with_uploads(&pool, upload_root.clone()).await;
-        post_args(&server, "/api/login", &login_args("test-4"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-4").await.assert_status_ok();
 
         let response = post_file(
             &server,
@@ -1296,9 +1269,7 @@ mod tests {
             .await
             .expect("plain user");
         let server = api_server(pool).await;
-        post_args(&server, "/api/login", &login_args("test-5"))
-            .await
-            .assert_status_ok();
+        login_request(&server, "test-5").await.assert_status_ok();
 
         // The entry exists before the stream opens, as the widget arranges.
         add_chunk("watched.png", 5, "test-5").await;

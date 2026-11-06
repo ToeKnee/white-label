@@ -457,7 +457,7 @@ async fn delete_social_media_services(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::{
         music_service::Platform,
         social_media::SocialMedia,

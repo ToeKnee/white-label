@@ -1,11 +1,10 @@
 //! The shared tail of an upload: once the bytes are in `<root>/tmp`, move
 //! them into the config's directory and attach the file to its row.
 //!
-//! Both serving stacks stream bytes their own way (the Leptos wire protocol
-//! in `server::api::files` reads ordered multipart fields; the dioxus server
-//! fn in `ui::upload` consumes a request body stream), then hand the
-//! finished file here, so storage layout and database attachment cannot
-//! drift between them.
+//! Both upload paths (the dioxus server fn in `ui::upload` and the no-JS
+//! form handler in `server::upload_form`) stream the request body their own
+//! way, then hand the finished file here, so storage layout and database
+//! attachment cannot drift between them.
 
 use sqlx::PgPool;
 
@@ -82,8 +81,7 @@ pub async fn finalise_upload(
 /// would rename the row: [`Artist::update`] re-derives `slug` from `name`,
 /// so any artist whose slug does not match its name (a hand-edited slug, or
 /// a fixture like `e2e-tabs`) silently loses its slug — breaking every link
-/// to that artist. The same flaw in the Leptos wire endpoint is fixed here,
-/// since both stacks share this tail.
+/// to that artist.
 async fn store_artist_primary_image(
     pool: &PgPool,
     file_name: &str,

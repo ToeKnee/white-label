@@ -3,18 +3,18 @@
 //! The Page struct is used to represent a record page in the database.
 
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use sqlx::{FromRow, PgPool, Row};
 
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use super::record_label::RecordLabel;
 use super::traits::Validate;
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
 
 /// The Page struct is used to represent a page in the database.
 #[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "ssr", derive(FromRow))]
+#[cfg_attr(feature = "server", derive(FromRow))]
 pub struct Page {
     /// The unique identifier of the page
     pub id: i64,
@@ -43,7 +43,7 @@ pub struct Page {
 }
 
 impl Validate for Page {
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     async fn validate(&self, pool: &PgPool) -> anyhow::Result<()> {
         if self.name.is_empty() {
             return Err(anyhow::anyhow!("Name is required."));
@@ -102,7 +102,7 @@ impl Page {
     /// # Errors
     /// If the page cannot be created, return an error
     /// If the record label is not found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn create(
         pool: &PgPool,
         name: String,
@@ -153,7 +153,7 @@ impl Page {
     ///
     /// # Errors
     /// If the page cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_slug(
         pool: &PgPool,
         slug: String,
@@ -169,7 +169,7 @@ impl Page {
     ///
     /// # Errors
     /// If the database query fails, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn find_by_slug(
         pool: &PgPool,
         slug: String,
@@ -202,7 +202,7 @@ impl Page {
     ///
     /// # Errors
     /// If the pages cannot be listed, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn list(pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Self>> {
         let query = if include_hidden {
             "SELECT * FROM pages
@@ -256,7 +256,7 @@ impl Page {
     ///
     /// # Panics
     /// If the page cannot be updated, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn update(mut self, pool: &PgPool) -> anyhow::Result<Self> {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
@@ -296,7 +296,7 @@ impl Page {
     ///
     /// # Errors
     /// If the page cannot be deleted, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<Self> {
         let page =
             sqlx::query_as::<_, Self>("UPDATE pages SET deleted_at = $1 WHERE id = $2 RETURNING *")
@@ -321,7 +321,7 @@ impl Page {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{create_test_page, create_test_record_label};
 
     #[test]

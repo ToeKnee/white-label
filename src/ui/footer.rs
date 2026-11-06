@@ -1,9 +1,7 @@
 //! The footer link columns (services, label, legal).
 //!
-//! A dioxus port of the static structure in Leptos
-//! `components::record_label::footer`. The link targets are
-//! `Route::PageDetails` variants, so the hrefs match the `/pages/<slug>`
-//! URLs the Leptos footer hardcodes.
+//! The link targets are `Route::PageDetails` variants, so the hrefs are the
+//! same `/pages/<slug>` URLs the rest of the site serves.
 
 use dioxus::prelude::*;
 

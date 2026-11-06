@@ -1,6 +1,5 @@
-//! Dioxus migration server (MIGRATION.md Phases 1–3: router, API port and
-//! the `crate::ui` app shell with placeholder pages). The shipped site is
-//! still the default bin (`src/main.rs`, Leptos) until cutover.
+//! The application server: Dioxus SSR pages plus the JSON API and the
+//! no-JS form handlers (see `crate::server`).
 //!
 //! Run manually:
 //!
@@ -9,7 +8,7 @@
 //!   cargo run --no-default-features --features server --bin dioxus-server
 //! ```
 //!
-//! `dx serve` sets those variables itself once Dioxus UI work starts.
+//! `dx serve` sets those variables itself.
 
 fn main() {
     // `dioxus::serve` owns the tokio runtime and reads IP/PORT.

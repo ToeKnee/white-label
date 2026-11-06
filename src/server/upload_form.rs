@@ -141,8 +141,8 @@ pub(super) async fn upload_image(
     let Some(mut field) = file_part else {
         return failed_upload(&page, "missing_file");
     };
-    // `Field::content_type` is a parsed `Mime`; the configurations list them
-    // as strings, so the comparison is the string one the wire endpoint uses.
+    // `Field::content_type` is a parsed `Mime`; the configurations list
+    // accepted types as strings, so the comparison is a string one.
     let Some(mime_type) = field.content_type().map(ToString::to_string) else {
         return failed_upload(&page, "bad_mime");
     };
@@ -347,8 +347,7 @@ mod tests {
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_user_with_permissions,
     };
-    use crate::routes::auth::Login;
-    use crate::server::api::test_support::{api_server_with_uploads, post_args};
+    use crate::server::test_support::{api_server_with_uploads, login_as};
 
     const BOUNDARY: &str = "white-label-upload-form-test-boundary";
 
@@ -424,17 +423,7 @@ mod tests {
             std::fs::create_dir_all(upload_root.join(dir)).expect("uploads subdirectory");
         }
         let server = api_server_with_uploads(pool, upload_root.to_path_buf()).await;
-        post_args(
-            &server,
-            "/api/login",
-            &Login {
-                username: "test-1".to_string(),
-                password: "password".to_string(),
-                remember: None,
-            },
-        )
-        .await
-        .assert_status_ok();
+        login_as(&server, "test-1").await;
         server
     }
 

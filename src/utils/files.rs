@@ -1,7 +1,7 @@
 //! Provides utility functions for handling file names and extensions.
 
-#[cfg(feature = "ssr")]
-use leptos::prelude::ServerFnError;
+#[cfg(feature = "server")]
+use crate::error::AppError;
 
 /// The image type a file with this extension (any case) is expected to hold.
 ///
@@ -138,7 +138,7 @@ pub const SIGNATURE_BYTES: usize = 12;
 ///
 /// # Errors
 /// [`std::io::Error`] if the file cannot be opened or read.
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub fn first_bytes(path: &str, limit: usize) -> std::io::Result<Vec<u8>> {
     use std::io::Read as _;
 
@@ -181,13 +181,13 @@ pub fn file_extension(file_name: &str) -> Option<&str> {
 ///
 /// # Errors
 /// - If the file already exists and `file_exists_ok` is false, it will return an error.
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub fn valid_file_name(
     file_name: &str,
     rename: Option<String>,
     path: &str,
     overwrite_existing_file: bool,
-) -> Result<String, ServerFnError> {
+) -> Result<String, AppError> {
     let mut name = file_name.to_string();
 
     match rename {
@@ -210,7 +210,7 @@ pub fn valid_file_name(
         // If it does, return an error
         let file_path = format!("{path}/{name}");
         if std::path::Path::new(&file_path).exists() {
-            return Err(ServerFnError::new("File already exists.".to_string()));
+            return Err(AppError::BadRequest("File already exists.".to_string()));
         }
     }
 

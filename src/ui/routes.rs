@@ -1,16 +1,14 @@
-//! The application route table (mirrors the Leptos route tree in `crate::app`,
-//! see MIGRATION.md Phase 3).
+//! The application route table.
 //!
-//! Layouts are the dioxus equivalent of Leptos `ParentRoute`: they wrap the
-//! variants below them (until `#[end_layout]`) and render their child through
-//! `Outlet::<Route>`.
+//! Layouts wrap the variants below them (until `#[end_layout]`) and render
+//! their child through `Outlet::<Route>`.
 //!
 //! Example — `/admin/artist/jimi/release/axis/tracks` renders `AppShell` >
 //! `AdminRoot` > `AdminArtistRoot` > `Tracks`.
 //!
-//! Leptos paired every `path!("x")` route with an exact-`"x/"` twin; the
-//! dioxus parser matches both forms for one variant, so those duplicates
-//! collapse (verified below and by the SSR tests in `crate::server`).
+//! One variant matches both `/x` and `/x/`, so the table needs no
+//! trailing-slash duplicates (verified below and by the SSR tests in
+//! `crate::server`).
 
 use dioxus::prelude::*;
 

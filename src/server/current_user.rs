@@ -1,16 +1,15 @@
 //! Current-user plumbing for the Dioxus server.
 //!
-//! `tower-sessions` has no equivalent of the Leptos app's
-//! `axum_session_auth::AuthLayer` (see MIGRATION.md risk 9), so this module
-//! provides the two pieces the ported endpoints (Phase 2) will need:
+//! `tower-sessions` stores session records but does not resolve them to an
+//! app user, so this module provides the two pieces every authenticated
+//! handler or server fn extracts:
 //!
 //! - `Db`: a newtype around `PgPool` so handlers and server fns can extract
 //!   it (the orphan rule blocks implementing the extractor for `PgPool`
-//!   itself; same approach as the Phase 0 spike).
-//! - `CurrentUser`: reads the session record and loads the `User` by id,
-//!   replacing `AuthSession<User, …>`.
+//!   itself).
+//! - `CurrentUser`: reads the session record and loads the `User` by id.
 //!
-//! Example (Phase 2 handler shape):
+//! Example:
 //!
 //! ```ignore
 //! async fn profile(CurrentUser(user): CurrentUser, Db(pool): Db) -> Result<String, AppError> {
@@ -71,8 +70,7 @@ where
 /// still exists.
 ///
 /// The extractor itself never rejects: unauthenticated requests arrive with
-/// `None`, letting each endpoint answer 401/403 with its own status (parity
-/// with the Leptos routes' in-handler permission checks).
+/// `None`, letting each endpoint answer 401/403 with its own status.
 pub struct CurrentUser(pub Option<User>);
 
 impl CurrentUser {
@@ -115,9 +113,9 @@ where
     }
 }
 
-/// Record a successful login in the session. The Dioxus replacement for
-/// `AuthSession::login_user` — note that, unlike the `axum_session_auth`
-/// quirk (spike finding 5), the caller already has the `User` in hand.
+/// Record a successful login in the session: only the user id is stored;
+/// [`CurrentUser`] loads the [`User`] itself on every request, so a renamed
+/// or edited user needs no session rewrite.
 ///
 /// # Errors
 ///
@@ -133,11 +131,10 @@ pub async fn login(
 /// How long a session survives without re-activity when `remember` is set.
 pub const REMEMBER_SESSION_INACTIVITY: time::Duration = time::Duration::days(30);
 
-/// Keep the `remember` flag alive on the tower-sessions side, mirroring the
-/// Leptos app's `remember_user`.
+/// Apply the login form's `remember` flag to the tower-sessions side.
 ///
-/// Shared by the wire login endpoint and the web login/register forms so
-/// both honour the checkbox the same way.
+/// Shared by the Dioxus login server fn and the no-JS login/register form
+/// handlers so both honour the checkbox the same way.
 pub fn remember_session(session: &tower_sessions::Session, remember: Option<&str>) {
     if remember.is_some() {
         session.set_expiry(Some(tower_sessions::session::Expiry::OnInactivity(
@@ -146,8 +143,7 @@ pub fn remember_session(session: &tower_sessions::Session, remember: Option<&str
     }
 }
 
-/// End the session for a logout (clears the record and rotates the cookie,
-/// matching the Leptos app's logout behaviour).
+/// End the session for a logout (clears the record and rotates the cookie).
 ///
 /// # Errors
 ///

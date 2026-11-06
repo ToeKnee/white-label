@@ -1,9 +1,8 @@
-//! The app root and shared page chrome (MIGRATION.md Phase 3).
+//! The app root and shared page chrome.
 //!
-//! The dioxus counterpart of Leptos' `shell()` + `WhiteLabel()`: the
-//! fullstack renderer owns the `html`/`head`/`body` wrapper, `App` adds the
-//! head elements, and the `AppShell` layout supplies the navbar / `<main>` /
-//! footer that Leptos rendered inside `Router`.
+//! The fullstack renderer owns the `html`/`head`/`body` wrapper, `App` adds
+//! the head elements, and the `AppShell` layout supplies the navbar /
+//! `<main>` / footer around every page.
 
 // Dioxus component functions are conventionally PascalCase, and `Element` is
 // a type alias for a `Result`, which trips pedantic lints that do not apply
@@ -19,7 +18,7 @@
 
 use dioxus::prelude::*;
 
-use crate::store::GlobalState;
+use crate::ui::GlobalState;
 use crate::ui::Route;
 use crate::ui::SessionHint;
 use crate::ui::assets::bundled_asset;

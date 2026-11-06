@@ -1,13 +1,13 @@
 //! User service module
 
 use crate::error::AppError;
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use bcrypt::{DEFAULT_COST, hash, verify};
 use sqlx::PgPool;
 
 use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::models::auth::{User, UserPasshash};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use crate::models::traits::Validate;
 
 /// Check a username/password pair and return the matching user.
@@ -29,7 +29,7 @@ use crate::models::traits::Validate;
 /// If the user does not exist, return `Unauthorized`
 /// If the password does not match the stored hash, return `Unauthorized`
 /// If bcrypt itself fails, return `Internal`
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn login_user(
     pool: &PgPool,
     username: String,
@@ -75,7 +75,7 @@ pub async fn login_user(
 ///
 /// # Panics
 /// If the password cannot be hashed, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn register_user_service(
     pool: &PgPool,
     form: RegisterUserForm,
@@ -137,7 +137,7 @@ pub async fn register_user_service(
 /// If the password is supplied but don't match, return an error
 /// If the user cannot be updated, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_user_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -185,7 +185,7 @@ pub async fn update_user_service(
 /// If the password cannot be updated, return an error
 /// If the user is not active, return an error
 /// If the user does not exist, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn change_password_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -239,7 +239,7 @@ pub async fn change_password_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     mod ssr_tests {
         use crate::models::{auth::UserPasshash, test_helpers::create_test_user};
 

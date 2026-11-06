@@ -1,10 +1,8 @@
-//! Dioxus UI tree (MIGRATION.md, Phase 3: app shell + routing).
+//! Dioxus UI tree.
 //!
-//! Where the Dioxus port lives; it replaces the Leptos `app`/`components`
-//! stack at cutover. It currently holds the route table, the shared chrome
-//! (navbar, `<main>`, footer), document head elements, the reactive
-//! contexts, and placeholder pages. The real pages arrive per vertical
-//! slice in Phase 4.
+//! The whole rendered app: the route table, the shared chrome (navbar,
+//! `<main>`, footer), document head elements, the reactive contexts, the
+//! pages, forms and auth guards.
 //!
 //! Only the dioxus targets build it: the SSR server (`server`), the wasm
 //! client (`web`) and the desktop window (`desktop`); the mobile target joins
@@ -58,8 +56,9 @@ pub use shell::App;
 use dioxus::prelude::*;
 
 use crate::api_types::record_label::LabelResult;
+use crate::models::artist::Artist;
 use crate::models::auth::User;
-use crate::store::GlobalState;
+use crate::models::record_label::RecordLabel;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// The error a page resource carries: the message and status the server
@@ -182,10 +181,24 @@ pub fn markdown_html(source: &str) -> String {
     }
 }
 
+/// The chrome's coarse app state: the label and artist the current page is
+/// about.
+///
+/// [`App`] provides it as a `Signal` and the footer reads the label name out of
+/// it. Nothing writes it yet — each page answers with its own record — so the
+/// footer's title is empty until a slice feeds it from [`use_label`].
+#[derive(Clone, Debug, Default)]
+pub struct GlobalState {
+    /// The record label being viewed.
+    pub record_label: RecordLabel,
+    /// The artist being viewed.
+    pub artist: Artist,
+}
+
 /// The [`GlobalState`] store provided by [`App`] and read by the chrome.
 ///
-/// A coarse `Signal` for now; field-level projections if the Phase 4 slices
-/// show update patterns that need finer subscriptions.
+/// A coarse `Signal` for now; field-level projections if update patterns need
+/// finer subscriptions.
 #[must_use]
 pub fn use_global_state() -> Signal<GlobalState> {
     use_context()

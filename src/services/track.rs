@@ -9,7 +9,7 @@ use crate::models::{artist::Artist, auth::User, release::Release, track::Track};
 
 /// `Artist::find_by_slug` wired onto the service error ladder: a missing
 /// row is a 404 with the model's message, a database failure stays a 500.
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 async fn lookup_artist(pool: &PgPool, slug: String) -> Result<Artist, AppError> {
     Artist::find_by_slug(pool, slug.clone())
         .await
@@ -22,7 +22,7 @@ async fn lookup_artist(pool: &PgPool, slug: String) -> Result<Artist, AppError> 
 }
 
 /// `Release::find_by_slug` wired onto the service error ladder, as above.
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 async fn lookup_release(pool: &PgPool, slug: String) -> Result<Release, AppError> {
     Release::find_by_slug(pool, slug.clone())
         .await
@@ -35,7 +35,7 @@ async fn lookup_release(pool: &PgPool, slug: String) -> Result<Release, AppError
 }
 
 /// `Track::find_by_slug` wired onto the service error ladder, as above.
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 async fn find_track_by_slug(pool: &PgPool, slug: &str) -> Result<Track, AppError> {
     Track::find_by_slug(pool, slug.to_string())
         .await
@@ -63,7 +63,7 @@ async fn find_track_by_slug(pool: &PgPool, slug: &str) -> Result<Track, AppError
 /// * If the release cannot be found, return an error
 /// * If the user cannot be found, return an error
 /// * If the tracks cannot be found, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn get_tracks_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -113,7 +113,7 @@ pub async fn get_tracks_service(
 /// If the release cannot be found, return an error
 /// If the user cannot be found, return an error
 /// If the track cannot be found, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn get_track_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -167,7 +167,7 @@ pub async fn get_track_service(
 /// If the name is empty, return an error
 /// If the track cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_track_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -230,7 +230,7 @@ pub async fn create_track_service(
 /// If the name is empty, return an error
 /// If the track cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_track_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -291,7 +291,7 @@ pub async fn update_track_service(
 /// # Errors
 /// If the track cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn delete_track_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -331,7 +331,7 @@ pub async fn delete_track_service(
 /// # Errors
 /// If the track cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn restore_track_service(
     pool: &PgPool,
     user: Option<&User>,
@@ -363,7 +363,7 @@ pub async fn restore_track_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
         create_test_user, create_test_user_with_permissions,

@@ -2,7 +2,7 @@
 //!
 //! This module contains traits that define the behavior of various models in the application.
 
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use sqlx::PgPool;
 
 /// Trait for validating models
@@ -18,7 +18,7 @@ pub trait Validate {
     /// A future that resolves to a result
     ///   - Ok(()) if the model is valid
     ///   - Err if the model is invalid
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     fn validate(
         &self,
         pool: &PgPool,

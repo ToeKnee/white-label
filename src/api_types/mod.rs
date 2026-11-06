@@ -2,11 +2,11 @@
 //!
 //! These are the response half of the API surface (`crate::forms` holds the
 //! request half). They are deliberately free of any framework type so they
-//! compile in every build: the SSR server, the Leptos client bundles, the
-//! wasm Dioxus client (`web`) and the webview Dioxus client (`desktop`).
+//! compile in every build: the SSR server, the wasm Dioxus client (`web`)
+//! and the webview Dioxus client (`desktop`).
 //!
-//! Services return them, the `crate::routes` endpoints serialize them, the
-//! hand-written `crate::server::api` endpoints replay them, and `crate::ui`
+//! Services return them, the `crate::server` endpoints and the `#[get]`
+//! server fns in `crate::ui::data` serialize them, and `crate::ui`
 //! consumes them as plain data:
 //!
 //! ```

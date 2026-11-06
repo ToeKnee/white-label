@@ -5,9 +5,8 @@
 //! rendering similarity. Dioxus differences, per component group:
 //!
 //! - `ServerErrors` takes the app's own
-//!   [`AppError`](crate::error::AppError) (whose `Display` is already the
-//!   bare message), replacing the Leptos `ServerFnError` + `split_at_colon`
-//!   dance.
+//!   [`AppError`](crate::error::AppError), whose `Display` is already the
+//!   bare message.
 //! - The permission guards take the resolved session user and a [`Route`]
 //!   instead of a URL string, and call the shared
 //!   [`crate::ui::redirect`] helper.
@@ -268,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn badge_for_matches_the_leptos_precedence() {
+    fn badge_for_follows_the_status_precedence() {
         // The table behind the rendered tests above, including the boundary
         // semantics (`>` now is strict for Coming Soon).
         assert_eq!(
@@ -341,8 +340,8 @@ mod tests {
                 server_errors: Some(AppError::NotFound("Artist not found.".into())),
             }
         });
-        // AppError::Display is the bare message — no "NotFound|" prefix like
-        // the Leptos ServerFnError wire format needed `split_at_colon` for.
+        // AppError's Display is the bare message, never a status-prefixed
+        // string.
         assert!(failed.contains("Artist not found."), "{failed}");
         assert!(!failed.contains("NotFound|"), "{failed}");
 

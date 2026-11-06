@@ -6,10 +6,10 @@ use sqlx::PgPool;
 use crate::models::{
     artist::Artist, auth::User, page::Page, record_label::RecordLabel, release::Release,
 };
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use crate::services::authentication_helpers::user_with_permissions;
 
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 /// Fetches the admin menu data, including record label, artists, releases, and tracks.
 /// This function requires the user to have admin permissions.
 ///
@@ -94,7 +94,7 @@ pub async fn admin_menu(pool: &PgPool, user: Option<&User>) -> Result<AdminMenu,
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_page, create_test_record_label, create_test_release,
         create_test_user_with_permissions,

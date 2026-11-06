@@ -2,13 +2,13 @@
 //!
 //! Assembles the axum router that `dioxus::serve` wraps: the app database
 //! pool as a request extension, `tower-sessions` backed by Postgres,
-//! static uploads, the `/api/*` port, the auth form handlers
-//! (`forms`) and the Dioxus SSR app (`crate::ui`). The Leptos `setup.rs`
-//! still serves the shipped site until cutover.
+//! static uploads, the auth form handlers (`forms`) and the Dioxus SSR app
+//! (`crate::ui`), whose server fns carry the JSON API.
 
-pub(crate) mod api;
 pub mod current_user;
 pub(crate) mod forms;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub(crate) mod upload_form;
 
 use anyhow::Context;
@@ -18,17 +18,16 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::server::current_user::Db;
 
-/// Postgres table holding Dioxus-server sessions. Kept separate from the
-/// Leptos app's `axum_sessions` table — the two stacks use different
-/// schemas, so during the overlap each server owns its own sessions (users
-/// log in again once at cutover).
+/// Postgres table holding this server's sessions.
+///
+/// Named `sessions` (the `axum_sessions` table the pre-Dioxus server used is
+/// no longer read by any code; the schema itself is left alone).
 const SESSION_TABLE: &str = "sessions";
 
 /// Uploads directory (`UPLOAD_PATH`), exposed to API handlers as a request
 /// extension.
 ///
-/// `None` when the server has no uploads dir. The Leptos route read the
-/// env var inside the handler — passing it through the router instead
+/// `None` when the server has no uploads dir. Passing it through the router
 /// keeps the value injectable for tests.
 #[derive(Clone, Debug)]
 pub struct UploadRoot(Option<std::path::PathBuf>);
@@ -40,8 +39,8 @@ impl UploadRoot {
         Self(path)
     }
 
-    /// The root as a path string, for `{root}/{sub}/{file}` joins done the
-    /// same string-concatenation way the Leptos routes do.
+    /// The root as a path string, for `{root}/{sub}/{file}` joins — the shape
+    /// the upload paths stored in the database are written against.
     #[must_use]
     pub fn root(&self) -> Option<String> {
         self.0.as_ref().map(|path| path.display().to_string())
@@ -50,7 +49,7 @@ impl UploadRoot {
 
 /// Build the Dioxus server's router (database, sessions, uploads, Dioxus
 /// SSR). Factored out from serving so `axum-test` can drive it without
-/// binding a socket (Phase 2 exit criteria).
+/// binding a socket.
 ///
 /// The caller supplies the pool and the uploads directory: the
 /// `dioxus-server` binary wires these from the environment (`create_pool`,
@@ -73,20 +72,18 @@ pub async fn build_router(
         .context("could not create/migrate the sessions table")?;
 
     let mut router = dioxus::server::router(crate::ui::App)
-        // Ported `/api/*` endpoints (see `api` module); merged before the
-        // layers below so handlers get the session and `Db` extensions.
-        .merge(api::api_routes())
         // The auth pages' form posts (see `forms`), POST counterparts of
         // the SSR pages' paths, also under the session and `Db` layers.
         .merge(forms::form_routes())
         .layer(SessionManagerLayer::new(session_store))
         // Handlers and server fns reach the pool via `Db`.
         .layer(axum::Extension(Db(pool)))
-        // The upload endpoints (`api::files`) resolve their root here.
+        // The upload paths (the `ui::upload` server fn and the no-JS
+        // handler in `server::upload_form`) resolve their root here.
         .layer(axum::Extension(UploadRoot::new(upload_path.clone())));
 
     // Uploaded files, mounted after the session stack so static hits skip
-    // the database — same treatment as the Leptos app's `/uploads`.
+    // the database.
     //
     // Dioxus' own server router nests every top-level entry of the public
     // dir (`serve_dir_cached` in dioxus-server), so a public `uploads`
@@ -186,8 +183,8 @@ mod tests {
         create_test_artist, create_test_page, create_test_record_label, create_test_release,
         create_test_track, create_test_user, create_test_user_with_permissions,
     };
-    use crate::server::api::test_support::{api_server, post_args};
     use crate::server::build_router;
+    use crate::server::test_support::{self, api_server};
 
     /// Build the real router and wrap it for in-process HTTP.
     async fn test_server(pool: PgPool, upload_path: Option<std::path::PathBuf>) -> TestServer {
@@ -395,14 +392,6 @@ mod tests {
         assert_shell(&unknown_release, &[CHROME[0], "Test Release 1"]);
     }
 
-    /// The body `POST /api/login` expects (the wire args minus the optional
-    /// `remember` flag).
-    #[derive(serde::Serialize)]
-    struct LoginArgs<'a> {
-        username: &'a str,
-        password: &'a str,
-    }
-
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
@@ -442,16 +431,7 @@ mod tests {
             "guests must not see unpublished artists:\n{guest_body}"
         );
 
-        post_args(
-            &server,
-            "/api/login",
-            &LoginArgs {
-                username: "test-2",
-                password: "password",
-            },
-        )
-        .await
-        .assert_status_ok();
+        login_as(&server, 2).await;
 
         let owner_body = server.get("/artists").await.text();
         assert!(
@@ -1236,22 +1216,14 @@ mod tests {
 
     // --- Admin pages and forms (MIGRATION.md Phase 4 slice 4) ----------
 
-    /// Log `test-<n>` (password "password") into an `api_server` jar.
+    /// Log `test-<n>` (password "password") into an `api_server` jar, through
+    /// the login server fn the Dioxus clients use.
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     async fn login_as(server: &axum_test::TestServer, n: u32) {
-        post_args(
-            server,
-            "/api/login",
-            &LoginArgs {
-                username: &format!("test-{n}"),
-                password: "password",
-            },
-        )
-        .await
-        .assert_status_ok();
+        test_support::login_as(server, &format!("test-{n}")).await;
     }
 
     #[expect(

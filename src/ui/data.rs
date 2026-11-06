@@ -8,18 +8,15 @@
 //! `?artist_slug&release_slug`): dioxus only puts declared params in the
 //! URL, and a browser refuses a body on GET, so an undeclared argument
 //! breaks every client build. During SSR dioxus runs the call in-process
-//! with the same axum extractors the Phase 2 `/api/*` port uses (`Db`,
-//! `CurrentUser`), so page content is rendered server-side and the
-//! logged-in user's visibility rules apply there too (extractor injection
-//! in SSR was verified in the Phase 0 spike). Client builds get generated
-//! stubs that fetch the same GET endpoints over HTTP (Phases 6-7).
+//! with the same `Db`/`CurrentUser` extractors the no-JS form handlers in
+//! `crate::server` use, so page content is rendered server-side and the
+//! logged-in user's visibility rules apply there too. Client builds get
+//! generated stubs that fetch the same GET endpoints over HTTP.
 //!
-//! These endpoints deliberately sit beside the Phase 2 port, not on top of
-//! it: the port keeps its exact Leptos wire protocol (POST,
-//! `"Variant|message"` errors) for the Leptos site until cutover, while
-//! these are plain GETs returning real HTTP statuses via `HttpError`.
-//! Both go through the same `crate::services` functions, so permission
-//! checks and hidden-content rules live in one place.
+//! These endpoints are plain GETs returning real HTTP statuses via
+//! `HttpError`. Like the form handlers, they go through the
+//! `crate::services` functions, so permission checks and hidden-content
+//! rules live in one place.
 
 use dioxus::prelude::*;
 
@@ -59,7 +56,7 @@ pub(crate) fn to_http_error<T>(error: &AppError) -> core::result::Result<T, Http
 }
 
 /// Whether hidden (unpublished or deleted) content is listed — the same
-/// `label_owner` check the Phase 2 handlers and Leptos routes use.
+/// `label_owner` check the admin pages and the form handlers apply.
 #[cfg(feature = "server")]
 fn show_hidden(current_user: Option<&User>) -> bool {
     current_user.is_some_and(|user| user.permissions.contains("label_owner"))

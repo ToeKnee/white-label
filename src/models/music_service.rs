@@ -1,7 +1,7 @@
 //! This module defines varous music services
 
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use sqlx::{FromRow, PgPool};
 use std::fmt;
 use std::slice::Iter;
@@ -9,13 +9,13 @@ use std::slice::Iter;
 use self::Platform::{
     AmazonMusic, AppleMusic, Bandcamp, Beatport, Deezer, SoundCloud, Spotify, Tidal, YouTubeMusic,
 };
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use super::artist::Artist;
 use super::traits::Validate;
 
 /// Enum representing different music services.
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Default, Hash)]
-#[cfg_attr(feature = "ssr", derive(sqlx::Type))]
+#[cfg_attr(feature = "server", derive(sqlx::Type))]
 pub enum Platform {
     /// Amazon Music service.
     /// Amazon Music is a music streaming platform and online music store operated by Amazon.
@@ -73,7 +73,7 @@ impl Platform {
 
 /// Represents a music service associated with an artist.
 #[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "ssr", derive(FromRow))]
+#[cfg_attr(feature = "server", derive(FromRow))]
 pub struct MusicService {
     /// The unique identifier for the music service.
     pub id: i64,
@@ -90,7 +90,7 @@ pub struct MusicService {
 }
 
 impl Validate for MusicService {
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     async fn validate(&self, pool: &PgPool) -> anyhow::Result<()> {
         if self.artist_id <= 0 {
             return Err(anyhow::anyhow!(
@@ -122,7 +122,7 @@ impl MusicService {
     ///
     /// # Errors
     /// If the artist does not exist, or if the URL is invalid, an error will be returned.
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn create(
         pool: &PgPool,
         artist_id: i64,
@@ -164,7 +164,7 @@ impl MusicService {
     ///
     /// # Errors
     /// If the artist does not exist, or if there is an issue with the database connection, an error will be returned.
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn list_by_artist(pool: &PgPool, artist_id: i64) -> anyhow::Result<Vec<Self>> {
         if artist_id <= 0 {
             return Err(anyhow::anyhow!(
@@ -192,7 +192,7 @@ impl MusicService {
     ///
     /// # Errors
     /// If the music service does not exist, or if the artist does not exist, an error will be returned.
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn update(&self, pool: &PgPool) -> anyhow::Result<Self> {
         self.validate(pool).await?;
 
@@ -220,7 +220,7 @@ impl MusicService {
     ///
     /// # Errors
     /// If the music service does not exist, or if there is an issue with the database connection, an error will be returned.
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<()> {
         sqlx::query("DELETE FROM music_services WHERE id = $1")
             .bind(self.id)
@@ -234,7 +234,7 @@ impl MusicService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::create_test_artist;
 
     #[test]

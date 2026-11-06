@@ -4,12 +4,8 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Anthony Batchelor <tony@ynottony.net>"]
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-# Migration checkpoint: Dioxus server (see MIGRATION.md, Phase 1). The
-# shipped site is still the default bin (src/main.rs, Leptos SSR) until
-# cutover.
+# Server binary (MIGRATION.md). Serves the pages, the form posts, the JSON
+# server fns, sessions and uploads from one axum router (`src/server`).
 [[bin]]
 name = "dioxus-server"
 path = "src/bin/dioxus_server.rs"
@@ -33,56 +29,27 @@ required-features = ["desktop"]
 
 [dependencies]
 anyhow = "1.0.94"
+# Progress broadcast for the upload endpoints.
 async-broadcast = { version = "0.7.2", optional = true }
-async-trait = "0.1.83"
 axum = { version = "0.8", optional = true, features = ["macros"] }
 axum-macros = { version = "0.5.0", optional = true }
-axum_session = { version = "0.16.0", optional = true }
-axum_session_auth = { version = "0.16.0", features = [
-    "advanced",
-], optional = true }
-axum_session_sqlx = { version = "0.5.0", optional = true }
 bcrypt = { version = "0.17.0", optional = true }
 chrono = { version = "0.4.39", features = ["serde"] }
-console_error_panic_hook = { version = "0.1", optional = true }
 convert_case = "0.8.0"
 dashmap = { version = "6.1.0", optional = true }
 deunicode = "1.6.0"
-# Dioxus migration (in progress, see MIGRATION.md). Optional: pulled in only
-# by the `server` feature, so the shipped Leptos build is unaffected.
 dioxus = { version = "0.7.10", features = [
     "fullstack",
     "router",
 ], optional = true }
 dotenvy = "0.15.7"
 futures = "0.3.31"
-getrandom = { version = "0.3.3", optional = true }
 http = "1"
-itertools = "0.14.0"
-js-sys = "0.3.77"
-leptos = { version = "0.8.0", features = ["tracing"] }
-leptos_axum = { version = "0.8.0", optional = true }
-leptos_meta = { version = "0.8.0" }
-leptos_router = { version = "0.8.0" }
 markdown = "1.0.0-alpha.21"
-once_cell = { version = "1.20.2", optional = true }
-rand = { version = "0.9.1", optional = true }
-reactive_stores = "0.2.0"
-reactive_stores_macro = "0.2.0"
-regex = "1.11.1"
+# Parses the `multipart/form-data` upload form post (the javascript-off path).
+multer = { version = "3", optional = true }
 serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1"
-# Decodes server-fn request bodies in `src/server/api` with the same
-# settings as the Leptos PostUrl codec (server_fn depends on serde_qs 0.15).
-serde_qs = "0.15"
-# Parses `multipart/form-data` upload bodies in `src/server/api/files`
-# (already in the tree via server_fn's `multipart` feature; MIT).
-multer = "3"
-server_fn = { version = "0.8.0", features = [
-    "serde-lite",
-    "multipart",
-    "cbor",
-] }
 sqlx = { version = "0.8.2", features = [
     "postgres",
     "migrate",
@@ -95,7 +62,7 @@ time = "0.3.37"
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", features = ["fs", "limit"], optional = true }
-tower-sessions = "0.14.0"
+tower-sessions = { version = "0.14.0", optional = true }
 tower-sessions-sqlx-store = { version = "0.15.0", features = [
     "postgres",
 ], optional = true }
@@ -104,52 +71,30 @@ tracing-subscriber = { version = "0.3.19", features = [
     "fmt",
     "env-filter",
 ] }
-tracing-wasm = { version = "0.2.1", optional = true }
-wasm-bindgen = "=0.2.100"
-web-sys = { version = "0.3.67", features = ["FileList", "File"] }
 
 [features]
-default = ["ssr"]
-hydrate = [
-    "leptos/hydrate",
-    "dep:tracing",
-    "dep:tracing-wasm",
-    "dep:console_error_panic_hook",
-]
-ssr = [
+# The default build is the server, so plain `cargo test` covers the services,
+# the API and the pages.
+default = ["server"]
+# The axum server: pages, form posts, server fns, sessions, uploads.
+server = [
     "dep:async-broadcast",
     "dep:axum",
     "dep:axum-macros",
-    "dep:axum_session",
-    "dep:axum_session_auth",
-    "dep:axum_session_sqlx",
     "dep:bcrypt",
     "dep:dashmap",
-    "dep:leptos_axum",
-    "dep:once_cell",
-    "dep:sqlx",
-    "dep:tokio",
-    "dep:tower",
-    "dep:tower-http",
-    "dep:tower-sessions-sqlx-store",
-    "dep:tracing",
-    "dep:rand",
-    "dep:getrandom",
-    "leptos/ssr",
-    "leptos_meta/ssr",
-    "leptos_router/ssr",
-]
-tracing-wasm = ["dep:tracing", "dep:tracing-wasm"]
-# Transitional: `server` still implies the Leptos `ssr` stack because
-# services/models are gated behind it and still return `ServerFnError`.
-# Phase 2 decouples services onto a neutral error type, then the Leptos
-# feature flags go away at cutover.
-server = [
-    "ssr",
     "dep:dioxus",
     "dioxus/fullstack",
     "dioxus/router",
     "dioxus/server",
+    "dep:multer",
+    "dep:sqlx",
+    "dep:tokio",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:tower-sessions",
+    "dep:tower-sessions-sqlx-store",
+    "dep:tracing",
 ]
 # Web client (wasm) build: the same `crate::ui` app, launched by
 # `dioxus::launch` in the browser. The fullstack macro turns the server fns
@@ -173,15 +118,6 @@ desktop = [
     "dep:tracing",
 ]
 
-# Defines a size-optimized profile for the WASM bundle in release mode
-[profile.wasm-release]
-inherits = "release"
-opt-level = 'z'
-lto = true
-codegen-units = 1
-panic = "abort"
-debug = "line-tables-only"
-
 [profile.dev]
 debug = "line-tables-only"
 
@@ -191,79 +127,6 @@ debug = "line-tables-only"
 [dev-dependencies]
 axum-test = "17.0.1"
 tempfile = "3"
-
-[package.metadata.leptos]
-# The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
-output-name = "white-label"
-
-# The site root folder is where cargo-leptos generate all output. WARNING: all content of this folder will be erased on a rebuild. Use it in your server setup.
-site-root = "target/site"
-
-# The site-root relative folder where all compiled output (JS, WASM and CSS) is written
-# Defaults to pkg
-site-pkg-dir = "pkg"
-
-# [Optional] The source CSS file. If it ends with .sass or .scss then it will be compiled by dart-sass into CSS. The CSS is optimized by Lightning CSS before being written to <site-root>/<site-pkg>/app.css
-style-file = "style/main.scss"
-# Assets source dir. All files found here will be copied and synchronized to site-root.
-# The assets-dir cannot have a sub directory with the same name/path as site-pkg-dir.
-#
-# Optional. Env: LEPTOS_ASSETS_DIR.
-assets-dir = "public"
-
-# The tailwind input file.
-#
-# Optional, Activates the tailwind build
-tailwind-input-file = "style/tailwind.css"
-
-# The tailwind config file.
-#
-# Optional, defaults to "tailwind.config.js" which if is not present
-# is generated for you
-tailwind-config-file = "tailwind.config.js"
-
-# The IP and port (ex: 127.0.0.1:3000) where the server serves the content. Use it in your server setup.
-site-addr = "127.0.0.1:3000"
-
-# The port to use for automatic reload monitoring
-reload-port = 3001
-
-# [Optional] Command to use when running end2end tests. It will run in the end2end dir.
-#   [Windows] for non-WSL use "npx.cmd playwright test"
-#   This binary name can be checked in Powershell with Get-Command npx
-end2end-cmd = "npx playwright test"
-end2end-dir = "end2end"
-
-#  The browserlist query used for optimizing the CSS.
-browserquery = "defaults"
-
-# The environment Leptos will run in, usually either "DEV" or "PROD"
-env = "DEV"
-
-# The features to use when compiling the bin target
-#
-# Optional. Can be over-ridden with the command line parameter --bin-features
-bin-features = ["ssr"]
-
-# If the --no-default-features flag should be used when compiling the bin target
-#
-# Optional. Defaults to false.
-bin-default-features = false
-
-# The features to use when compiling the lib target
-#
-# Optional. Can be over-ridden with the command line parameter --lib-features
-lib-features = ["hydrate"]
-
-# If the --no-default-features flag should be used when compiling the lib target
-#
-# Optional. Defaults to false.
-lib-default-features = false
-
-# The profile to use for the lib target when compiling for release
-#
-# Optional. Defaults to "release".
-lib-profile-release = "wasm-release"
 
 [lints.clippy]
 unwrap_used = "warn"

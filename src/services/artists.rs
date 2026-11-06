@@ -55,7 +55,7 @@ pub async fn get_releases_for_artist_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release,
         create_test_user_with_permissions,
