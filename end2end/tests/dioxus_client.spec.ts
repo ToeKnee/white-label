@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
  * Run against a second gate server (port 8131) whose public dir is the
  * `dx build` output, so the SSR pages boot the wasm bundle: the router must
  * take over navigation, and the editors' reactive submit path (`use_action`
- * against the JSON twins under `/api/client/*`) must replace the no-JS 303
+ * against the JSON twins under `/api/*`) must replace the no-JS 303
  * flow without a document load. `run-dioxus-gate.sh` passes `DIOXUS_URL` for
  * this server. The bundle is a debug build, so wasm boot gets generous
  * timeouts.
@@ -31,7 +31,7 @@ const clientIsLive = async (page: import("@playwright/test").Page) => {
 
 /**
  * Logs in through the login form. Whether that submit is the no-JS 303 or
- * the reactive twin (`/api/client/login`) depends on whether the wasm client
+ * the reactive twin (`/api/login`) depends on whether the wasm client
  * has hydrated yet — either way the visitor ends up home with the user menu
  * in the navbar, which is what these tests need before they browse.
  */
@@ -127,7 +127,7 @@ test("the links editor submits reactively (no 303 round trip)", async ({ page })
 });
 
 test("the release editor creates, saves, deletes and restores reactively", async ({ page }) => {
-  // The slice 6i twins (`/api/client/release/*`). A desktop window has no page
+  // The slice 6i twins (`/api/*_release`). A desktop window has no page
   // load to carry `?updated=1` or `?bad=<code>`, so the twins answer the saved
   // row (or the same code) as data and the editor renders from that. The web
   // client runs the very same path, so no document request may go out.
@@ -342,7 +342,7 @@ test("the profile avatar upload runs through the server fns with a progress bar"
 });
 
 test("auth submits reactively: same document, navbar follows the session", async ({ page }) => {
-  // The slice 6d twins (`/api/client/login|logout`) rather than the 303 form
+  // The slice 6d twins (`/api/login|logout`) rather than the 303 form
   // handlers. A marker set on the live document is the proof: a form post
   // would load a fresh document and take it with it.
   const pageErrors: string[] = [];

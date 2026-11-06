@@ -86,7 +86,8 @@ build-and-serve commands above are the dev flow.
 `cargo test` covers the SSR side; the hydrated client side
 is covered by `end2end/tests/dioxus_client.spec.ts` (SPA nav issues no extra
 document loads, the links editor submits without a round trip, login and logout
-submit through the `/api/client/*` twins so the navbar follows the session
+submit through the `/api/login` and `/api/logout` twins so the navbar follows
+the session
 without a reload, the profile avatar upload and the artist image upload both
 run through the server fns with a progress bar) — it needs the
 wasm bundle, so it only runs through the gate script below.
@@ -260,14 +261,16 @@ dioxus blocks in-app navigation after the first load, so the plain-HTML 303 form
 fallbacks the SSR pages use are inert in the window: every form a user needs to
 submit natively goes through the reactive `use_action` + JSON-twin path. Login,
 register and logout joined them in slice 6d: three server fns under
-`/api/client/*`, next to the `/auth/*` handlers rather than on the same path
+`/api/login`, `/api/register` and `/api/logout`, next to the `/auth/*`
+handlers rather than on the same path
 (axum refuses a method+path twice), answering an `AuthOutcome` —
 `LoggedIn { user }`, `Done`, or `Failed { code }` with the same fixed codes the
 `?bad=` query carries.
 
 Slice 6i finished the job for the rest of the app: the record-label, page,
 artist, release, track and links editors plus the profile and change-password
-pages each have a matching `/api/client/*` twin. They answer `EditOutcome` —
+pages each have a matching JSON twin under `/api/*` (e.g. `/api/update_artist`,
+`/api/restore_track`). They answer `EditOutcome` —
 `Saved(row)`, which the page renders straight from (a rename, a soft delete, a
 restore or an avatar change needs no reload), or `Failed { code }` carrying the
 very code the 303 would have put in `?bad=`, so one alert table serves both

@@ -11,7 +11,8 @@
 //!   `?saved=1`, `?updated=1`, `?done=1`). That is the path the SSR-only
 //!   server takes, and it needs no javascript.
 //! - `onsubmit` prevents that post and calls the JSON twins at the bottom of
-//!   this module (`/api/client/*`) through `use_action`, so the hydrated web
+//!   this module (`POST /api/login` and friends) through `use_action`, so the
+//!   hydrated web
 //!   client and the desktop window submit without a page load. For the window
 //!   this is not an optimisation but the only path: a webview cannot follow a
 //!   303, which is why it could not log in before slice 6d.
@@ -95,8 +96,7 @@ pub fn Login(
     // shell and no router to provide either one.
     let router = try_use_context::<RouterContext>();
     let session_hint = try_use_context::<Signal<SessionHint>>();
-    let mut submit =
-        use_action(move |form: ClientLoginForm| async move { login_client(form).await });
+    let mut submit = use_action(move |form: ClientLoginForm| async move { login(form).await });
 
     // Leaving the page happens in an effect: the action only resolves after the
     // submit handler has already returned.
@@ -188,7 +188,7 @@ pub fn Register(
     let router = try_use_context::<RouterContext>();
     let session_hint = try_use_context::<Signal<SessionHint>>();
     let mut submit =
-        use_action(move |form: ClientRegisterForm| async move { register_client(form).await });
+        use_action(move |form: ClientRegisterForm| async move { register(form).await });
 
     use_effect(move || {
         if let Some(AuthOutcome::LoggedIn { user }) = answered(submit.value()) {
@@ -296,7 +296,7 @@ pub fn Logout(
     done: Option<String>,
 ) -> Element {
     let session_hint = try_use_context::<Signal<SessionHint>>();
-    let mut submit = use_action(move |(): ()| async move { logout_client().await });
+    let mut submit = use_action(move |(): ()| async move { logout().await });
 
     use_effect(move || {
         if matches!(answered(submit.value()), Some(AuthOutcome::Done)) {
@@ -686,20 +686,20 @@ fn PasswordForm(
 // client build has no page load to carry a `?bad=` query and a webview window
 // cannot follow a 303 at all.
 //
-// They live under `/api/client/*` rather than on the Leptos server-fn paths
-// (`POST /api/login`, …) because the live Leptos site still owns those until
-// Phase 8 retires it, and axum panics on two handlers for one method and path.
+// They answer on their own paths (`POST /api/login`, …) beside the form
+// handlers' `/auth/*` paths — axum panics on two handlers for one method
+// and path, and a JSON body/answer pair does not fit a form post anyway.
 
 /// Logs in and starts the session, answering `LoggedIn` with the user so the
 /// client can show them without a second round trip.
 ///
 /// # Errors
 /// 500 with a retry message when the session store will not take the session.
-#[post("/api/client/login",
+#[post("/api/login",
     db: crate::server::current_user::Db,
     session: tower_sessions::Session
 )]
-pub async fn login_client(form: ClientLoginForm) -> core::result::Result<AuthOutcome, HttpError> {
+pub async fn login(form: ClientLoginForm) -> core::result::Result<AuthOutcome, HttpError> {
     let user = match services::user::login_user(&db.0, form.username, form.password).await {
         Ok(user) => user,
         Err(error) => {
@@ -723,13 +723,11 @@ pub async fn login_client(form: ClientLoginForm) -> core::result::Result<AuthOut
 ///
 /// # Errors
 /// 500 with a retry message when the session store will not take the session.
-#[post("/api/client/register",
+#[post("/api/register",
     db: crate::server::current_user::Db,
     session: tower_sessions::Session
 )]
-pub async fn register_client(
-    form: ClientRegisterForm,
-) -> core::result::Result<AuthOutcome, HttpError> {
+pub async fn register(form: ClientRegisterForm) -> core::result::Result<AuthOutcome, HttpError> {
     let user = match services::user::register_user_service(
         &db.0,
         RegisterUserForm {
@@ -764,8 +762,8 @@ pub async fn register_client(
 ///
 /// # Errors
 /// 500 with a retry message when the session store will not flush the session.
-#[post("/api/client/logout", session: tower_sessions::Session)]
-pub async fn logout_client() -> core::result::Result<AuthOutcome, HttpError> {
+#[post("/api/logout", session: tower_sessions::Session)]
+pub async fn logout() -> core::result::Result<AuthOutcome, HttpError> {
     if let Err(error) = record_logout(&session).await {
         tracing::error!("logout twin: could not end the session: {error}");
         return HttpError::internal_server_error("Could not end the session, try again later");
@@ -778,17 +776,17 @@ pub async fn logout_client() -> core::result::Result<AuthOutcome, HttpError> {
 /// follow a rename) without a page load.
 ///
 /// ```text
-/// POST /api/client/profile {"fields":{"original_username":"alice","username":"alicia",…}}
+/// POST /api/update_profile {"fields":{"original_username":"alice","username":"alicia",…}}
 /// 200 {"Saved":{"username":"alicia",…}}
 ///
-/// POST /api/client/profile {"fields":{"original_username":"bob",…}}
+/// POST /api/update_profile {"fields":{"original_username":"bob",…}}
 /// 200 {"Failed":{"code":"forbidden"}}
 /// ```
 ///
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the save could
 /// not run at all.
-#[post("/api/client/profile",
+#[post("/api/update_profile",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -820,7 +818,7 @@ pub async fn update_profile(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the change could
 /// not run at all.
-#[post("/api/client/change-password",
+#[post("/api/change_password",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]

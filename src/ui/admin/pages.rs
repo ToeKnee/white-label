@@ -11,7 +11,7 @@
 //!
 //! From Phase 6 slice 6i the editors also save **reactively**: with a client
 //! build `onsubmit` prevents the post and one `use_action` calls the JSON
-//! twins at the bottom of this module (`/api/client/page/*`), which answer the
+//! twins at the bottom of this module (`/api/*_page`), which answer the
 //! page's own `PageResult` (or the same fixed codes as data). The row on screen
 //! then follows the save — a rename carries its new slug into the next save and
 //! to the Delete/Restore buttons, and a soft-delete swaps Delete for Restore —
@@ -471,14 +471,14 @@ pub fn MarkdownField(
 // a success answers the page's own `PageResult`:
 //
 // ```text
-// POST /api/client/page/update  {"fields":{"slug":"terms","name":"Terms",…}}
+// POST /api/update_page  {"fields":{"slug":"terms","name":"Terms",…}}
 // 200 {"Saved":{"page":{"slug":"terms-of-service",…}}}
 //
-// POST /api/client/page/update  {"fields":{"slug":"terms","name":"",…}}
+// POST /api/update_page  {"fields":{"slug":"terms","name":"",…}}
 // 200 {"Failed":{"code":"name_required"}}
 // ```
 //
-// They live on `/api/client/page/*` rather than on the handler paths: axum
+// They live on `/api/*_page` rather than on the form handlers' `/admin/forms/…` paths: axum
 // allows only one handler per method and path.
 
 /// What the page editor asks its action to do.
@@ -512,7 +512,7 @@ async fn apply_page_edit(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the create could
 /// not run at all. Refusals (validation, permissions) answer `Failed`.
-#[post("/api/client/page/create",
+#[post("/api/create_page",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -545,7 +545,7 @@ pub async fn create_page(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the save could
 /// not run at all.
-#[post("/api/client/page/update",
+#[post("/api/update_page",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -574,7 +574,7 @@ pub async fn update_page(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the delete could
 /// not run at all.
-#[post("/api/client/page/delete",
+#[post("/api/delete_page",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -600,7 +600,7 @@ pub async fn delete_page(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the restore
 /// could not run at all.
-#[post("/api/client/page/restore",
+#[post("/api/restore_page",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]

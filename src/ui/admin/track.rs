@@ -10,7 +10,7 @@
 //!
 //! From Phase 6 slice 6i the editors also save **reactively**: with a client
 //! build `onsubmit` prevents the post and one `use_action` calls the JSON
-//! twins at the bottom of this module (`/api/client/track/*`), which answer
+//! twins at the bottom of this module (`/api/*_track`), which answer
 //! the page's own `TrackResult` (or the same fixed codes as data). The row on
 //! screen then follows the save — a rename carries the new slug into the next
 //! save, and a soft-delete swaps Delete for Restore — with no page load,
@@ -747,14 +747,14 @@ fn track_message(code: Option<&str>) -> Option<&'static str> {
 // a success answers the page's own `TrackResult`:
 //
 // ```text
-// POST /api/client/track/update  {"fields":{"slug":"a-track","name":"B",…}}
+// POST /api/update_track  {"fields":{"slug":"a-track","name":"B",…}}
 // 200 {"Saved":{"track":{"slug":"b",…},"artists":[…]}}
 //
-// POST /api/client/track/update  {"fields":{"slug":"a-track","name":"",…}}
+// POST /api/update_track  {"fields":{"slug":"a-track","name":"",…}}
 // 200 {"Failed":{"code":"name_required"}}
 // ```
 //
-// They live on `/api/client/track/*` rather than on the handler paths: axum
+// They live on `/api/*_track` rather than on the form handlers' `/admin/forms/…` paths: axum
 // allows only one handler per method and path.
 
 /// What the track editor asks its action to do.
@@ -794,7 +794,7 @@ async fn apply_track_edit(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the create could
 /// not run at all. Refusals (validation, permissions) answer `Failed`.
-#[post("/api/client/track/create",
+#[post("/api/create_track",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -831,7 +831,7 @@ pub async fn create_track(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the save could
 /// not run at all.
-#[post("/api/client/track/update",
+#[post("/api/update_track",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -864,7 +864,7 @@ pub async fn update_track(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the delete could
 /// not run at all.
-#[post("/api/client/track/delete",
+#[post("/api/delete_track",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -890,7 +890,7 @@ pub async fn delete_track(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the restore
 /// could not run at all.
-#[post("/api/client/track/restore",
+#[post("/api/restore_track",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]

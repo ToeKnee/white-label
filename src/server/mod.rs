@@ -614,7 +614,7 @@ mod tests {
         assert!(home.contains("Register"), "session should be gone:\n{home}");
     }
 
-    // --- Reactive auth twins (`/api/client/*`, Phase 6 slice 6d) -----------
+    // --- Reactive auth twins (`POST /api/login` & co, Phase 6 slice 6d) ----
     //
     // The desktop window and the wasm client cannot post a form and follow the
     // 303, so these JSON twins carry the same flows as data. They share the
@@ -631,7 +631,7 @@ mod tests {
         let server = api_server(pool).await;
 
         let answered = server
-            .post("/api/client/login")
+            .post("/api/login")
             .json(&serde_json::json!({
                 "form": { "username": "test-5", "password": "password", "remember": "on" }
             }))
@@ -672,7 +672,7 @@ mod tests {
             ("", "", "required"),
         ] {
             let answered = server
-                .post("/api/client/login")
+                .post("/api/login")
                 .json(&serde_json::json!({
                     "form": { "username": username, "password": password }
                 }))
@@ -700,7 +700,7 @@ mod tests {
         let server = api_server(pool).await;
 
         server
-            .post("/api/client/login")
+            .post("/api/login")
             .json(&serde_json::json!({
                 "form": { "username": "test-5", "password": "password" }
             }))
@@ -713,7 +713,7 @@ mod tests {
 
         // A unit variant arrives as the bare string "Done".
         let ended = server
-            .post("/api/client/logout")
+            .post("/api/logout")
             .json(&serde_json::json!({}))
             .await;
         ended.assert_status_ok();
@@ -737,7 +737,7 @@ mod tests {
         let server = api_server(pool).await;
 
         let answered = server
-            .post("/api/client/register")
+            .post("/api/register")
             .json(&serde_json::json!({
                 "form": {
                     "username": "twin-user",
@@ -762,7 +762,7 @@ mod tests {
 
         // The same fixed codes the register form reports go back out.
         let duplicate = server
-            .post("/api/client/register")
+            .post("/api/register")
             .json(&serde_json::json!({
                 "form": {
                     "username": "twin-user",
@@ -781,7 +781,7 @@ mod tests {
 
         // Mismatched confirmations report `mismatch`.
         let mismatch = server
-            .post("/api/client/register")
+            .post("/api/register")
             .json(&serde_json::json!({
                 "form": {
                     "username": "another-user",
@@ -1035,7 +1035,7 @@ mod tests {
         create_test_user(&pool, 5).await.expect("user fixture");
         let server = api_server(pool).await;
         server
-            .post("/api/client/login")
+            .post("/api/login")
             .json(&serde_json::json!({
                 "form": { "username": "test-5", "password": "password" }
             }))
@@ -1045,7 +1045,7 @@ mod tests {
         // A rename answers the stored account, which is what re-fills the form's
         // fields and reaches the navbar.
         let answer = server
-            .post("/api/client/profile")
+            .post("/api/update_profile")
             .json(&serde_json::json!({
                 "fields": {
                     "original_username": "test-5",
@@ -1097,7 +1097,7 @@ mod tests {
 
         // Editing someone else's account is refused with the handler's code.
         let answer = server
-            .post("/api/client/profile")
+            .post("/api/update_profile")
             .json(&serde_json::json!({
                 "fields": {
                     "original_username": "someone-else",
@@ -1124,7 +1124,7 @@ mod tests {
         create_test_user(&pool, 5).await.expect("user fixture");
         let server = api_server(pool).await;
         server
-            .post("/api/client/login")
+            .post("/api/login")
             .json(&serde_json::json!({
                 "form": { "username": "test-5", "password": "password" }
             }))
@@ -1134,7 +1134,7 @@ mod tests {
         // The current password has to be right, and the refusal carries the
         // `current` code the redirect would have carried.
         let answer = server
-            .post("/api/client/change-password")
+            .post("/api/change_password")
             .json(&serde_json::json!({
                 "fields": {
                     "password": "nope",
@@ -1153,7 +1153,7 @@ mod tests {
 
         // A confirmation mismatch reports `mismatch`.
         let answer = server
-            .post("/api/client/change-password")
+            .post("/api/change_password")
             .json(&serde_json::json!({
                 "fields": {
                     "password": "password",
@@ -1173,7 +1173,7 @@ mod tests {
         // A finished change answers `Done` — the page's success alert, with no
         // row to hand back because nothing about the account changed.
         let answer = server
-            .post("/api/client/change-password")
+            .post("/api/change_password")
             .json(&serde_json::json!({
                 "fields": {
                     "password": "password",
@@ -1188,7 +1188,7 @@ mod tests {
         // The new password is really the one on the account: the login twin
         // refuses the old one and takes the new one.
         let answer = server
-            .post("/api/client/login")
+            .post("/api/login")
             .json(&serde_json::json!({
                 "form": { "username": "test-5", "password": "password" }
             }))
@@ -1201,7 +1201,7 @@ mod tests {
         );
 
         let answer = server
-            .post("/api/client/login")
+            .post("/api/login")
             .json(&serde_json::json!({
                 "form": { "username": "test-5", "password": "fresh123" }
             }))
@@ -2748,7 +2748,7 @@ mod tests {
         assert_eq!(forbidden.status_code(), StatusCode::FORBIDDEN);
     }
 
-    // --- Reactive editor twins (`/api/client/*`, Phase 6 slice 6i) -------
+    // --- Reactive editor twins (`/api/*_{create,update,delete,restore}_…`) --
     //
     // A desktop window cannot follow the `?updated=1` / `?bad=<code>` redirects
     // the admin handlers answer with, so these twins carry the same outcome as
@@ -2780,7 +2780,7 @@ mod tests {
         // The dioxus client sends the server-fn arguments by name, so the body
         // key here is the twin's argument name (`fields` for the update form).
         let answer = server
-            .post("/api/client/release/update")
+            .post("/api/update_release")
             .json(&serde_json::json!({
                 "fields": {
                     "slug": "test-release-1",
@@ -2811,7 +2811,7 @@ mod tests {
         // A refusal carries the code the 303 handler puts in `?bad=`, which the
         // editor maps through the same alert table it uses for the query.
         let answer = server
-            .post("/api/client/release/update")
+            .post("/api/update_release")
             .json(&serde_json::json!({
                 "fields": {
                     "slug": "renamed-album",
@@ -2835,7 +2835,7 @@ mod tests {
         // `deleted_at`, which is what swaps the editor's Delete button for
         // Restore without a page load.
         let answer = server
-            .post("/api/client/release/delete")
+            .post("/api/delete_release")
             .json(&serde_json::json!({
                 "target": { "slug": "renamed-album", "artist_slug": "test-artist-1" }
             }))
@@ -2848,7 +2848,7 @@ mod tests {
         );
 
         let answer = server
-            .post("/api/client/release/restore")
+            .post("/api/restore_release")
             .json(&serde_json::json!({
                 "target": { "slug": "renamed-album", "artist_slug": "test-artist-1" }
             }))
@@ -2865,7 +2865,7 @@ mod tests {
         // would have given, as an answer a client can act on.
         let guest_server = api_server(pool).await;
         let unauthorized = guest_server
-            .post("/api/client/release/delete")
+            .post("/api/delete_release")
             .json(&serde_json::json!({
                 "target": { "slug": "test-release-1", "artist_slug": "test-artist-1" }
             }))
@@ -2892,7 +2892,7 @@ mod tests {
         login_as(&server, 1).await;
 
         let answer = server
-            .post("/api/client/label/update")
+            .post("/api/update_record_label")
             .json(&serde_json::json!({
                 "fields": {
                     "id": label.id.to_string(),
@@ -2912,7 +2912,7 @@ mod tests {
 
         login_as(&server, 2).await;
         let answer = server
-            .post("/api/client/label/update")
+            .post("/api/update_record_label")
             .json(&serde_json::json!({
                 "fields": { "id": label.id.to_string(), "name": "Hijacked Label" }
             }))

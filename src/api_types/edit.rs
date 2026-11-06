@@ -9,10 +9,10 @@
 /// with the same information as data:
 ///
 /// ```text
-/// POST /api/client/release/update  {"fields":{…}}
+/// POST /api/update_release  {"fields":{…}}
 /// 200 {"Saved":{"release":{…},"artists":[…],"tracks":[…]}}
 ///
-/// POST /api/client/release/update  {"fields":{…}}
+/// POST /api/update_release  {"fields":{…}}
 /// 200 {"Failed":{"code":"slug_taken"}}
 /// ```
 ///

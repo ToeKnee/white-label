@@ -10,7 +10,7 @@
 //! From Phase 6 slice 6i the page's artist Delete/Restore buttons save
 //! **reactively** too: with a client build the sibling forms' `onsubmit`
 //! prevents the post and a `use_action` calls the artist twins in
-//! `super::artist` (`/api/client/artist/delete` / `.../restore`), which answer
+//! `super::artist` (`/api/delete_artist` / `.../restore`), which answer
 //! the artist row itself, so the header name and the Delete/Restore swap follow
 //! the save with no page load. The plain sibling forms stay underneath as the
 //! javascript-off path.

@@ -11,7 +11,7 @@
 //!
 //! From Phase 6 slice 6i the editors also save **reactively**: with a client
 //! build `onsubmit` prevents the post and one `use_action` calls the JSON
-//! twins at the bottom of this module (`/api/client/release/*`), which answer
+//! twins at the bottom of this module (`/api/*_release`), which answer
 //! the page's own `ReleaseResult` (or the same fixed codes as data). The row on
 //! screen then follows the save — a rename carries the new slug into the next
 //! save and the uploader, and a soft-delete swaps Delete for Restore — with no
@@ -825,14 +825,14 @@ fn release_message(code: Option<&str>) -> Option<&'static str> {
 // a success answers the page's own `ReleaseResult`:
 //
 // ```text
-// POST /api/client/release/update  {"fields":{"slug":"a-release","name":"B",…}}
+// POST /api/update_release  {"fields":{"slug":"a-release","name":"B",…}}
 // 200 {"Saved":{"release":{"slug":"b",…},"artists":[…],"tracks":[…]}}
 //
-// POST /api/client/release/update  {"fields":{"slug":"a-release","name":"",…}}
+// POST /api/update_release  {"fields":{"slug":"a-release","name":"",…}}
 // 200 {"Failed":{"code":"name_required"}}
 // ```
 //
-// They live on `/api/client/release/*` rather than on the handler paths: axum
+// They live on `/api/*_release` rather than on the form handlers' `/admin/forms/…` paths: axum
 // allows only one handler per method and path.
 
 /// What the release editor asks its action to do.
@@ -867,7 +867,7 @@ async fn apply_release_edit(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the create could
 /// not run at all. Refusals (validation, permissions) answer `Failed`.
-#[post("/api/client/release/create",
+#[post("/api/create_release",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -905,7 +905,7 @@ pub async fn create_release(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the save could
 /// not run at all.
-#[post("/api/client/release/update",
+#[post("/api/update_release",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -938,7 +938,7 @@ pub async fn update_release(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the delete could
 /// not run at all.
-#[post("/api/client/release/delete",
+#[post("/api/delete_release",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -964,7 +964,7 @@ pub async fn delete_release(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the restore
 /// could not run at all.
-#[post("/api/client/release/restore",
+#[post("/api/restore_release",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]

@@ -8,7 +8,7 @@
 //!
 //! From Phase 6 slice 6i the editor also saves **reactively**: with a client
 //! build `onsubmit` prevents the post and a `use_action` calls the JSON twin
-//! at the bottom of this module (`/api/client/label/update`), which answers
+//! at the bottom of this module (`/api/update_record_label`), which answers
 //! the saved `LabelResult` (or the same fixed codes as data). The header and
 //! the alerts then follow the last save — a rename needs no page load, which
 //! is what makes the editor usable in a desktop window (a 303 has nothing to
@@ -277,14 +277,14 @@ fn label_message(code: Option<&str>) -> Option<&'static str> {
 // code as data and a success answers the page's own `LabelResult`:
 //
 // ```text
-// POST /api/client/label/update  {"fields":{"id":"1","name":"B",…}}
+// POST /api/update_record_label  {"fields":{"id":"1","name":"B",…}}
 // 200 {"Saved":{"record_label":{"name":"B",…}}}
 //
-// POST /api/client/label/update  {"fields":{"id":"9999",…}}
+// POST /api/update_record_label  {"fields":{"id":"9999",…}}
 // 200 {"Failed":{"code":"server"}}
 // ```
 //
-// It lives on `/api/client/label/update` rather than on the handler path: axum
+// It lives on `/api/update_record_label` rather than on the handler path: axum
 // allows only one handler per method and path.
 
 /// Saves the record label.
@@ -296,7 +296,7 @@ fn label_message(code: Option<&str>) -> Option<&'static str> {
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the save could
 /// not run at all. Refusals (permissions) answer `Failed`.
-#[post("/api/client/label/update",
+#[post("/api/update_record_label",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]

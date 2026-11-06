@@ -51,8 +51,8 @@ pub async fn api_server_with_uploads(pool: &PgPool, upload_root: std::path::Path
 /// `save_cookies` on [`api_server`] then carries the session into later calls.
 pub fn login_request(server: &TestServer, username: &str) -> TestRequest {
     server
-        // The login server fn's path (`ui::auth::login_client`).
-        .post("/api/client/login")
+        // The login server fn's path (`ui::auth::login`).
+        .post("/api/login")
         .json(&serde_json::json!({
             "form": { "username": username, "password": "password" }
         }))

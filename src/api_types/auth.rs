@@ -1,4 +1,5 @@
-//! Response types for the reactive auth endpoints (`/api/client/*`).
+//! Response types for the reactive auth endpoints (`POST /api/login`,
+//! `POST /api/register` and friends).
 
 use crate::models::auth::User;
 
@@ -12,10 +13,10 @@ use crate::models::auth::User;
 /// API) is still an error at the request level.
 ///
 /// ```text
-/// POST /api/client/login  {"form":{"username":"test-1","password":"password"}}
+/// POST /api/login  {"form":{"username":"test-1","password":"password"}}
 /// 200 {"LoggedIn":{"user":{…}}}              session cookie set
 ///
-/// POST /api/client/login  {"form":{"username":"test-1","password":"nope"}}
+/// POST /api/login  {"form":{"username":"test-1","password":"nope"}}
 /// 200 {"Failed":{"code":"password"}}         no session cookie
 /// ```
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Eq, PartialEq)]

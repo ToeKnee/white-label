@@ -12,7 +12,7 @@
 //!
 //! From Phase 6 slice 6i the editors also save **reactively**: with a client
 //! build `onsubmit` prevents the post and one `use_action` calls the JSON
-//! twins at the bottom of this module (`/api/client/artist/*`), which answer
+//! twins at the bottom of this module (`/api/*_artist`), which answer
 //! the page's own `ArtistResult` (or the same fixed codes as data). The row on
 //! screen then follows the save — a rename carries its new slug into the next
 //! save and to the Delete/Restore buttons, and a soft-delete swaps Delete for
@@ -401,14 +401,14 @@ pub(super) fn artist_message(code: Option<&str>) -> Option<&'static str> {
 // a success answers the page's own `ArtistResult`:
 //
 // ```text
-// POST /api/client/artist/update  {"fields":{"slug":"jimi","name":"Jimi",…}}
+// POST /api/update_artist  {"fields":{"slug":"jimi","name":"Jimi",…}}
 // 200 {"Saved":{"artist":{"slug":"jimi-hendrix",…}}}
 //
-// POST /api/client/artist/update  {"fields":{"slug":"jimi","name":"",…}}
+// POST /api/update_artist  {"fields":{"slug":"jimi","name":"",…}}
 // 200 {"Failed":{"code":"name_required"}}
 // ```
 //
-// They live on `/api/client/artist/*` rather than on the handler paths: axum
+// They live on `/api/*_artist` rather than on the form handlers' `/admin/forms/…` paths: axum
 // allows only one handler per method and path.
 
 /// What the artist editor asks its action to do.
@@ -443,7 +443,7 @@ async fn apply_artist_edit(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the create could
 /// not run at all. Refusals (validation, permissions) answer `Failed`.
-#[post("/api/client/artist/create",
+#[post("/api/create_artist",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -480,7 +480,7 @@ pub async fn create_artist(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the save could
 /// not run at all.
-#[post("/api/client/artist/update",
+#[post("/api/update_artist",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -513,7 +513,7 @@ pub async fn update_artist(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the delete could
 /// not run at all.
-#[post("/api/client/artist/delete",
+#[post("/api/delete_artist",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
@@ -539,7 +539,7 @@ pub async fn delete_artist(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the restore
 /// could not run at all.
-#[post("/api/client/artist/restore",
+#[post("/api/restore_artist",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]

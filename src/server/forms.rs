@@ -213,7 +213,7 @@ async fn change_password(
 // The fixed codes `crate::ui::auth` maps onto alert text. Service messages
 // are constants in `crate::services`, so comparing them is stable;
 // anything unrecognised gets the generic `server`/`invalid` code. The
-// reactive twins (`ui::auth`'s `/api/client/*` server fns) answer the same
+// reactive twins (`ui::auth`'s `/api/*` server fns) answer the same
 // codes, so both paths keep failing identically.
 
 pub fn login_code(error: &AppError) -> &'static str {

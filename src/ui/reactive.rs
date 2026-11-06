@@ -3,8 +3,8 @@
 //! Every admin editor has two submission paths that must behave the same: the
 //! javascript-off `<form action="/admin/forms/…">` post (whose 303 the page
 //! reads back as `?updated=1` / `?bad=<code>`) and the reactive one, where a
-//! client build intercepts the submit and calls a JSON twin (`/api/client/…`)
-//! through `use_action`. A webview window cannot follow a 303 at all, so the
+//! client build intercepts the submit and calls a JSON twin (`/api/*`) through
+//! `use_action`. A webview window cannot follow a 303 at all, so the
 //! reactive path is the only one that works there.
 //!
 //! This module holds the two pieces every editor needs:
