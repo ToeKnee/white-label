@@ -1,20 +1,17 @@
-//! Upload or replace an artist's images (MIGRATION.md Phase 5 slice 5g),
-//! ported from the Leptos `components::admin::artist::images`.
+//! Upload or replace an artist's images.
 //!
 //! The page is the artist tabs' Images entry: the picker goes to
 //! [`UploadConfiguration::Artist`] (its directory, mime types, 100 MB limit
 //! and `admin` + `label_owner` requirement), addressed by the artist slug,
 //! and the artist's current primary image is shown underneath.
 //!
-//! Deviations from the Leptos original:
+//! Design notes:
 //!
 //! - The `<img>` follows a finished upload at once: the upload answers with
 //!   the stored name and `on_uploaded` points the image at
-//!   [`stored_file_url`]. Leptos left the previous file on screen until the
-//!   page was reloaded (its widget logged a TODO about exactly that).
-//! - The Leptos page read the artist from its `GlobalState` store; the port
-//!   fetches it through the `get_artist` twin, so a missing artist gets the
-//!   not-found page as in the other editors.
+//!   [`stored_file_url`].
+//! - The artist is fetched through the `get_artist` page fetch, so a
+//!   missing artist gets the not-found page as in the other editors.
 
 use dioxus::prelude::*;
 
@@ -26,7 +23,7 @@ use crate::ui::utils::Loading;
 use crate::ui::utils::permission_allows;
 use crate::ui::{Route, page_data, redirect, use_page, use_user};
 
-/// Upload/replace an artist's images (Leptos `artist/images.rs`).
+/// Upload/replace an artist's images.
 #[component]
 pub fn EditArtistImages(
     /// The artist slug from the URL.

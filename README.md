@@ -286,7 +286,7 @@ form handlers and server fns) and the whole `src/ui` suite build under the
 default `server` feature, so one command covers everything:
 
 ```bash
-cargo test            # 477 lib tests + doc tests, src/server/ and src/ui/ included
+cargo test            # 478 lib tests + doc tests, src/server/ and src/ui/ included
 cargo test -- server::   # just the router/form-handler tests
 cargo test -- ui::       # just the route-table + UI component tests
 ```

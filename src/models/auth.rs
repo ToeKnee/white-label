@@ -103,22 +103,21 @@ impl Validate for User {
 }
 
 impl User {
-    /// Check if the user is authenticated.
+    /// Whether this is a real (non-guest) user: the sentinel `id` is -1.
+    #[must_use]
     pub const fn is_authenticated(&self) -> bool {
         self.id != -1
     }
 
-    /// Check if the user is active.
+    /// Whether the user's account is usable — the same sentinel check as
+    /// [`Self::is_authenticated`].
+    #[must_use]
     pub const fn is_active(&self) -> bool {
         self.id != -1
     }
 
-    /// Check if the user is anonymous.
-    pub const fn is_anonymous(&self) -> bool {
-        self.id == -1
-    }
-
     /// Get the avatar URL of the user.
+    #[must_use]
     pub fn avatar_url(&self) -> String {
         self.avatar.clone().map_or_else(
             || "/Logo.svg".to_string(),
@@ -556,26 +555,6 @@ mod tests {
             updated_at: chrono::Utc::now(),
         };
         assert!(user.is_active());
-    }
-
-    #[test]
-    fn test_user_is_anonymous() {
-        let user = User::default();
-        assert!(user.is_anonymous());
-
-        let user = User {
-            id: 1,
-            username: "test".into(),
-            first_name: None,
-            last_name: None,
-            email: "test@example.com".into(),
-            description: None,
-            avatar: None,
-            permissions: HashSet::new(),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
-        assert!(!user.is_anonymous());
     }
 
     #[cfg(feature = "server")]

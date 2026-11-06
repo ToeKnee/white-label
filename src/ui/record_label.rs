@@ -1,9 +1,8 @@
-//! The record label home page (MIGRATION.md Phase 4 slice 2), ported from
-//! the Leptos `components::record_label::home` module.
+//! The record label home page.
 //!
 //! The label itself comes from the shared resource [`App`] provides
 //! (`super::use_label`); the artist cards reuse
-//! [`crate::ui::artist::ArtistList`] (one copy where Leptos had two).
+//! [`crate::ui::artist::ArtistList`].
 
 use dioxus::prelude::*;
 
@@ -33,9 +32,8 @@ pub fn RecordLabelHome() -> Element {
 /// can simply use the value above them.
 #[component]
 fn LabelHomeBody() -> Element {
-    // A failed label load renders the empty defaults, like the Leptos
-    // store starting at `RecordLabel::default()` (the h1 is then blank
-    // and the artist fetch below fails the way the Leptos skip did).
+    // A failed label load renders the empty defaults (the h1 is then blank
+    // and the artist fetch below fails too).
     let label = use_label()?;
     let label = match label() {
         Ok(result) => result.record_label,

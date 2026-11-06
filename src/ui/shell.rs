@@ -55,7 +55,6 @@ pub fn App() -> Element {
 }
 
 /// Chrome shared by every route: navbar, page body inside `<main>`, footer.
-/// (Leptos: `Router > LabelHeader`, `main > Routes`, `LabelFooter`.)
 #[component]
 pub fn AppShell() -> Element {
     rsx! {

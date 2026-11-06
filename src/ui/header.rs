@@ -41,8 +41,7 @@ pub fn LabelHeader() -> Element {
     }
 }
 
-/// The brand link: the record label's name (empty until a label exists,
-/// as the Leptos store default left it with no label loaded).
+/// The brand link: the record label's name (empty until a label exists).
 #[component]
 fn BrandLink() -> Element {
     let label = use_label()?;
@@ -80,9 +79,8 @@ fn menu_user(hint: &SessionHint, page_session: Option<User>) -> Option<User> {
 /// The user menu, resolved against the request's session: an avatar
 /// dropdown once signed in, the guest links otherwise.
 ///
-/// These are the two branches the Leptos `UserMenu` picked from its user
-/// context. A sign-in, sign-out, or profile change that never reloaded the
-/// page answers through the [`SessionHint`] context instead: the chrome
+/// A sign-in, sign-out, or profile change that never reloaded the page
+/// answers through the [`SessionHint`] context: the chrome
 /// outlives client navigations, and a page resource resolves once per
 /// component (a desktop window's resolves to a guest at launch, before anyone
 /// has signed in), so the menu needs the action's own answer to catch up.

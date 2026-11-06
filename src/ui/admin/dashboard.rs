@@ -1,15 +1,16 @@
-//! The admin dashboard (MIGRATION.md Phase 4 slice 4), ported from the
-//! Leptos `components::admin::dashboard` module and its `dash` pieces.
+//! The admin dashboard: a card row, each card behind its own
+//! `SuspenseBoundary`.
 //!
-//! Same card row as the original — label summary, artists table, pages
-//! table, social tips, upcoming-release countdown, mailing-list stub —
-//! with each card behind its own `SuspenseBoundary` (the Leptos per-card
-//! `Transition`). Deviations:
+//! The row covers label summary, artists table, pages table, social tips,
+//! upcoming-release countdown and mailing-list stub, so one slow load
+//! renders its fallback without blocking the rest.
+//!
+//! Two deliberate choices:
 //!
 //! - The countdown is a snapshot of `Utc::now()` at render (SSR only, so no
 //!   `set_interval` tick yet; the values land when the client builds come).
-//! - Social tips rotate daily (deterministic across SSR and client
-//!   renders); the Leptos original picked one per request with `rand`.
+//! - Social tips rotate daily — the index comes from the date, so SSR and
+//!   client renders agree on which tip shows.
 
 use chrono::{DateTime, Datelike, Utc};
 use dioxus::prelude::*;
@@ -28,7 +29,7 @@ use crate::ui::utils::{Loading, StatusBadge};
 use crate::utils::shorten_string::shorten_string;
 use dioxus::router::Link;
 
-/// The dashboard: the card row the Leptos `Dashboard` rendered.
+/// The dashboard: the full card row.
 #[component]
 pub fn Dashboard() -> Element {
     rsx! {
@@ -44,8 +45,7 @@ pub fn Dashboard() -> Element {
     }
 }
 
-/// Quick label info for `label_owner` sessions (the Leptos
-/// `dash::record_label::RecordLabel` card; nothing for other users).
+/// Quick label info for `label_owner` sessions (nothing for other users).
 #[component]
 fn RecordLabelCard() -> Element {
     rsx! {
@@ -68,8 +68,7 @@ fn RecordLabelCardBody() -> Element {
     }
 
     let label_result = use_label()?;
-    // A failed label load renders the empty defaults, like the Leptos
-    // store starting at its default.
+    // A failed label load renders the empty defaults.
     let label = match label_result() {
         Ok(result) => result.record_label,
         Err(error) => {
@@ -97,7 +96,7 @@ fn RecordLabelCardBody() -> Element {
     }
 }
 
-/// The label's artists table (the Leptos `dash::artists::ArtistsTable`).
+/// The label's artists table.
 #[component]
 fn ArtistsTable() -> Element {
     rsx! {
@@ -189,9 +188,7 @@ fn ArtistRow(artist: Artist) -> Element {
     }
 }
 
-/// The label's pages table (the Leptos `dash::pages::PagesTable`); the
-/// pages resource keys off the label id, like the original keyed off the
-/// store's label.
+/// The label's pages table; the pages resource keys off the label id.
 #[component]
 fn PagesTable() -> Element {
     rsx! {
@@ -294,8 +291,7 @@ fn PageRow(page: Page) -> Element {
     }
 }
 
-/// Three skeleton rows while a table loads (the Leptos row fallbacks, which
-/// were identical for both tables).
+/// Three skeleton rows while a table loads (shared by both tables).
 #[component]
 fn RowFallback() -> Element {
     rsx! {
@@ -309,8 +305,7 @@ fn RowFallback() -> Element {
     }
 }
 
-/// A static promotion tip, rotated through the list daily (the Leptos
-/// `SocialMediaTips` list, kept verbatim).
+/// A promotion tip, rotated through the list daily.
 #[component]
 fn SocialMediaTips() -> Element {
     let tip = random_tip();
@@ -326,8 +321,7 @@ fn SocialMediaTips() -> Element {
     }
 }
 
-/// The Leptos tip list; the index rotates daily so SSR and client renders
-/// agree (Leptos picked randomly per request).
+/// The promotion tip list; the daily rotation happens in [`random_tip`].
 fn random_tip() -> &'static str {
     let tips: Vec<&'static str> = vec![
         "Check out our new release... <INSERT RELEASE HERE> Out on Friday!",
@@ -373,16 +367,13 @@ fn random_tip() -> &'static str {
     ];
 
     // Deterministic so the SSR render and the client's hydrating render
-    // pick the same tip (the Leptos original shuffled per request, which
-    // would mismatch once a client build exists); rotates through the list
-    // daily.
+    // pick the same tip; rotates through the list daily.
     let index = usize::try_from(chrono::Utc::now().ordinal()).unwrap_or(0) % tips.len();
     tips[index]
 }
 
-/// The days/hours/minutes/seconds between `now` and `target`, using the
-/// Leptos countdown's arithmetic (a past target yields negative values,
-/// which daisyUI renders as zeros).
+/// The days/hours/minutes/seconds between `now` and `target` (a past
+/// target yields negative values, which daisyUI renders as zeros).
 fn countdown_parts(now: DateTime<Utc>, target: DateTime<Utc>) -> (i64, i64, i64, i64) {
     let diff = target - now;
     (
@@ -394,7 +385,7 @@ fn countdown_parts(now: DateTime<Utc>, target: DateTime<Utc>) -> (i64, i64, i64,
 }
 
 /// The upcoming-release countdown card; renders nothing when the label has
-/// no future-scheduled release (the Leptos `UpcomingRelease`).
+/// no future-scheduled release.
 #[component]
 fn UpcomingRelease() -> Element {
     rsx! {
@@ -413,8 +404,8 @@ fn UpcomingReleaseBody() -> Element {
         Ok(None) => return rsx! {},
         Err(error) => {
             tracing::error!("Error while getting upcoming release: {error}");
-            // The Leptos Err arm fell through and rendered the card with a
-            // default (empty) release and a zero countdown; kept as-is.
+            // The error arm falls through and renders the card with a
+            // default (empty) release and a zero countdown.
             Release::default()
         }
     };
@@ -460,7 +451,7 @@ fn UpcomingReleaseBody() -> Element {
 }
 
 /// The mailing-list stub card, static markup with no data behind it yet
-/// (the Leptos card rendered a hard-coded `0`).
+/// (it shows a hard-coded `0`).
 #[component]
 fn MailingListCard() -> Element {
     rsx! {
@@ -528,8 +519,8 @@ mod tests {
 
     #[test]
     fn countdown_of_a_past_target_is_negative_like_daisys_input() {
-        // The Leptos arithmetic yields non-positive values for a past date
-        // (durations truncate toward zero); daisyUI clamps the CSS
+        // Durations truncate toward zero, so a past date yields
+        // non-positive values; daisyUI clamps the CSS
         // `--value` to 0 when rendering.
         let now = utc(2026, 1, 5, 0, 0, 0);
         let past = utc(2026, 1, 4, 4, 5, 6);

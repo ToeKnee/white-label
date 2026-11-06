@@ -1,5 +1,4 @@
-//! The auth pages (MIGRATION.md Phase 4 slice 3), ported from the Leptos
-//! `components::auth` group.
+//! The auth pages (login, register, logout, profile, change-password).
 //!
 //! Each page carries both submit paths, exactly like the upload widget.
 //!
@@ -34,8 +33,8 @@
 //! user rather than another fetch.
 //!
 //! The profile page also carries the avatar upload widget
-//! ([`crate::ui::upload::FileUploadWithProgress`], Phase 5 slice 5f); like
-//! the Leptos original it needs the client build, since its upload is a
+//! ([`crate::ui::upload::FileUploadWithProgress`]); it needs the client
+//! build, since its upload is a
 //! request body rather than a form post. A stored avatar also reaches the
 //! navbar through a fresh [`crate::ui::SessionHint::SignedIn`], so the menu
 //! avatar changes without a page load (the navbar outlives the upload, and on
@@ -84,8 +83,7 @@ use crate::server::forms::{change_password_code, login_code, profile_code, regis
 use crate::services;
 
 /// The login page. `bad` carries the code from a javascript-off attempt; a
-/// reactive failure stays in the action instead. The daisy fieldset and icons
-/// are kept 1:1 with the Leptos original.
+/// reactive failure stays in the action instead.
 #[component]
 pub fn Login(
     /// Error code from a failed login attempt.
@@ -178,8 +176,8 @@ pub fn Login(
 
 /// The register page; `bad` carries the code from a javascript-off attempt.
 ///
-/// A successful register logs the new user in and lands home (as the Leptos
-/// register page did) — by 303 without a client build, by navigation with one.
+/// A successful register logs the new user in and lands home — by 303
+/// without a client build, by navigation with one.
 #[component]
 pub fn Register(
     /// Error code from a failed registration attempt.
@@ -288,7 +286,7 @@ pub fn Register(
 /// session and 303s back with `?done`, and the reactive twin ends it and
 /// reports `Done` instead.
 ///
-/// After a logout it shows the Leptos page's "Logged out" line instead, and the
+/// After a logout it shows a "Logged out" line instead, and the
 /// navbar menu goes back to the guest links through the session hint.
 #[component]
 pub fn Logout(
@@ -332,8 +330,7 @@ pub fn Logout(
     }
 }
 
-/// The profile editor, guarded like the Leptos `EditProfile`
-/// (`authenticated_or_redirect("/login")`).
+/// The profile editor; signed-out visitors are redirected to `/login`.
 #[component]
 pub fn EditProfile(
     /// Set when the profile has just been saved.
@@ -445,7 +442,6 @@ fn ProfileForm(
     let hint_user = user.clone();
     let user_for_fields = user;
     rsx! {
-        // Leptos placed the avatar picker between the heading and the form.
         // The slug follows the account being edited, so after a rename the next
         // upload still names the account it belongs to (the service checks
         // it against the session anyway).
@@ -484,7 +480,7 @@ fn ProfileForm(
     }
 }
 
-/// The profile inputs (the Leptos `Form` component), inside the page's
+/// The profile inputs, inside the page's
 /// form element.
 ///
 /// `original_username` names the account being edited and is cross-checked
@@ -553,7 +549,8 @@ fn ProfileFields(user: User) -> Element {
     }
 }
 
-/// The password change page, guarded like the Leptos `ChangePassword`.
+/// The password change page; signed-out visitors are redirected to
+/// `/login`.
 #[component]
 pub fn ChangePassword(
     /// Set when the password has just been changed.
@@ -940,7 +937,7 @@ fn change_password_message(code: Option<&str>) -> Option<&'static str> {
     }
 }
 
-// The daisyUI input icons, repeated across the Leptos originals' fields.
+// The daisyUI input icons used by the auth fields.
 
 /// The person icon (username fields).
 #[component]

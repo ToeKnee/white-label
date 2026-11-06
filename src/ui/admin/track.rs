@@ -1,5 +1,4 @@
-//! The track list and editors (MIGRATION.md Phase 4 slice 5c), ported from
-//! the Leptos `components::admin::artist::release::track` group.
+//! The track list and editors.
 //!
 //! Same shape as the release editors (`super::release`): pages post to
 //! `crate::server::forms` handlers under `/admin/forms/track`, the handlers
@@ -8,7 +7,7 @@
 //! validation messages. The page gate is `label_owner`; the track services
 //! additionally require `admin`.
 //!
-//! From Phase 6 slice 6i the editors also save **reactively**: with a client
+//! The editors also save **reactively**: with a client
 //! build `onsubmit` prevents the post and one `use_action` calls the JSON
 //! twins at the bottom of this module (`/api/*_track`), which answer
 //! the page's own `TrackResult` (or the same fixed codes as data). The row on
@@ -19,15 +18,14 @@
 //! create page navigates to its editor. The plain form posts stay underneath
 //! as the javascript-off path.
 //!
-//! Deviations from the Leptos originals:
+//! Design notes:
 //!
-//! - The track list (a `TrackList`) is rendered from the release editor's
+//! - The track list (a `TrackList`) renders from the release editor's
 //!   existing `get_release` result (whose `tracks` field already carries
-//!   them) instead of a second `get_tracks` fetch; the list page reuses the
-//!   same twin. A new `get_track` twin serves the track editor.
-//! - Leptos' create-page `<Title>` said "New Release" (a copy-paste slip);
-//!   the port titles it "New Track".
-//! - The image upload block stays deferred to Phase 5, as elsewhere.
+//!   them); the `/tracks` page fetches that same endpoint, and a dedicated
+//!   `get_track` fetch serves the track editor.
+//! - Track images show in the list (`primary_image_url`) but the editors
+//!   offer no way to upload one.
 //! - A reactive rename leaves the *URL* on the old slug (the javascript-off
 //!   path 303s to the new one). Saving again, deleting and restoring all
 //!   follow the new slug, but reloading the old URL gets the tracks list.
@@ -60,8 +58,7 @@ use crate::services;
 use super::pages::{DateField, MarkdownField};
 use super::release::ArtistSelect;
 
-/// The track list page for one release (Leptos `track/list.rs` at the
-/// `/tracks` route).
+/// The track list page for one release (the `/tracks` route).
 #[component]
 pub fn Tracks(
     /// The artist slug from the URL.
@@ -118,7 +115,7 @@ fn TracksBody(artist_slug: String, release_slug: String) -> Element {
 }
 
 /// The tracks table with its "Add" link, shared by the `/tracks` page and
-/// the release editor's sidebar (where Leptos rendered the same component).
+/// the release editor's sidebar.
 #[component]
 pub fn TrackList(
     /// The artist the rows link back through.
@@ -175,7 +172,7 @@ pub fn TrackList(
     }
 }
 
-/// One track row (the Leptos `TrackRow`).
+/// One track row.
 #[component]
 fn TrackRow(track: Track, artist_slug: String, release_slug: String) -> Element {
     let isrc = track.isrc_code.clone().unwrap_or_default();
@@ -230,7 +227,6 @@ pub fn CreateTrack(
     bad: Option<String>,
 ) -> Element {
     rsx! {
-        // Leptos titled this page "New Release" (copy-paste slip); fixed.
         document::Title { "New Track" }
         h1 { "New Track" }
         SuspenseBoundary {
@@ -253,8 +249,7 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
         return rsx! { Loading {} };
     }
 
-    // The page URL addresses the artist, so the pickers start on it (the
-    // Leptos effect that seeded `artist_ids`).
+    // The page URL addresses the artist, so the pickers start on it.
     let artist_name_slug = artist_slug.clone();
     let artist_resource = use_page(move || page_data(get_artist(artist_name_slug.clone())))?;
     let artist = match artist_resource() {
@@ -271,7 +266,7 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
     };
 
     // The hidden `release_id` comes from the addressed release; a bad
-    // release slug steers to the releases list, as in Leptos.
+    // release slug steers to the releases list.
     let release_artist_slug = artist_slug.clone();
     let release_slug_for_resource = release_slug.clone();
     let release_resource = use_page(move || {
@@ -452,9 +447,9 @@ fn EditTrackBody(
     }
 
     // The header is "Track - Release - Artist", so all three rows are
-    // needed; the redirects mirror the Leptos error branches (a missing
-    // release steers to the releases list, a missing track to the tracks
-    // list; a missing artist gets the NotFound page, as in the other
+    // needed; a bad slug steers where the missing entity is managed (a
+    // missing release goes to the releases list, a missing track to the
+    // tracks list; a missing artist gets the NotFound page, as in the other
     // editors).
     let header_artist_slug = artist_slug.clone();
     let artist_resource = use_page(move || page_data(get_artist(header_artist_slug.clone())))?;

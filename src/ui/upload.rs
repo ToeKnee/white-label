@@ -1,5 +1,4 @@
-//! The dioxus upload widget and its endpoints (MIGRATION.md Phase 5 slice
-//! 5f).
+//! The upload widget and its endpoints.
 //!
 //! A `FileStream` argument *is* the request body: dioxus sends the file's
 //! own mime type in `Content-Type`, its size in `X-Content-Size` and its
@@ -14,7 +13,7 @@
 //! the `Content-Disposition` copy, which dioxus escapes client-side and leaves
 //! percent-encoded on the server.
 //!
-//! Deviations from the Leptos original:
+//! Design notes:
 //! - No plain-HTML *body* twin: `/api/upload` speaks dioxus' body protocol, so
 //!   the reactive path needs the client build. The widget also renders a real
 //!   `multipart/form-data` form, so a browser with javascript off posts to
@@ -32,9 +31,7 @@
 //!   check did nothing except hide the avatar progress bar behind a 403 for
 //!   everyone without those permissions.
 //! - [`upload_file`](crate::ui::upload::upload_file) answers the stored file
-//!   name, which the widget shows;
-//!   the Leptos route answered nothing and its client logged a TODO about
-//!   refreshing the page.
+//!   name, which the widget shows.
 
 use dioxus::fullstack::{FileStream, TextStream};
 use dioxus::html::FileData;
@@ -128,7 +125,7 @@ pub async fn upload_file(
     }
     // `filename` is the client's own copy (see the module docs); the
     // Content-Disposition name would arrive percent-encoded. The last
-    // argument keeps the Leptos behaviour of overwriting an existing file.
+    // argument keeps the overwrite-an-existing-file behaviour.
     let tmp_file_name = match valid_file_name(&filename, Some(slug.clone()), &details.path, true) {
         Ok(valid_name) => valid_name,
         Err(error) => {
@@ -367,8 +364,7 @@ pub async fn file_progress(filename: String) -> core::result::Result<TextStream,
 // The widget
 // ---------------------------------------------------------------------------
 
-/// File picker, Upload button and progress bar (the Leptos
-/// `FileUploadWithProgress`).
+/// File picker, Upload button and progress bar.
 ///
 /// Two submission paths share one markup. The reactive one (`onsubmit`, so
 /// `prevent_default`) streams the file through the server fn and draws the
@@ -397,8 +393,7 @@ pub fn FileUploadWithProgress(
     bad_upload: Option<String>,
     /// Runs after a file is stored, with the name it was stored under. The
     /// artist and release pages use it to point their `<img>` at the new
-    /// file, so the user does not have to reload (Leptos left the old image
-    /// on screen until they did).
+    /// file, so the user does not have to reload.
     #[props(optional)]
     on_uploaded: Option<EventHandler<String>>,
 ) -> Element {
@@ -1470,7 +1465,7 @@ mod tests {
         });
         assert!(
             html.contains(r#"name="file_to_upload""#),
-            "the picker keeps the Leptos field name: {html}"
+            "the picker's field is named file_to_upload: {html}"
         );
         assert!(
             html.contains(r#"class="w-full file-input file-input-primary""#),

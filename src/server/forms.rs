@@ -122,13 +122,11 @@ async fn login(
     }
     remember_session(&session, args.remember.as_deref());
 
-    // The home page's session read then shows the user menu, as the Leptos
-    // page's `redirect("/")` after login did.
+    // The home page's session read then shows the user menu.
     Redirect::to("/")
 }
 
-/// Create the account, then log the new user in (the Leptos register page
-/// redirected home the same way).
+/// Create the account, then log the new user in and send them home.
 async fn register(
     Db(pool): Db,
     session: Session,
@@ -349,8 +347,7 @@ async fn update_page(
     )
     .await
     {
-        // `update` can re-slugify; redirect to the editor's *current* slug
-        // like the Leptos action's result did.
+        // `update` can re-slugify; redirect to the editor's *current* slug.
         Ok(result) => Redirect::to(&format!("/admin/page/{}?updated=1", result.page.slug)),
         Err(error) => {
             tracing::warn!("page update form rejected: {error}");
@@ -364,8 +361,7 @@ async fn update_page(
 }
 
 /// Soft-delete a page. The editor reloads with `?updated=1`; its refetch
-/// shows the Restore button in place of Delete (the state swap the Leptos
-/// dialog produced in place).
+/// shows the Restore button in place of Delete.
 async fn delete_page(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
@@ -407,8 +403,7 @@ async fn restore_page(
 
 /// Create an artist. Success 303s to the new artist's profile editor under
 /// the slug the server derived from the name (never echoing the submitted
-/// name), with no `?updated=1`: the Leptos create action redirected
-/// silently into the editor.
+/// name), with no `?updated=1`.
 async fn create_artist(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
@@ -455,7 +450,7 @@ async fn update_artist(
     .await
     {
         // `Artist::update` re-slugifies from the name; redirect to the
-        // editor's *current* slug, like the Leptos action's redirect did.
+        // editor's *current* slug.
         Ok(result) => Redirect::to(&format!("/admin/artist/{}?updated=1", result.artist.slug)),
         Err(error) => {
             tracing::warn!("artist update form rejected: {error}");
@@ -536,8 +531,8 @@ fn split_form_pairs(pairs: Vec<(String, String)>, key: &str) -> (Vec<String>, se
 }
 
 /// Create a release. Success 303s to the new release's editor under the
-/// slug the server derived from the name, with no `?updated=1` (the Leptos
-/// create action redirected silently), mirroring `create_artist`.
+/// slug the server derived from the name, with no `?updated=1`, mirroring
+/// `create_artist`.
 async fn create_release(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
@@ -604,7 +599,7 @@ async fn update_release(
     .await
     {
         // `Release::update` re-slugifies from the name; redirect to the
-        // editor's *current* slug, like the Leptos action's redirect did.
+        // editor's *current* slug.
         Ok(result) => Redirect::to(&format!(
             "/admin/artist/{}/release/{}?updated=1",
             addressed_artist, result.release.slug
@@ -835,7 +830,7 @@ async fn restore_track(
 }
 
 /// Fields of the links form: the hidden artist slug plus one input per
-/// platform. Every platform always renders an input (Leptos parity), so
+/// platform. Every platform always renders an input, so
 /// an empty value means "clear this link"; absent fields default the same
 /// way. There are no repeated keys here, unlike the artist checkboxes.
 #[derive(Debug, Default, serde::Deserialize)]
@@ -981,7 +976,7 @@ pub fn page_code(error: &AppError) -> &'static str {
 
 /// The artist services require both `admin` and `label_owner`, so a
 /// `label_owner`-only session reaches the form and then gets this
-/// `forbidden` code on submit (parity with the Leptos editors).
+/// `forbidden` code on submit.
 pub fn artist_code(error: &AppError) -> &'static str {
     match error {
         AppError::Forbidden(_) => "forbidden",

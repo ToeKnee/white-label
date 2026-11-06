@@ -1,5 +1,4 @@
-//! The record-label editor (MIGRATION.md Phase 4 slice 4), ported from the
-//! Leptos `components::admin::edit_label` module.
+//! The record-label editor.
 //!
 //! Like the slice-3 auth pages, the form posts to a plain-HTML handler in
 //! `crate::server::forms` (`POST /admin/forms/label`), and the page reads
@@ -15,15 +14,14 @@
 //! redirect there). The plain form post stays underneath as the
 //! javascript-off path.
 //!
-//! Deviations from the Leptos editor:
+//! Design notes:
 //!
 //! - The markdown preview tracks what is typed (a reactive draft re-rendered
 //!   through `markdown_html`); before hydration, or with javascript off, it
 //!   shows the saved description as the SSR render left it.
 //! - On the javascript-off path the success alert's name comes from the
 //!   freshly loaded label (the redirect reload re-fetches it); the reactive
-//!   path renders the row its save answered, matching how the original
-//!   updated its store from the action result.
+//!   path renders the row its save answered.
 
 use dioxus::prelude::*;
 
@@ -70,8 +68,8 @@ fn EditLabelBody(
 ) -> Element {
     let session = use_user()?;
     let user = session().ok().flatten();
-    // The Leptos guard redirected non-owners to `/admin`; guests get the
-    // same steer (the handler enforces the real permission check).
+    // Non-owners (and guests) get the steer to the dashboard; the
+    // handler enforces the real permission check.
     if !permission_allows(user.as_ref(), "label_owner") {
         redirect(Route::Dashboard {});
         return rsx! { Loading {} };
@@ -160,9 +158,9 @@ fn EditLabelBody(
     }
 }
 
-/// The description textarea beside a markdown preview (the Leptos
-/// `DescriptionFields`). The preview tracks what is typed from a reactive
-/// draft; with javascript off it shows the saved description, as SSR left it.
+/// The description textarea beside a markdown preview. The preview tracks
+/// what is typed from a reactive draft; with javascript off it shows the
+/// saved description, as SSR left it.
 #[component]
 fn DescriptionFields(
     /// The saved description, as the textarea's value and the draft's start.
@@ -194,8 +192,7 @@ fn DescriptionFields(
     }
 }
 
-/// The ISRC explainer, collapsed by CSS only (the Leptos
-/// `ISRCDescription` text, kept verbatim).
+/// The ISRC explainer, collapsed by CSS only.
 #[component]
 fn IsrcDescription() -> Element {
     rsx! {

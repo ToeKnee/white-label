@@ -224,7 +224,7 @@ mod tests {
         let response = server.get("/").await;
 
         // An empty database leaves the home page with empty label fields
-        // (the fetches fail as they did for the Leptos store default), so
+        // (the fetches fail), so
         // this test pins the shell and head elements only; seeded content
         // and titles are asserted in `public_pages_render_seeded_content`.
         assert_shell(
@@ -575,7 +575,7 @@ mod tests {
         .await;
         assert_eq!(location(&empty_fields), "/login?bad=required");
 
-        // The page turns a code back into the Leptos alert text.
+        // The page turns a code back into the alert text.
         let page = server.get("/login?bad=password").await;
         assert_shell(
             &page,
@@ -606,7 +606,7 @@ mod tests {
         let after = post_form(&server, "/auth/logout", &[]).await;
         assert_eq!(location(&after), "/logout?done=1");
 
-        // The done state shows the Leptos page's "Logged out" line, and the
+        // The done state shows the "Logged out" line, and the
         // home page is back to the guest menu.
         let done_page = server.get("/logout?done=1").await;
         assert_shell(&done_page, &[CHROME[0], "Logged out"]);
@@ -916,7 +916,7 @@ mod tests {
         assert_eq!(location(&saved), "/profile?saved=1");
 
         // The reload re-fills the form with the stored values, and the
-        // `?saved` code raises the Leptos page's success alert.
+        // `?saved` code raises the success alert.
         let page = server.get("/profile").await.text();
         assert!(page.contains("Testy"), "reloaded profile:\n{page}");
         let alerted = server.get("/profile?saved=1").await.text();
@@ -1654,7 +1654,7 @@ mod tests {
         );
 
         // Create 303s into the editor under the slug derived from the name —
-        // the Leptos action's silent redirect (no `?updated=1`).
+        // silently, with no `?updated=1`.
         let created = post_form(
             &server,
             "/admin/forms/artist",
@@ -1710,8 +1710,8 @@ mod tests {
             ],
         );
 
-        // Delete swaps the row button to Restore (the JS-free reload that
-        // replaces the Leptos dialog flow). `get_artist` answers by slug
+        // Delete swaps the row button to Restore (the JS-free reload flow).
+        // `get_artist` answers by slug
         // without a visibility filter, so the soft-deleted row still loads.
         let deleted = post_form(
             &server,
@@ -1805,8 +1805,8 @@ mod tests {
             "/admin/artist/no-such-artist?bad=server"
         );
 
-        // The artist services require admin *and* label_owner (the Leptos
-        // services did too): an owner without admin gets the create page
+        // The artist services require admin *and* label_owner: an owner
+        // without admin gets the create page
         // served, then the service forbids the submit.
         login_as(&server, 2).await;
         let response = post_form(
@@ -1895,7 +1895,7 @@ mod tests {
         );
 
         // Create 303s silently to the editor under the slug the server
-        // derived from the name (parity with the Leptos create action).
+        // derived from the name.
         let created = post_form_pairs(
             &server,
             "/admin/forms/release",
@@ -2204,7 +2204,7 @@ mod tests {
         );
 
         // Create 303s silently to the new track's editor under the slug the
-        // server derived from the name (parity with the Leptos action).
+        // server derived from the name.
         let created = post_form_pairs(
             &server,
             "/admin/forms/track",
@@ -2541,7 +2541,7 @@ mod tests {
     }
 
     /// Slice 5d: the links editor page and its no-JS form handler. The GET
-    /// renders one input per platform (Leptos parity), the 303 handler
+    /// renders one input per platform, the 303 handler
     /// saves and steers back with `?updated=1`, and failures carry fixed
     /// codes.
     #[expect(
@@ -3151,8 +3151,8 @@ mod tests {
             ],
         );
 
-        // The exact `"x"`/`"x/"` route pairs the Leptos table needed are one
-        // variant here (MIGRATION.md risk 4); the trailing-slash profile URL
+        // One route variant parses both the exact and trailing-slash forms
+        // of a path (MIGRATION.md risk 4); the trailing-slash profile URL
         // now serves the real editor.
         let slashed = server.get("/admin/artist/test-artist-1/").await;
         assert_shell(
@@ -3171,8 +3171,8 @@ mod tests {
 
         let response = server.get("/totally/bogus/path").await;
 
-        // The catch-all still renders inside the shell, like the Leptos
-        // `Routes fallback` did; the 404 *page* is served with 200 there
+        // The catch-all still renders inside the shell; the 404 *page* is
+        // served with 200 there
         // too. Apostrophes in text are HTML-escaped by the renderer, hence
         // the apostrophe-free marker.
         assert_shell(&response, &[CHROME[0], "find what you were looking for!"]);

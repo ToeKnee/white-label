@@ -27,8 +27,9 @@ pub struct UploadedFile {
 /// Move the finished temp file into the config's directory, drop its
 /// progress entry and attach it to the artist/avatar/release row.
 ///
-/// This mirrors the Leptos `finalise_file_upload`, including its swallowing
-/// of database-attach errors.
+/// A database-attach error is deliberately swallowed here: the bytes are
+/// already stored, so a failed attach only leaves the row pointing at the
+/// old file.
 ///
 /// `upload_root` is the uploads root as a path string (`UploadRoot::root`),
 /// and `slug` is the item the upload names: an artist or release slug, or
@@ -61,8 +62,8 @@ pub async fn finalise_upload(
         uploader.username, file.original_file_name
     ));
 
-    // Database attachment never fails the upload today (the Leptos route
-    // ignores these errors) — kept as-is for parity between the stacks.
+    // A failed database attach does not fail the upload: the file itself
+    // is already stored.
     let file_name = file.file_name.as_str();
     let attach = match upload_config {
         UploadConfiguration::Artist => store_artist_primary_image(pool, file_name, slug).await,
@@ -101,10 +102,13 @@ async fn store_artist_primary_image(
 }
 
 /// Point the logged-in user's own avatar at the uploaded file. A slug
-/// that doesn't match the uploader's username is a silent no-op, as in the
-/// Leptos route. (It also refreshed Leptos' client-side user context —
-/// dioxus clients re-fetch, except the profile page, which hands the navbar a
-/// fresh `SessionHint::SignedIn` carrying the updated user instead.)
+/// that doesn't match the uploader's username is a silent no-op.
+/// Writes only the `avatar` column, for the same reason as
+/// [`store_artist_primary_image`]: the session's copy of the row predates any
+/// profile edits made since sign-in, and a whole-row update would roll them
+/// back. After an avatar change other pages pick the new file up on their
+/// next data fetch; the profile page additionally hands the navbar a
+/// fresh `SessionHint::SignedIn` carrying the updated user.
 async fn store_avatar(
     pool: &PgPool,
     file_name: &str,
@@ -114,11 +118,10 @@ async fn store_avatar(
     if slug != uploader.username {
         return Ok(());
     }
-    let mut user = User::get_by_username(pool, slug.to_string())
-        .await
-        .map_err(|error| error.to_string())?;
-    user.avatar = Some(file_name.to_string());
-    user.update(pool)
+    sqlx::query("UPDATE users SET avatar = $1, updated_at = NOW() WHERE id = $2")
+        .bind(file_name)
+        .bind(uploader.id)
+        .execute(pool)
         .await
         .map(|_| ())
         .map_err(|error| error.to_string())
@@ -142,4 +145,59 @@ async fn store_release_primary_image(
         .await
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::test_helpers::create_test_user;
+
+    // The contract behind the shared-user race that made the Playwright
+    // profile spec flaky: the upload flow must never carry session-time row
+    // values back into the database. (The race window itself is too narrow to
+    // hit deterministically; the client spec is its regression test.)
+    #[sqlx::test]
+    fn store_avatar_keeps_the_columns_a_profile_save_owns(pool: PgPool) {
+        let sql_user = create_test_user(&pool, 1)
+            .await
+            .expect("test user to exist");
+        let (mut session_copy, _passhash) = sql_user.into_user(None);
+        // Stale by design: a copy taken before the rename the DB already has.
+        session_copy.first_name = Some("Session-time copy".to_string());
+
+        // A profile save that landed after sign-in but before the upload.
+        sqlx::query("UPDATE users SET first_name = $1 WHERE id = $2")
+            .bind("Renamed")
+            .bind(session_copy.id)
+            .execute(&pool)
+            .await
+            .expect("the profile rename to land");
+
+        store_avatar(&pool, "avatar.png", "test-1", &session_copy)
+            .await
+            .expect("the avatar to attach");
+
+        let stored = User::get_by_username(&pool, "test-1".to_string())
+            .await
+            .expect("the stored user");
+        assert_eq!(stored.first_name.as_deref(), Some("Renamed"));
+        assert_eq!(stored.avatar.as_deref(), Some("avatar.png"));
+    }
+
+    #[sqlx::test]
+    fn store_avatar_is_a_no_op_for_a_foreign_slug(pool: PgPool) {
+        let sql_user = create_test_user(&pool, 2)
+            .await
+            .expect("test user to exist");
+        let (uploader, _passhash) = sql_user.into_user(None);
+
+        store_avatar(&pool, "avatar.png", "someone-else", &uploader)
+            .await
+            .expect("the slug check to pass quietly");
+
+        let stored = User::get_by_username(&pool, "test-2".to_string())
+            .await
+            .expect("the stored user");
+        assert_eq!(stored.avatar, None);
+    }
 }

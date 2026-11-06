@@ -61,6 +61,7 @@ pub struct LinksForm {
 
 impl LinksForm {
     /// Take a Platform and return the corresponding link from the form.
+    #[must_use]
     pub fn from_platform(self, platform: &Platform) -> String {
         match platform {
             Platform::AmazonMusic => self.amazon_music,
@@ -76,6 +77,7 @@ impl LinksForm {
     }
 
     /// Take a `SocialMedia` and return the corresponding link from the form.
+    #[must_use]
     pub fn from_social_media(self, social_media: &SocialMedia) -> String {
         match social_media {
             SocialMedia::BlueSky => self.blue_sky,

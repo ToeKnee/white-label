@@ -15,6 +15,7 @@ use crate::error::AppError;
 /// assert_eq!(image_mime_for_extension("JPG"), Some("image/jpeg"));
 /// assert_eq!(image_mime_for_extension("txt"), None);
 /// ```
+#[must_use]
 pub const fn image_mime_for_extension(extension: &str) -> Option<&'static str> {
     if extension.eq_ignore_ascii_case("png") {
         Some("image/png")
@@ -45,6 +46,7 @@ pub const fn image_mime_for_extension(extension: &str) -> Option<&'static str> {
 /// );
 /// assert_eq!(image_mime_in_bytes(b"just some text"), None);
 /// ```
+#[must_use]
 pub fn image_mime_in_bytes(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n']) {
         return Some("image/png");
@@ -167,6 +169,7 @@ pub fn first_bytes(path: &str, limit: usize) -> std::io::Result<Vec<u8>> {
 /// let extension = file_extension(file_name);
 /// assert_eq!(extension, Some("txt"));
 /// ```
+#[must_use]
 pub fn file_extension(file_name: &str) -> Option<&str> {
     if !file_name.contains('.') {
         return None;

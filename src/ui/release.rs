@@ -1,11 +1,10 @@
-//! The public release page (MIGRATION.md Phase 4 slice 2), ported from the
-//! Leptos `components::artist::release` module.
+//! The public release page.
 //!
 //! Album details plus the track list, each track showing its featured artists.
 //!
-//! Unlike the other public pages, a failed fetch here *redirects* (as the
-//! Leptos `redirect` calls did): an unknown artist falls back to the
-//! artists index, an unknown release to that artist's page. The
+//! Unlike the other public pages, a failed fetch here *redirects*: an
+//! unknown artist falls back to the artists index, an unknown release to
+//! that artist's page. The
 //! navigation is issued with `use_navigator().replace` while the body
 //! still renders `Loading`; the router re-renders the new route (SSR
 //! converges on it, verified by the tests in `crate::server`).
@@ -99,8 +98,7 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
     }
 }
 
-/// The tracks on a release, or nothing when there are none (the Leptos
-/// `TrackList` skipped the heading and list when the vec was empty).
+/// The tracks on a release, or nothing when there are none.
 #[component]
 fn TrackList(
     /// The tracks to display

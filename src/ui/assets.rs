@@ -25,6 +25,7 @@
 ///
 /// Native bundles keep their files under `assets/`; web and SSR serve them
 /// from the public dir root.
+#[must_use]
 pub fn bundled_asset(path: &str) -> String {
     bundled_path(cfg!(feature = "desktop"), path)
 }
@@ -33,6 +34,7 @@ pub fn bundled_asset(path: &str) -> String {
 ///
 /// Native builds prefix the API origin (the webview's own origin has no
 /// uploads); web and SSR keep the root-relative path.
+#[must_use]
 pub fn served_file_url(path: &str) -> String {
     absolute(api_origin(), path)
 }
@@ -42,6 +44,7 @@ pub fn served_file_url(path: &str) -> String {
 /// Those helpers yield either an `/uploads/…` path (a file the API server
 /// holds) or the `/Logo.svg` placeholder (a static that ships with the app),
 /// so the two buckets are sorted here rather than at every `<img>`.
+#[must_use]
 pub fn display_image_url(image_url: &str) -> String {
     if image_url.starts_with("/uploads/") {
         served_file_url(image_url)

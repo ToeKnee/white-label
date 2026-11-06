@@ -1,15 +1,13 @@
 //! The admin section: the `AdminRoot` layout (side menu + permission gate)
-//! and its pages (MIGRATION.md Phase 4 slice 4), ported from the Leptos
-//! `components::admin` group.
+//! and its pages.
 //!
-//! The layout mirrors the Leptos `root.rs`: a flex row with the menu on the
-//! left and the gated page body on the right. Differences from the original:
+//! The layout is a flex row with the menu on the left and the gated page
+//! body on the right. Behaviour notes:
 //!
-//! - The gate goes through `use_user` (the `GET /api/user` twin) instead of
-//!   the Leptos `UserContext`; the condition is the original's
-//!   `permissions.contains("admin")` — guests and non-admins get the login
-//!   page rendered inline (`ui::redirect` swaps the SSR content; dioxus has
-//!   no 303 from inside SSR components — same deviation as slice 3).
+//! - The gate goes through `use_user` (the `GET /api/user` server fn) and
+//!   checks `permissions.contains("admin")` — guests and non-admins get the
+//!   login page rendered inline (`ui::redirect` swaps the SSR content; dioxus
+//!   has no 303 from inside SSR components).
 //! - Menu links are typed `Link`s built from the menu data's slugs (the
 //!   route table's own paths), not the `url` strings the `admin_menu`
 //!   service builds: on a desktop window the document origin is `file://`,
@@ -17,13 +15,11 @@
 //!   it to the system browser, while a typed `Link` navigates inside it.
 //!   The `url` strings the `admin_menu` service builds now have no
 //!   consumers.
-//! - `Artists`/`Pages` summary links pointed at `/admin/artists` and
-//!   `/admin/pages`, which the dioxus route table does not (and the Leptos
-//!   one did not either, for `/admin/pages`) — they are plain text here.
-//!   Slice 5 may add real index routes.
+//! - `Artists`/`Pages` summary links are plain text, because the route
+//!   table has no `/admin/artists` or `/admin/pages` index routes to point
+//!   them at.
 //! - Menu load failures fall back to the static skeleton (Dashboard link,
-//!   empty submenus, create links), exactly where the Leptos component kept
-//!   its `AdminMenu::default()`.
+//!   empty submenus, create links), the shape `AdminMenu::default()` yields.
 
 pub mod artist;
 pub mod dashboard;
@@ -62,7 +58,7 @@ pub fn AdminRoot() -> Element {
     rsx! {
         div { class: "flex",
             // The menu has its own boundary so a slow (or failing) admin
-            // menu never blocks the page body, as the Leptos Transition did.
+            // menu never blocks the page body.
             SuspenseBoundary {
                 fallback: |_context: SuspenseContext| rsx! { Loading {} },
                 AdminMenuBody {}
@@ -132,7 +128,7 @@ fn AdminMenuBody() -> Element {
 }
 
 /// The artists submenu: one expandable row per artist plus the create
-/// link (the Leptos `ArtistsMenu`).
+/// link.
 #[component]
 fn ArtistsMenu(artists: Vec<MenuArtist>) -> Element {
     rsx! {
@@ -154,9 +150,8 @@ fn ArtistsMenu(artists: Vec<MenuArtist>) -> Element {
     }
 }
 
-/// One artist row with its releases nested underneath (the Leptos
-/// `ArtistMenuRow`; its "All Releases" and create links are built from the
-/// artist slug exactly as the original did).
+/// One artist row with its releases nested underneath. The "All Releases"
+/// and create links are built from the artist slug.
 #[component]
 fn ArtistMenuRow(menu_artist: MenuArtist) -> Element {
     let artist_slug = menu_artist.artist.slug.clone();
@@ -223,7 +218,7 @@ const fn artist_role(primary_artist_id: i64, artist_id: i64) -> (&'static str, &
 }
 
 /// One release row: a filled dot marks the artist as the release's primary
-/// artist, a hollow one means featured (the Leptos `ReleaseMenuRow`). The
+/// artist, a hollow one means featured. The
 /// artist slug comes from the row above: the route table nests a release
 /// under its artist, and the menu's `url` string is no longer what the
 /// link points at.
@@ -248,8 +243,7 @@ fn ReleaseMenuRow(menu_release: MenuRelease, artist_id: i64, artist_slug: String
     }
 }
 
-/// The pages submenu: one row per page plus the create link (the Leptos
-/// `PagesMenu`).
+/// The pages submenu: one row per page plus the create link.
 #[component]
 fn PagesMenu(pages: Vec<MenuPage>) -> Element {
     rsx! {
@@ -289,8 +283,7 @@ mod tests {
     }
 
     /// The menu's typed targets address the same pages the `admin_menu`
-    /// service names (which the Leptos admin menu still links by its `url`
-    /// strings).
+    /// service names with its `url` strings.
     ///
     /// Dioxus renders a canonical href for an optional-query route: a bare
     /// `?` when the query is empty, and a nest-base path keeps its trailing

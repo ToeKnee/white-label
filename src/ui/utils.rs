@@ -1,14 +1,13 @@
 //! Shared presentational components and auth guards.
 //!
-//! Ported from the Leptos `components::utils` group (MIGRATION.md Phase 4
-//! slice 1). The daisyUI markup is kept 1:1 with the originals for
-//! rendering similarity. Dioxus differences, per component group:
+//! The daisyUI markup follows the site's published design for rendering
+//! similarity. Notes, per component group:
 //!
 //! - `ServerErrors` takes the app's own
 //!   [`AppError`](crate::error::AppError), whose `Display` is already the
 //!   bare message.
-//! - The permission guards take the resolved session user and a [`Route`]
-//!   instead of a URL string, and call the shared
+//! - The permission guards take the resolved session user and a [`Route`],
+//!   and swap the page out through the shared
 //!   [`crate::ui::redirect`] helper.
 
 use chrono::{DateTime, Utc};
@@ -43,8 +42,7 @@ pub fn ErrorPage() -> Element {
     })
 }
 
-/// The 404 page for unmatched paths — the dioxus equivalent of the Leptos
-/// `Routes fallback=NotFound`, with the daisy hero kept intact.
+/// The 404 page for unmatched paths, rendered with the daisy hero.
 #[component]
 pub fn NotFound(segments: Vec<String>) -> Element {
     // The catch-all swallows every unmatched path; make it visible to ops.
@@ -95,7 +93,7 @@ pub fn InlineError(
 
 /// Show a failed server call's message as an inline error (nothing when the
 /// call succeeded). `AppError`'s `Display` is the bare user-facing message,
-/// so no variant-prefix trimming is needed like the Leptos wire format had.
+/// so nothing has to be unwrapped from a variant prefix.
 #[component]
 pub fn ServerErrors(
     /// The server error to display, if the call failed.
@@ -195,8 +193,8 @@ pub fn authenticated_or_redirect(user: Option<&User>, to: Route) {
 /// [`permission_or_redirect`], kept separate so page components can render
 /// their loading state while the guard redirects.
 ///
-/// The condition is kept intentionally identical to the Leptos original: an
-/// *active* user passes even without the permission token, so this is closer
+/// The condition deliberately passes an
+/// *active* user even without the permission token, so this is closer
 /// to "redirect guests" than a strict permission gate. Server-side handlers
 /// and services enforce the real permission checks.
 #[must_use]

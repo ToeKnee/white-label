@@ -32,9 +32,8 @@ pub struct UpdatePageForm {
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-/// The page create form's posted fields, exactly as the browser posts them.
-/// The name is flat (`page_form[…]` nesting was a Leptos server-fn
-/// convention this plain-form surface does not need).
+/// The page create form's posted fields, exactly as the browser posts them
+/// (flat names suit this plain-form surface).
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct PageCreateFields {

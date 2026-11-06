@@ -1,13 +1,12 @@
-//! Edit an artist's music-service and social links (MIGRATION.md Phase 4
-//! slice 5d), ported from the Leptos `components::admin::artist::links`.
+//! Edit an artist's music-service and social links.
 //!
 //! Like the other editors the page is gated on `label_owner`; the link
 //! service additionally requires `admin`. Every platform always renders an
-//! input (Leptos parity): a row for the artist shows its saved URL, an
+//! input: a row for the artist shows its saved URL, an
 //! unlinked platform an empty one. The service turns non-empty inputs into
 //! create/update and empty inputs on saved rows into deletes.
 //!
-//! From Phase 6 slice 6i the page's artist Delete/Restore buttons save
+//! The page's artist Delete/Restore buttons save
 //! **reactively** too: with a client build the sibling forms' `onsubmit`
 //! prevents the post and a `use_action` calls the artist twins in
 //! `super::artist` (`/api/delete_artist` / `.../restore`), which answer
@@ -15,21 +14,19 @@
 //! the save with no page load. The plain sibling forms stay underneath as the
 //! javascript-off path.
 //!
-//! Deviations from the Leptos original:
+//! Notes on the link-submit path itself:
 //!
-//! - The Leptos page updated reactively (its `ActionForm` never
-//!   redirected). The port keeps that flow — `onsubmit` intercepts and a
+//! - It saves **reactively**: `onsubmit` intercepts and a
 //!   `use_action` calls the JSON twin `POST /api/update_links` (see
 //!   [`crate::ui::data::update_links`]) — but keeps a plain
 //!   `<form action="/admin/forms/links">` underneath, so the button still
-//!   works before the wasm client lands (Phases 6-7): with no client the
+//!   works before the wasm client lands: with no client the
 //!   full POST 303s back with `?updated=1`/`?bad=` codes like the other
 //!   editors.
-//! - The success alert reads "… Links Updated!" (the Leptos copy said
-//!   only "… Updated!").
-//! - Leptos showed the raw server error text; the no-JS path shows fixed
-//!   alerts from `links_message` instead (the reactive path keeps the raw
-//!   message, matching the Leptos `ServerErrors` widget).
+//! - The success alert reads "… Links Updated!".
+//! - The no-JS path shows fixed alerts from `links_message` rather than raw
+//!   server error text (the reactive path keeps the raw message in the
+//!   `ServerErrors`-style widget).
 
 use convert_case::{Case, Casing};
 use dioxus::prelude::*;
@@ -51,7 +48,7 @@ use crate::ui::{Route, redirect};
 
 use super::artist::{DeleteForm, RestoreForm, artist_message, delete_artist, restore_artist};
 
-/// Edit an artist's external links (Leptos `artist/links.rs`).
+/// Edit an artist's external links.
 #[component]
 pub fn EditArtistLinks(
     /// The artist slug from the URL.
@@ -167,8 +164,7 @@ fn EditArtistLinksBody(
             InlineError { message: message.to_string() }
         }
         if let Some(Err(error)) = saved {
-            // Reactive-path failures (the Leptos ServerErrors widget showed
-            // the raw service message too).
+            // Reactive-path failures show the raw service message.
             InlineError { message: error.to_string() }
         }
         if let Some(message) = artist_row_message {
@@ -194,8 +190,8 @@ fn EditArtistLinksBody(
                 SocialMediaCards { social_media_services: links.social_media_services }
                 div { class: "flex flex-auto gap-6",
                     button { class: "flex-1 btn btn-primary", "Update" }
-                    // Leptos parity: the links page also carries the
-                    // artist delete/restore buttons.
+                    // The links page also carries the artist
+                    // delete/restore buttons.
                     if artist_deleted {
                         button {
                             class: "btn btn-secondary",
@@ -260,7 +256,7 @@ fn links_form_from_values(evt: &FormEvent) -> Option<LinksForm> {
     serde_json::from_value(serde_json::Value::Object(fields)).ok()
 }
 
-/// The music-service cards (Leptos `music_service.rs`): one card per
+/// The music-service cards: one card per
 /// platform, accent-styled with the saved URL when the artist has a row,
 /// secondary-styled and empty otherwise.
 #[component]
@@ -323,7 +319,7 @@ fn MusicServiceCards(
     }
 }
 
-/// The social-media cards (Leptos `social_media.rs`); same shape as
+/// The social-media cards; same shape as
 /// [`MusicServiceCards`] with the social platform set.
 #[component]
 fn SocialMediaCards(

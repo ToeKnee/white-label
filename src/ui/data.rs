@@ -305,8 +305,8 @@ pub async fn get_label_pages(
 }
 
 /// The next scheduled release (a future `release_date`), if any — the
-/// dashboard countdown's data. The Leptos caller always passed no artist
-/// filter, so this twin takes none either.
+/// dashboard countdown's data. It takes no artist filter, because the
+/// countdown never needs one.
 ///
 /// # Errors
 /// 500 with a retry message when the label or release cannot be loaded.

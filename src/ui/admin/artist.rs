@@ -1,6 +1,4 @@
-//! The artist profile editors (MIGRATION.md Phase 4 slice 5a), ported from
-//! the Leptos `components::admin::artist` create/edit pair plus its
-//! `DeleteArtist`/`RestoreArtist` dialogs.
+//! The artist profile editors.
 //!
 //! Both pages post to plain-HTML handlers in `crate::server::forms`:
 //! `POST /admin/forms/artist` creates, `POST /admin/forms/artist/update`
@@ -20,14 +18,15 @@
 //! desktop window (a 303 has nothing to redirect there). The plain form posts
 //! stay underneath as the javascript-off path.
 //!
-//! As in the Leptos editors the page gate is the `label_owner` permission,
+//! The page gate is the `label_owner` permission,
 //! while the services additionally require `admin`; a `label_owner`
 //! without `admin` sees the form and then gets the `forbidden` alert after
-//! submitting (same behaviour as the original).
+//! submitting.
 //!
-//! Deviations follow `super::pages` (see its module docs): flat field
-//! names, JS-free `DateField` semantics (submitted local time is UTC), and
-//! `form`-associated Delete/Restore sibling forms instead of `<dialog>`s.
+//! The field and delete conventions follow `super::pages` (see its module
+//! docs): flat field names, JS-free `DateField` semantics (submitted local
+//! time is UTC), and `form`-associated Delete/Restore sibling forms instead
+//! of `<dialog>`s.
 //!
 //! As in the release editors (`super::release`), a reactive rename leaves the
 //! *URL* on the old slug (the javascript-off path 303s to the new one). Saving
@@ -88,8 +87,7 @@ fn CreateArtistBody(
         return rsx! { Loading {} };
     }
 
-    // The artist is stamped with the label's id (the Leptos effect that
-    // seeded it into the form state).
+    // The artist is stamped with the label's id.
     let label_id = match use_label()?() {
         Ok(result) => result.record_label.id,
         Err(error) => {
@@ -285,8 +283,7 @@ fn EditArtistBody(artist_slug: String, updated: Option<String>, bad: Option<Stri
     }
 }
 
-/// The editor inputs inside the update form (the Leptos `Form` piece of
-/// `artist/edit.rs`).
+/// The editor inputs inside the update form.
 #[component]
 fn EditArtistFields(artist: Artist, slug: String) -> Element {
     rsx! {

@@ -1,14 +1,9 @@
-//! Artist pages (MIGRATION.md Phase 4 slice 2), ported from the Leptos
-//! `components::artist` group.
-//!
-//! Covers the artists index and the artist page, plus the artist card
-//! (`ArtistList`/`ArtistBox`) shared with the label home page — the Leptos
-//! modules each had their own copy.
+//! Artist pages: the artists index and the artist page, plus the artist
+//! card (`ArtistList`/`ArtistBox`) shared with the label home page.
 //!
 //! Data arrives through the dioxus resources in `super::data`; each page
 //! body runs inside a `SuspenseBoundary`, so SSR waits on the resources and
-//! inlines the content (the Leptos `Transition + Suspend` equivalent).
-//! Fetch failures keep the Leptos behaviour: log and render with the
+//! inlines the content. Fetch failures log and render with the
 //! model's default value rather than an error page.
 
 use dioxus::prelude::*;
@@ -29,7 +24,7 @@ use crate::ui::utils::{Loading, StatusBadge};
 use crate::utils::shorten_string::shorten_string;
 
 // ---------------------------------------------------------------------------
-// Artists index (Leptos `components::artist::list`)
+// Artists index
 // ---------------------------------------------------------------------------
 
 /// The label's artists, listed as cards.
@@ -125,7 +120,7 @@ fn ArtistBox(
 }
 
 // ---------------------------------------------------------------------------
-// Artist page (Leptos `components::artist::home`)
+// Artist page
 // ---------------------------------------------------------------------------
 
 /// One artist's public page: bio, links, and their releases.
@@ -328,7 +323,7 @@ fn ReleaseCard(
     /// The slug of the artist, used to build the public release URL.
     artist_slug: String,
 ) -> Element {
-    // The Leptos original printed "Unreleased" when there is no date.
+    // No date prints as "Unreleased".
     let release_date = release.release_date.map_or_else(
         || "Unreleased".to_string(),
         |date| date.format("%e %B %Y").to_string(),

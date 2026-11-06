@@ -1,8 +1,7 @@
-//! Marketing/legal page details (MIGRATION.md Phase 4 slice 2), ported
-//! from the Leptos `components::page` module.
+//! Marketing/legal page details.
 //!
-//! `label_owner` sessions can also see unpublished pages (service-side
-//! visibility rule, same as the Leptos `get_page` route).
+//! `label_owner` sessions can also see unpublished pages (a service-side
+//! visibility rule).
 
 use dioxus::prelude::*;
 
@@ -32,7 +31,7 @@ pub fn PageDetails(
 fn PageBody(slug: String) -> Element {
     let page = use_page(move || page_data(get_page(slug.clone())))?;
 
-    // Failed loads render the empty default, as the Leptos component did
+    // Failed loads render the empty default
     // (the route underneath answers 404, so this page is still served).
     let page = match page() {
         Ok(result) => result.page,

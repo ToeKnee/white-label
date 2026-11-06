@@ -27,7 +27,7 @@ use dioxus::prelude::*;
 
 use crate::ui::Route;
 
-/// Artist editor tabs layout (Leptos: `components::admin::artist::root`).
+/// Artist editor tabs layout.
 ///
 /// `artist_slug` is injected by the router from the variant's field, which
 /// is why the layout starts at the slug routes rather than at the nest base

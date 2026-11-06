@@ -46,6 +46,7 @@ impl FromStr for UploadConfiguration {
 
 impl UploadConfiguration {
     /// Returns the upload details for the given configuration.
+    #[must_use]
     pub fn get_details(&self) -> UploadDetails {
         match self {
             Self::Artist => UploadDetails {

@@ -43,7 +43,7 @@ pub mod release;
 pub mod routes;
 /// The app root: reactive contexts, document head, and the page shell.
 pub mod shell;
-/// Uploads with progress: the dioxus port of the Leptos widget.
+/// Uploads with progress: the picker widget and its upload endpoints.
 pub mod upload;
 /// Shared presentational pieces (alerts, badges, spinner, error/404 heroes)
 /// and the auth redirect guards — Phase 4 slice 1 of the component port.
@@ -167,8 +167,8 @@ pub fn use_label() -> core::result::Result<PageValue<LabelResult>, RenderError> 
     use_page(move || page_data(crate::ui::data::get_record_label()))
 }
 
-/// Render markdown as HTML with GFM options, the same call the Leptos
-/// components made. Broken markdown logs and yields empty HTML rather
+/// Render markdown as HTML with GFM options. Broken markdown logs and
+/// yields empty HTML rather
 /// than falling back silently.
 #[must_use]
 pub fn markdown_html(source: &str) -> String {

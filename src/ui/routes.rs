@@ -262,7 +262,7 @@ pub enum Route {
         bad: Option<String>,
     },
     #[end_layout]
-    /// Catch-all 404 page (the Leptos `Routes fallback`).
+    /// Catch-all 404 page.
     #[route("/:..segments")]
     NotFound {
         /// The unmatched path, split into segments.
@@ -270,8 +270,7 @@ pub enum Route {
     },
 }
 
-/// Navigates to `to` without a full page load, replacing the current entry
-/// (the Leptos `redirect` helper's equivalent).
+/// Navigates to `to` without a full page load, replacing the current entry.
 ///
 /// Call it from component code — it looks the navigator up in the current
 /// scope:
@@ -659,8 +658,8 @@ mod tests {
         );
     }
 
-    /// The Leptos table needed exact `""`/`"/"` route pairs; dioxus matches
-    /// both spellings against one variant (MIGRATION.md risk 4).
+    /// One variant matches both the bare and trailing-slash spellings of a
+    /// path (MIGRATION.md risk 4).
     #[test]
     fn trailing_slashes_are_tolerated() {
         assert_eq!(parse("/admin/"), Route::Dashboard {});
@@ -691,7 +690,7 @@ mod tests {
     #[test]
     fn unmatched_paths_fall_back_to_not_found() {
         // Static artist sub-paths are exact-match; an unknown word after a
-        // slug is the same ambiguity the Leptos table had.
+        // slug falls through to NotFound.
         assert!(matches!(parse("/nope"), Route::NotFound { .. }));
         assert!(matches!(
             parse("/this/does/not/exist"),

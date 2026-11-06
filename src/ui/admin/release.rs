@@ -1,6 +1,4 @@
-//! The releases list and editors (MIGRATION.md Phase 4 slice 5b), ported
-//! from the Leptos `components::admin::artist::release` group plus the
-//! shared `artist_select` component.
+//! The releases list and editors.
 //!
 //! Like the artist editors (`super::artist`) these pages post to plain-HTML
 //! handlers in `crate::server::forms`: `POST /admin/forms/release` creates,
@@ -9,40 +7,36 @@
 //! (`?bad=<code>` on failure, `?updated=1` on success); `release_message`
 //! maps the codes to text mirroring the service's messages.
 //!
-//! From Phase 6 slice 6i the editors also save **reactively**: with a client
-//! build `onsubmit` prevents the post and one `use_action` calls the JSON
-//! twins at the bottom of this module (`/api/*_release`), which answer
-//! the page's own `ReleaseResult` (or the same fixed codes as data). The row on
-//! screen then follows the save — a rename carries the new slug into the next
-//! save and the uploader, and a soft-delete swaps Delete for Restore — with no
-//! page load, which is what makes these editors usable in a desktop window (a
-//! 303 has nothing to redirect there). The plain form posts stay underneath as
-//! the javascript-off path.
+//! The editors also save **reactively**: with a client build `onsubmit`
+//! prevents the post and one `use_action` calls the JSON twins at the bottom
+//! of this module (`/api/*_release`), which answer the page's own
+//! `ReleaseResult` (or the same fixed codes as data). The row on screen then
+//! follows the save — a rename carries the new slug into the next save and
+//! the uploader, and a soft-delete swaps Delete for Restore — with no page
+//! load, which is what makes these editors usable in a desktop window (a
+//! 303 has nothing to redirect there). The plain form posts stay underneath
+//! as the javascript-off path.
 //!
-//! Deviations from the Leptos originals:
+//! Design notes:
 //!
 //! - `ArtistSelect` is JS-free: the per-artist checkboxes *are* the form
-//!   fields (repeated `artist_ids` entries), replacing the original's
-//!   hidden comma-joined input that click handlers updated. The primary
-//!   artist stays a `<select>`.
-//! - The editor's image uploader (`FileUploadWithProgress`, wired up in
-//!   Phase 5 slice 5g) sits *after* the field form instead of between
-//!   "Release Date" and "Private" as Leptos had it: the uploader brings its
-//!   own `<form>`, and a form may not nest — the Leptos page relied on the
-//!   browser dropping the inner `<form>` tag, which also closed the outer one
-//!   early. The `<img>` follows a finished upload at once (Leptos kept showing
-//!   the old file until a reload).
+//!   fields (repeated `artist_ids` entries). The primary artist stays a
+//!   `<select>`.
+//! - The editor's image uploader (`FileUploadWithProgress`) sits *after*
+//!   the field form, not inside it: the uploader brings its own `<form>`,
+//!   and a form may not nest — a nested inner form gets its tag dropped and
+//!   closes the outer form early. The `<img>` follows a finished upload at
+//!   once.
 //! - A reactive rename leaves the *URL* on the old slug (the javascript-off
-//!   path 303s to the new one). Saving again, deleting and restoring all follow
-//!   the new slug, but reloading the old URL gets the not-found page.
-//! - The list's "Tracks" column keeps the original's static `0` (the list
-//!   service carries no track counts), and the editor's sidebar renders the
-//!   real track list from the same `get_release` fetch instead of Leptos'
-//!   second `get_tracks` request.
+//!   path 303s to the new one). Saving again, deleting and restoring all
+//!   follow the new slug, but reloading the old URL gets the not-found page.
+//! - The list's "Tracks" column is a static `0` (the list service carries no
+//!   track counts), and the editor's sidebar renders the real track list
+//!   from the same `get_release` fetch.
 //!
 //! The page gate is the `label_owner` permission; the release services also
 //! require `admin` (a `label_owner` without it gets the `forbidden` alert
-//! on submit — same behaviour as the original).
+//! on submit).
 
 use dioxus::prelude::*;
 use dioxus::router::RouterContext;
@@ -77,7 +71,7 @@ use crate::services;
 use super::pages::{DateField, MarkdownField};
 use super::track::TrackList;
 
-/// The list of an artist's releases (Leptos `release/list.rs`).
+/// The list of an artist's releases.
 #[component]
 pub fn Releases(
     /// The artist slug from the URL.
@@ -183,8 +177,8 @@ fn ReleasesBody(artist_slug: String) -> Element {
     }
 }
 
-/// One table row (the Leptos `ReleaseRow`). The "Tracks" count stays the
-/// original's static `0` until the track editors land (slice 5c).
+/// One table row. The "Tracks" count is a static `0` because the list
+/// service carries no counts.
 #[component]
 fn ReleaseRow(release: Release, artist_slug: String) -> Element {
     let release_date = release.release_date.map_or_else(
@@ -268,7 +262,7 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
     }
 
     // The page URL addresses the artist, so the form starts with it as the
-    // primary/selected artist (the Leptos effect that seeded `artist_ids`).
+    // primary/selected artist.
     let artist_name_slug = artist_slug.clone();
     let artist_resource = use_page(move || page_data(get_artist(artist_name_slug.clone())))?;
     let artist = match artist_resource() {
@@ -284,8 +278,7 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
         }
     };
 
-    // The release is stamped with the label's id, like the Leptos hidden
-    // `label_id` field.
+    // The release is stamped with the label's id.
     let label_id = match use_label()?() {
         Ok(result) => result.record_label.id,
         Err(error) => {
@@ -441,8 +434,7 @@ fn EditReleaseBody(
         return rsx! { Loading {} };
     }
 
-    // The artist carries the header name and the hidden `label_id` (the
-    // Leptos form read both from the store).
+    // The artist carries the header name and the hidden `label_id`.
     let artist_name_slug = artist_slug.clone();
     let artist_resource = use_page(move || page_data(get_artist(artist_name_slug.clone())))?;
     let artist = match artist_resource() {
@@ -503,8 +495,7 @@ fn EditReleaseBody(
     // field by field (the uploader's `<img>` needs both).
     let current_image_url = display_image_url(&release.primary_image_url());
     let image_alt = release.name.clone();
-    // The sidebar track list shares this fetch (Leptos made a second
-    // `get_tracks` request for it).
+    // The sidebar track list shares this fetch.
     let sidebar_tracks = result
         .tracks
         .iter()
@@ -606,9 +597,8 @@ fn EditReleaseBody(
                 }
             }
         }
-        // (slice 5g) The image uploader. Leptos put it between "Release
-        // Date" and "Private", but it brings its own `<form>` and forms may
-        // not nest, so it lives after the field form here (module docs).
+        // The image uploader lives after the field form: it brings its own
+        // `<form>` and forms may not nest (module docs).
         div { class: "divider", "Images" }
         FileUploadWithProgress {
             config: UploadConfiguration::Release,
@@ -701,8 +691,8 @@ fn RestoreForm(
     }
 }
 
-/// The artist pickers (Leptos `admin::shared::artist_select`). Without JS
-/// the checkboxes themselves carry the selection: every checked one posts an
+/// The artist pickers. Without JS the checkboxes themselves carry the
+/// selection: every checked one posts an
 /// `artist_ids` entry, and `crate::server::forms` joins them into the
 /// service's comma-separated string.
 #[component]
@@ -773,8 +763,7 @@ fn ArtistSelectBody(primary_artist_id: i64, selected_ids: Vec<i64>) -> Element {
     }
 }
 
-/// One artist's checkbox row (the Leptos `ArtistCheckbox`; its click
-/// handler is unnecessary now — the checkbox *is* the form field).
+/// One artist's checkbox row — the checkbox *is* the form field.
 #[component]
 fn ArtistCheckbox(artist: Artist, selected: bool) -> Element {
     rsx! {

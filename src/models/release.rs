@@ -129,6 +129,7 @@ impl Validate for Release {
 impl Release {
     /// Get the primary image URL
     /// If the primary image is None, return the default image
+    #[must_use]
     pub fn primary_image_url(&self) -> String {
         self.primary_image.clone().map_or_else(
             || "/Logo.svg".to_string(),

@@ -127,7 +127,7 @@ mod tests {
         assert_eq!(updated.name, "Renamed Label");
         assert_eq!(updated.description, "new story");
         assert_eq!(updated.isrc_base, "US ABC 1");
-        // `update` re-slugifies from the name, as the Leptos route did.
+        // `update` re-slugifies from the name.
         assert_eq!(updated.slug, "renamed-label");
     }
 

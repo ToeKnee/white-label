@@ -9,10 +9,6 @@
 #![warn(clippy::nursery)]
 #![warn(clippy::perf)]
 #![warn(clippy::style)]
-// This pattern works well for components/routes etc.
-#![allow(clippy::module_name_repetitions)]
-// False positive on `must_use` for components
-#![allow(clippy::must_use_candidate)]
 
 /// Wire response types shared by the services and the API (framework-free, so
 /// the Dioxus client builds can use them).

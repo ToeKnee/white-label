@@ -1,6 +1,4 @@
-//! The marketing-page editors (MIGRATION.md Phase 4 slice 4), ported from
-//! the Leptos `components::admin::page` group plus the `admin::shared`
-//! field components they use.
+//! The marketing-page editors.
 //!
 //! Both pages post to plain-HTML handlers in `crate::server::forms`:
 //! `POST /admin/forms/page` creates, `POST /admin/forms/page/update`
@@ -19,12 +17,11 @@
 //! window (a 303 has nothing to redirect there). The plain form posts stay
 //! underneath as the javascript-off path.
 //!
-//! Deviations from the Leptos editors:
+//! Design notes:
 //!
-//! - Field names are flat (`name`, `body`, `slug`, `published_at`) instead
-//!   of the Leptos `page_form[...]` struct-prefix encoding.
-//! - `DateField` has no JS to keep the hidden full-date field in sync (no
-//!   client build yet): the hidden field carries the saved value, the
+//! - Field names are flat (`name`, `body`, `slug`, `published_at`).
+//! - `DateField` has no JS to keep the hidden full-date field in sync: the
+//!   hidden field carries the saved value, the
 //!   visible `datetime-local` is preferred by the handler when present,
 //!   and a submitted local time is interpreted as UTC (the browser's own
 //!   zone is not applied). The timezone hint shows the stored offset.
@@ -90,8 +87,7 @@ fn CreatePageBody(
         return rsx! { Loading {} };
     }
 
-    // The page is stamped with the label's id (the Leptos effect that
-    // seeded it into the form state).
+    // The page is stamped with the label's id.
     let label_id = match use_label()?() {
         Ok(result) => result.record_label.id,
         Err(error) => {
@@ -206,10 +202,8 @@ fn EditPageBody(slug: String, updated: Option<String>, bad: Option<String>) -> E
         Ok(result) => result,
         Err(error) => {
             tracing::error!("Error while getting page for editor (slug {slug}): {error}");
-            // The Leptos editor redirected to `/admin/pages`, which it also
-            // had no route for — visitors landed on the 404 page. The
-            // dioxus table has no admin index yet (slice 5), so the same
-            // target is the app's NotFound page, rendered inline.
+            // No admin index route exists yet, so the same target is the
+            // app's NotFound page, rendered inline.
             redirect(Route::NotFound {
                 segments: vec!["admin".into(), "pages".into()],
             });
@@ -279,8 +273,7 @@ fn EditPageBody(slug: String, updated: Option<String>, bad: Option<String>) -> E
     }
 }
 
-/// The editor inputs inside the update form (the Leptos `Form` piece of
-/// `edit.rs`).
+/// The editor inputs inside the update form.
 #[component]
 fn EditPageFields(page: Page, slug: String) -> Element {
     rsx! {
@@ -365,8 +358,7 @@ fn RestoreForm(
     }
 }
 
-/// Date/time editor used by every admin form (the Leptos `admin::shared`
-/// `DateField`; slice 5 imports it for the artist/release/track editors).
+/// Date/time editor used by every admin form.
 ///
 /// The hidden full-date field carries the saved UTC value; the visible
 /// `datetime-local` (named `local_<field>`) is preferred by the handler
@@ -412,8 +404,7 @@ pub fn DateField(
     }
 }
 
-/// Markdown textarea beside a preview (the Leptos `admin::shared`
-/// `MarkdownField`; slice 5 imports it). The preview tracks what is typed:
+/// Markdown textarea beside a preview. The preview tracks what is typed:
 /// a reactive draft starts from the saved text and a `markdown_html` re-render
 /// follows every keystroke. With javascript off (or before hydration) the
 /// preview shows the saved text, as the SSR render left it.
