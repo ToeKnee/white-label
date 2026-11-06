@@ -7,6 +7,14 @@
 //! unlinked platform an empty one. The service turns non-empty inputs into
 //! create/update and empty inputs on saved rows into deletes.
 //!
+//! From Phase 6 slice 6i the page's artist Delete/Restore buttons save
+//! **reactively** too: with a client build the sibling forms' `onsubmit`
+//! prevents the post and a `use_action` calls the artist twins in
+//! `super::artist` (`/api/client/artist/delete` / `.../restore`), which answer
+//! the artist row itself, so the header name and the Delete/Restore swap follow
+//! the save with no page load. The plain sibling forms stay underneath as the
+//! javascript-off path.
+//!
 //! Deviations from the Leptos original:
 //!
 //! - The Leptos page updated reactively (its `ActionForm` never
@@ -26,18 +34,22 @@
 use convert_case::{Case, Casing};
 use dioxus::prelude::*;
 
+use crate::api_types::artist::ArtistResult;
+use crate::api_types::edit::EditOutcome;
+use crate::forms::SlugFields;
 use crate::forms::links::LinksForm;
 use crate::models::music_service::{MusicService, Platform};
 use crate::models::social_media::{SocialMedia, SocialMediaService};
 use crate::ui::assets::bundled_asset;
 use crate::ui::data::{get_artist, get_links, update_links};
 use crate::ui::page_data;
+use crate::ui::reactive::{posted_fields, refused_code, saved_row, transport_message};
 use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
 use crate::ui::{Route, redirect};
 
-use super::artist::{DeleteForm, RestoreForm};
+use super::artist::{DeleteForm, RestoreForm, artist_message, delete_artist, restore_artist};
 
 /// Edit an artist's external links (Leptos `artist/links.rs`).
 #[component]
@@ -80,8 +92,8 @@ fn EditArtistLinksBody(
     // the NotFound page, as in the other editors).
     let header_artist_slug = artist_slug.clone();
     let artist_resource = use_page(move || page_data(get_artist(header_artist_slug.clone())))?;
-    let artist = match artist_resource() {
-        Ok(result) => result.artist,
+    let fetched_artist = match artist_resource() {
+        Ok(result) => result,
         Err(error) => {
             tracing::error!(
                 "Error while getting artist for the links editor (slug {artist_slug}): {error}"
@@ -92,8 +104,26 @@ fn EditArtistLinksBody(
             return rsx! { Loading {} };
         }
     };
-    let artist_name = artist.name;
+
+    // Reactive artist delete/restore (slice 6i): the links form's row buttons
+    // point at the sibling forms below; with a client build their `onsubmit`
+    // calls the artist twins in `super::artist` instead of posting. The row
+    // they answer replaces the fetched one, so the header name, the
+    // Delete/Restore swap and the fixed-code alerts follow the save — the
+    // links themselves keep their own action (slice 5d) below.
+    let mut artist_row =
+        use_action(
+            move |request: ArtistRowEdit| async move { apply_artist_row_edit(request).await },
+        );
+    let artist = saved_row(artist_row.value())
+        .unwrap_or(fetched_artist)
+        .artist;
     let artist_deleted = artist.deleted_at.is_some();
+    let row_slug = artist.slug.clone();
+    let artist_name = artist.name;
+    let artist_row_message = refused_code(artist_row.value())
+        .and_then(|code| artist_message(Some(code.as_str())).map(str::to_string))
+        .or_else(|| transport_message(artist_row.value()));
 
     let links_artist_slug = artist_slug.clone();
     let fetched = use_page(move || page_data(get_links(links_artist_slug.clone())))?;
@@ -121,10 +151,10 @@ fn EditArtistLinksBody(
         _ => resource_links,
     };
 
-    // The form is a dynamic rsx node, so its attributes are evaluated
-    // after the sibling Delete/Restore forms below; give the hidden input
-    // its own copy to keep the borrow checker happy.
-    let form_artist_slug = artist_slug.clone();
+    // The links form addresses the slug from the URL: the reactive artist
+    // save (slice 6i) replaces the row on screen, not the page's address, and
+    // the sibling forms below post `row_slug` instead.
+    let form_artist_slug = artist_slug;
 
     rsx! {
         document::Title { "{artist_name} Links" }
@@ -140,6 +170,11 @@ fn EditArtistLinksBody(
             // Reactive-path failures (the Leptos ServerErrors widget showed
             // the raw service message too).
             InlineError { message: error.to_string() }
+        }
+        if let Some(message) = artist_row_message {
+            // The artist twins refuse with the very codes the
+            // `/admin/forms/artist/{delete,restore}` handlers put in `?bad=`.
+            InlineError { message }
         }
 
         form {
@@ -173,8 +208,40 @@ fn EditArtistLinksBody(
                 }
             }
         }
-        DeleteForm { slug: artist_slug.clone() }
-        RestoreForm { slug: artist_slug }
+        DeleteForm {
+            slug: row_slug.clone(),
+            onsubmit: move |evt: FormEvent| {
+                evt.prevent_default();
+                artist_row.call(ArtistRowEdit::Delete(posted_fields::<SlugFields>(&evt)));
+            },
+        }
+        RestoreForm {
+            slug: row_slug,
+            onsubmit: move |evt: FormEvent| {
+                evt.prevent_default();
+                artist_row.call(ArtistRowEdit::Restore(posted_fields::<SlugFields>(&evt)));
+            },
+        }
+    }
+}
+
+/// What the links page's artist row buttons ask the twins to do.
+///
+/// Delete and restore share one action so the page has a single answer to
+/// read; the links save keeps its own action (slice 5d).
+enum ArtistRowEdit {
+    Delete(SlugFields),
+    Restore(SlugFields),
+}
+
+/// Runs one links-page artist action through its twin. On a client build these
+/// calls reach the generated stubs, so this lives on both sides.
+async fn apply_artist_row_edit(
+    request: ArtistRowEdit,
+) -> core::result::Result<EditOutcome<ArtistResult>, HttpError> {
+    match request {
+        ArtistRowEdit::Delete(target) => delete_artist(target).await,
+        ArtistRowEdit::Restore(target) => restore_artist(target).await,
     }
 }
 

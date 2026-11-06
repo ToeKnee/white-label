@@ -1027,6 +1027,201 @@ mod tests {
         assert_eq!(location(&fresh), "/");
     }
 
+    // --- Reactive profile and change-password twins (Phase 6 slice 6i) ---
+    //
+    // A webview window cannot follow the `/profile?saved=1` and
+    // `?bad=<code>` redirects these handlers answer with, so the twins carry the
+    // same outcome as data: the account as the server now holds it (which the
+    // form re-fills and the navbar shows), or the handler's own code.
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn profile_twin_answers_the_stored_account(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+        server
+            .post("/api/client/login")
+            .json(&serde_json::json!({
+                "form": { "username": "test-5", "password": "password" }
+            }))
+            .await
+            .assert_status_ok();
+
+        // A rename answers the stored account, which is what re-fills the form's
+        // fields and reaches the navbar.
+        let answer = server
+            .post("/api/client/profile")
+            .json(&serde_json::json!({
+                "fields": {
+                    "original_username": "test-5",
+                    "username": "test-five",
+                    "email": "test-5@example.com",
+                    "first_name": "Testy",
+                    "last_name": "",
+                    "description": "",
+                }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let saved: serde_json::Value = answer.json();
+        assert_eq!(
+            saved["Saved"]["username"].as_str(),
+            Some("test-five"),
+            "the saved account comes back:\n{saved}"
+        );
+
+        // The store really holds the rename, and a blank input cleared a value
+        // rather than storing "" (the same mapping the javascript-off handler
+        // applies).
+        let session = server.get("/api/user").await;
+        let stored: serde_json::Value = session.json();
+        assert!(
+            stored.is_object(),
+            "the session read should answer the stored user:\n{stored}"
+        );
+        assert_eq!(
+            stored["username"].as_str(),
+            Some("test-five"),
+            "the rename should be stored:\n{stored}"
+        );
+        assert_eq!(
+            stored["first_name"].as_str(),
+            Some("Testy"),
+            "a filled input should be stored:\n{stored}"
+        );
+        // A blank input cleared the value rather than storing "" (the same
+        // mapping the javascript-off handler applies).
+        assert!(
+            stored["last_name"].is_null(),
+            "a blank last name should be no value:\n{stored}"
+        );
+        assert!(
+            stored["description"].is_null(),
+            "a blank description should be no value:\n{stored}"
+        );
+
+        // Editing someone else's account is refused with the handler's code.
+        let answer = server
+            .post("/api/client/profile")
+            .json(&serde_json::json!({
+                "fields": {
+                    "original_username": "someone-else",
+                    "username": "whoever",
+                    "email": "whoever@example.com",
+                }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let refused: serde_json::Value = answer.json();
+        assert_eq!(
+            refused["Failed"]["code"].as_str(),
+            Some("forbidden"),
+            "the forbidden code should come back:\n{refused}"
+        );
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn change_password_twin_answers_done_and_reuses_the_codes(pool: PgPool) {
+        create_test_user(&pool, 5).await.expect("user fixture");
+        let server = api_server(pool).await;
+        server
+            .post("/api/client/login")
+            .json(&serde_json::json!({
+                "form": { "username": "test-5", "password": "password" }
+            }))
+            .await
+            .assert_status_ok();
+
+        // The current password has to be right, and the refusal carries the
+        // `current` code the redirect would have carried.
+        let answer = server
+            .post("/api/client/change-password")
+            .json(&serde_json::json!({
+                "fields": {
+                    "password": "nope",
+                    "new_password": "fresh123",
+                    "new_password_confirmation": "fresh123",
+                }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let refused: serde_json::Value = answer.json();
+        assert_eq!(
+            refused["Failed"]["code"].as_str(),
+            Some("current"),
+            "the wrong current password should report `current`:\n{refused}"
+        );
+
+        // A confirmation mismatch reports `mismatch`.
+        let answer = server
+            .post("/api/client/change-password")
+            .json(&serde_json::json!({
+                "fields": {
+                    "password": "password",
+                    "new_password": "fresh123",
+                    "new_password_confirmation": "other",
+                }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let refused: serde_json::Value = answer.json();
+        assert_eq!(
+            refused["Failed"]["code"].as_str(),
+            Some("mismatch"),
+            "the mismatch code should come back:\n{refused}"
+        );
+
+        // A finished change answers `Done` — the page's success alert, with no
+        // row to hand back because nothing about the account changed.
+        let answer = server
+            .post("/api/client/change-password")
+            .json(&serde_json::json!({
+                "fields": {
+                    "password": "password",
+                    "new_password": "fresh123",
+                    "new_password_confirmation": "fresh123",
+                }
+            }))
+            .await;
+        answer.assert_status_ok();
+        assert_eq!(answer.text().trim(), "\"Done\"", "the change outcome");
+
+        // The new password is really the one on the account: the login twin
+        // refuses the old one and takes the new one.
+        let answer = server
+            .post("/api/client/login")
+            .json(&serde_json::json!({
+                "form": { "username": "test-5", "password": "password" }
+            }))
+            .await;
+        let refused: serde_json::Value = answer.json();
+        assert_eq!(
+            refused["Failed"]["code"].as_str(),
+            Some("password"),
+            "the old password should be dead:\n{refused}"
+        );
+
+        let answer = server
+            .post("/api/client/login")
+            .json(&serde_json::json!({
+                "form": { "username": "test-5", "password": "fresh123" }
+            }))
+            .await;
+        let signed_in: serde_json::Value = answer.json();
+        assert_eq!(
+            signed_in["LoggedIn"]["user"]["username"].as_str(),
+            Some("test-5"),
+            "the new password should log in:\n{signed_in}"
+        );
+    }
+
     // --- Admin pages and forms (MIGRATION.md Phase 4 slice 4) ----------
 
     /// Log `test-<n>` (password "password") into an `api_server` jar.
@@ -2567,6 +2762,184 @@ mod tests {
             }))
             .await;
         assert_eq!(forbidden.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    // --- Reactive editor twins (`/api/client/*`, Phase 6 slice 6i) -------
+    //
+    // A desktop window cannot follow the `?updated=1` / `?bad=<code>` redirects
+    // the admin handlers answer with, so these twins carry the same outcome as
+    // data: `Saved` with the page's own result type (which the editor then
+    // renders in place of a refetch), or `Failed` with the very same code.
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn release_twins_answer_the_saved_row_and_the_form_codes(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        let label_id = label.id;
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        let artist_id = artist.id;
+        create_test_release(&pool, 1, Some(artist))
+            .await
+            .expect("release fixture");
+
+        let server = api_server(pool.clone()).await;
+        login_as(&server, 1).await;
+
+        // The dioxus client sends the server-fn arguments by name, so the body
+        // key here is the twin's argument name (`fields` for the update form).
+        let answer = server
+            .post("/api/client/release/update")
+            .json(&serde_json::json!({
+                "fields": {
+                    "slug": "test-release-1",
+                    "artist_ids": artist_id.to_string(),
+                    "label_id": label_id.to_string(),
+                    "artist_slug": "test-artist-1",
+                    "name": "Renamed Album",
+                    "description": "Liner notes.",
+                    "catalogue_number": "TEST-1",
+                    "primary_artist_id": artist_id.to_string(),
+                }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let saved: serde_json::Value = answer.json();
+        // A rename re-sluggifies, and the answer carries the row as the server
+        // now holds it — the slug the editor's next save and uploader target.
+        assert_eq!(
+            saved["Saved"]["release"]["slug"].as_str(),
+            Some("renamed-album"),
+            "the saved row should carry the new slug:\n{saved}"
+        );
+        assert!(
+            saved["Saved"]["artists"].is_array(),
+            "the page's whole result comes back, artists included:\n{saved}"
+        );
+
+        // A refusal carries the code the 303 handler puts in `?bad=`, which the
+        // editor maps through the same alert table it uses for the query.
+        let answer = server
+            .post("/api/client/release/update")
+            .json(&serde_json::json!({
+                "fields": {
+                    "slug": "renamed-album",
+                    "artist_ids": artist_id.to_string(),
+                    "label_id": label_id.to_string(),
+                    "artist_slug": "test-artist-1",
+                    "name": "",
+                    "primary_artist_id": artist_id.to_string(),
+                }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let refused: serde_json::Value = answer.json();
+        assert_eq!(
+            refused["Failed"]["code"].as_str(),
+            Some("name_required"),
+            "the empty name should be refused with the form's code:\n{refused}"
+        );
+
+        // Delete and restore answer the same way: the row in the answer carries
+        // `deleted_at`, which is what swaps the editor's Delete button for
+        // Restore without a page load.
+        let answer = server
+            .post("/api/client/release/delete")
+            .json(&serde_json::json!({
+                "target": { "slug": "renamed-album", "artist_slug": "test-artist-1" }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let deleted: serde_json::Value = answer.json();
+        assert!(
+            deleted["Saved"]["release"]["deleted_at"].is_string(),
+            "the deleted row should carry deleted_at:\n{deleted}"
+        );
+
+        let answer = server
+            .post("/api/client/release/restore")
+            .json(&serde_json::json!({
+                "target": { "slug": "renamed-album", "artist_slug": "test-artist-1" }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let restored: serde_json::Value = answer.json();
+        assert_eq!(
+            restored["Saved"]["release"]["deleted_at"].as_str(),
+            None,
+            "the restored row should be live again:\n{restored}"
+        );
+
+        // A hand-crafted post with no session gets the steer the 303 handler
+        // would have given, as an answer a client can act on.
+        let guest_server = api_server(pool).await;
+        let unauthorized = guest_server
+            .post("/api/client/release/delete")
+            .json(&serde_json::json!({
+                "target": { "slug": "test-release-1", "artist_slug": "test-artist-1" }
+            }))
+            .await;
+        assert_eq!(unauthorized.status_code(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn label_twin_answers_the_saved_label_and_the_forbidden_code(pool: PgPool) {
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        // `admin` alone is not enough; the service checks `label_owner`.
+        create_test_user_with_permissions(&pool, 2, vec!["admin"])
+            .await
+            .expect("admin-only user");
+
+        let server = api_server(pool.clone()).await;
+        login_as(&server, 1).await;
+
+        let answer = server
+            .post("/api/client/label/update")
+            .json(&serde_json::json!({
+                "fields": {
+                    "id": label.id.to_string(),
+                    "name": "Renamed Label",
+                    "description": "new story",
+                    "isrc_base": "US ABC 1",
+                }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let saved: serde_json::Value = answer.json();
+        assert_eq!(
+            saved["Saved"]["record_label"]["name"].as_str(),
+            Some("Renamed Label"),
+            "the header follows the saved name:\n{saved}"
+        );
+
+        login_as(&server, 2).await;
+        let answer = server
+            .post("/api/client/label/update")
+            .json(&serde_json::json!({
+                "fields": { "id": label.id.to_string(), "name": "Hijacked Label" }
+            }))
+            .await;
+        answer.assert_status_ok();
+        let refused: serde_json::Value = answer.json();
+        assert_eq!(
+            refused["Failed"]["code"].as_str(),
+            Some("forbidden"),
+            "the service's refusal should come back as data:\n{refused}"
+        );
     }
 
     /// The artist Images tab (Phase 5 slice 5g): the SSR body carries the

@@ -4,22 +4,45 @@
 //! Like the slice-3 auth pages, the form posts to a plain-HTML handler in
 //! `crate::server::forms` (`POST /admin/forms/label`), and the page reads
 //! the handler's fixed query codes: `?updated=1` after a successful save,
-//! `?bad=<code>` after a failure. Deviations from the Leptos editor:
+//! `?bad=<code>` after a failure.
+//!
+//! From Phase 6 slice 6i the editor also saves **reactively**: with a client
+//! build `onsubmit` prevents the post and a `use_action` calls the JSON twin
+//! at the bottom of this module (`/api/client/label/update`), which answers
+//! the saved `LabelResult` (or the same fixed codes as data). The header and
+//! the alerts then follow the last save — a rename needs no page load, which
+//! is what makes the editor usable in a desktop window (a 303 has nothing to
+//! redirect there). The plain form post stays underneath as the
+//! javascript-off path.
+//!
+//! Deviations from the Leptos editor:
 //!
 //! - The markdown preview tracks what is typed (a reactive draft re-rendered
 //!   through `markdown_html`); before hydration, or with javascript off, it
 //!   shows the saved description as the SSR render left it.
-//! - The success alert's name comes from the freshly loaded label (the
-//!   redirect reload re-fetches it), where the original updated its store
-//!   from the action result.
+//! - On the javascript-off path the success alert's name comes from the
+//!   freshly loaded label (the redirect reload re-fetches it); the reactive
+//!   path renders the row its save answered, matching how the original
+//!   updated its store from the action result.
 
 use dioxus::prelude::*;
 
+use crate::api_types::edit::EditOutcome;
+use crate::api_types::record_label::LabelResult;
+use crate::forms::record_label::LabelFields;
 use crate::ui::markdown_html;
+use crate::ui::reactive::{posted_fields, refused_code, saved_row, transport_message};
 use crate::ui::use_label;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
 use crate::ui::{Route, redirect};
+
+// Server-only: the twin's body runs in the server half of the `#[post]` macro,
+// next to the same service the javascript-off handler calls.
+#[cfg(feature = "server")]
+use crate::server::forms::label_code;
+#[cfg(feature = "server")]
+use crate::services;
 
 /// The label editor, for `label_owner` sessions; `updated` and `bad` carry
 /// the form handler's fixed codes.
@@ -55,25 +78,48 @@ fn EditLabelBody(
     }
 
     let label_result = use_label()?;
-    let label = match label_result() {
-        Ok(result) => result.record_label,
+    let fetched = match label_result() {
+        Ok(result) => result,
         Err(error) => {
             tracing::error!("Error while getting label for editor: {error}");
-            crate::models::record_label::RecordLabel::default()
+            LabelResult::default()
         }
     };
+
+    // Reactive save (slice 6i): with a client build the `onsubmit` below
+    // prevents the post and calls the twin at the bottom of this module; the
+    // plain form post stays as the javascript-off path (and is the only path
+    // a browser without one has).
+    let mut edit = use_action(move |fields: LabelFields| async move { update_label(fields).await });
+    let saved = saved_row(edit.value());
+    let just_saved = saved.is_some();
+    // The header, the alerts and the form values follow the last save, so a
+    // rename shows its new name without a page load.
+    let result = saved.unwrap_or(fetched);
+    let reactive_message = refused_code(edit.value())
+        .and_then(|code| label_message(Some(code.as_str())).map(str::to_string))
+        .or_else(|| transport_message(edit.value()));
+    let label = result.record_label;
 
     rsx! {
         document::Title { "Edit {label.name}" }
         h1 { "Edit {label.name} Details" }
         form { method: "post", action: "/admin/forms/label",
+            onsubmit: move |evt| {
+                evt.prevent_default();
+                edit.call(posted_fields::<LabelFields>(&evt));
+            },
             div { class: "grid gap-6",
                 Success {
                     message: format!("{} Updated!", label.name),
-                    show: updated.is_some(),
+                    show: updated.is_some() || just_saved,
                 }
                 if let Some(message) = label_message(bad.as_deref()) {
                     InlineError { message: message.to_string() }
+                }
+                if let Some(message) = reactive_message {
+                    // Same fixed-code table the `?bad=` redirect path uses.
+                    InlineError { message }
                 }
 
                 input {
@@ -217,6 +263,68 @@ fn label_message(code: Option<&str>) -> Option<&'static str> {
         Some("forbidden") => Some("You do not have permission to update a label."),
         Some("server") => Some("Could not update label, try again later."),
         Some(_) | None => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Reactive twin of the `/admin/forms/label` handler (slice 6i)
+// ---------------------------------------------------------------------------
+//
+// Same service and same fixed codes as the javascript-off handler in
+// `crate::server::forms::update_label`; only the delivery differs. A client
+// build has no page load to carry `?updated=1` / `?bad=<code>`, and a webview
+// window cannot follow a 303 at all, so a refusal answers with the very same
+// code as data and a success answers the page's own `LabelResult`:
+//
+// ```text
+// POST /api/client/label/update  {"fields":{"id":"1","name":"B",…}}
+// 200 {"Saved":{"record_label":{"name":"B",…}}}
+//
+// POST /api/client/label/update  {"fields":{"id":"9999",…}}
+// 200 {"Failed":{"code":"server"}}
+// ```
+//
+// It lives on `/api/client/label/update` rather than on the handler path: axum
+// allows only one handler per method and path.
+
+/// Saves the record label.
+///
+/// The service takes the fields positionally (its own shape predates the
+/// posted-field structs), so the twin passes them through as the javascript-off
+/// handler does; the answer wraps the new row for the page to render.
+///
+/// # Errors
+/// 401 when the session is gone, 500 with a retry message when the save could
+/// not run at all. Refusals (permissions) answer `Failed`.
+#[post("/api/client/label/update",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn update_label(
+    fields: LabelFields,
+) -> core::result::Result<EditOutcome<LabelResult>, HttpError> {
+    let Some(session_user) = user.0.as_ref() else {
+        // The page gate redirects guests before they reach this form; a
+        // hand-crafted POST gets the steer the 303 handler would have given.
+        return HttpError::unauthorized("Please log in to save.");
+    };
+    match services::record_label::update_record_label(
+        &db.0,
+        Some(session_user),
+        fields.parsed_id(),
+        fields.name,
+        fields.description,
+        fields.isrc_base,
+    )
+    .await
+    {
+        Ok(record_label) => Ok(EditOutcome::Saved(LabelResult { record_label })),
+        Err(error) => {
+            tracing::warn!("label update twin rejected: {error}");
+            Ok(EditOutcome::Failed {
+                code: label_code(&error).to_string(),
+            })
+        }
     }
 }
 

@@ -36,16 +36,20 @@ use axum::Router;
 use axum::extract::Form;
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::post;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use tower_sessions::Session;
 
 use crate::error::AppError;
-use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
+use crate::forms::SlugFields;
+use crate::forms::artist::{ArtistCreateFields, ArtistUpdateFields};
+use crate::forms::auth::{
+    ClientLoginForm, ClientPasswordFields, ClientProfileFields, ClientRegisterForm,
+};
 use crate::forms::links::LinksForm;
-use crate::forms::page::{CreatePageForm, UpdatePageForm};
-use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
-use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
-use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
+use crate::forms::page::{PageCreateFields, PageUpdateFields};
+use crate::forms::record_label::LabelFields;
+use crate::forms::release::{ReleaseCreateFields, ReleaseSlugFields, ReleaseUpdateFields};
+use crate::forms::track::{TrackCreateFields, TrackSlugFields, TrackUpdateFields};
+use crate::forms::user::RegisterUserForm;
 use crate::server::current_user::{
     CurrentUser, Db, login as record_login, logout as record_logout, remember_session,
 };
@@ -96,67 +100,13 @@ pub fn form_routes() -> Router {
         )
 }
 
-/// Fields of the login form. Every field defaults so a missing one is a
-/// validation failure to report, not an axum 400 HTML page.
-#[derive(Debug, serde::Deserialize)]
-struct LoginForm {
-    #[serde(default)]
-    username: String,
-    #[serde(default)]
-    password: String,
-    /// Present (any value) when the "Remember me" checkbox is ticked.
-    #[serde(default)]
-    remember: Option<String>,
-}
-
-/// Fields of the register form (the `?bad=` codes match
-/// `crate::ui::auth::register_message`).
-#[derive(Debug, serde::Deserialize)]
-struct RegisterForm {
-    #[serde(default)]
-    username: String,
-    #[serde(default)]
-    email: String,
-    #[serde(default)]
-    password: String,
-    #[serde(default)]
-    password_confirmation: String,
-    #[serde(default)]
-    remember: Option<String>,
-}
-
-/// Fields of the profile form. The optional text inputs always arrive (as
-/// empty strings when blank), matching the Leptos form's behaviour.
-#[derive(Debug, serde::Deserialize)]
-struct ProfileForm {
-    #[serde(default)]
-    original_username: String,
-    #[serde(default)]
-    username: String,
-    #[serde(default)]
-    email: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    first_name: String,
-    #[serde(default)]
-    last_name: String,
-}
-
-/// Fields of the change-password form.
-#[derive(Debug, serde::Deserialize)]
-struct PasswordForm {
-    #[serde(default)]
-    password: String,
-    #[serde(default)]
-    new_password: String,
-    #[serde(default)]
-    new_password_confirmation: String,
-}
-
 /// Log in, then start the session — the web twin of the wire `POST
 /// /api/login` (both run `crate::services::user::login_user`).
-async fn login(Db(pool): Db, session: Session, Form(args): Form<LoginForm>) -> impl IntoResponse {
+async fn login(
+    Db(pool): Db,
+    session: Session,
+    Form(args): Form<ClientLoginForm>,
+) -> impl IntoResponse {
     let user = match login_user(&pool, args.username, args.password).await {
         Ok(user) => user,
         Err(error) => {
@@ -181,7 +131,7 @@ async fn login(Db(pool): Db, session: Session, Form(args): Form<LoginForm>) -> i
 async fn register(
     Db(pool): Db,
     session: Session,
-    Form(args): Form<RegisterForm>,
+    Form(args): Form<ClientRegisterForm>,
 ) -> impl IntoResponse {
     let form = RegisterUserForm {
         username: args.username,
@@ -222,21 +172,13 @@ async fn logout(session: Session) -> impl IntoResponse {
 async fn update_profile(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<ProfileForm>,
+    Form(args): Form<ClientProfileFields>,
 ) -> impl IntoResponse {
     let Some(user) = current_user.as_ref() else {
         return Redirect::to("/login");
     };
 
-    let form = UpdateUserForm {
-        original_username: args.original_username,
-        username: args.username,
-        email: args.email,
-        description: optional(args.description),
-        first_name: optional(args.first_name),
-        last_name: optional(args.last_name),
-    };
-    match update_user_service(&pool, Some(user), form).await {
+    match update_user_service(&pool, Some(user), args.into_service_form()).await {
         Ok(_) => Redirect::to("/profile?saved=1"),
         Err(error) => {
             tracing::warn!("profile form rejected: {error}");
@@ -249,18 +191,13 @@ async fn update_profile(
 async fn change_password(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<PasswordForm>,
+    Form(args): Form<ClientPasswordFields>,
 ) -> impl IntoResponse {
     let Some(user) = current_user.as_ref() else {
         return Redirect::to("/login");
     };
 
-    let form = ChangePasswordForm {
-        password: args.password,
-        new_password: args.new_password,
-        new_password_confirmation: args.new_password_confirmation,
-    };
-    match change_password_service(&pool, Some(user), form).await {
+    match change_password_service(&pool, Some(user), args.into_service_form()).await {
         Ok(_) => Redirect::to("/profile/change-password?updated=1"),
         Err(error) => {
             tracing::warn!("change-password form rejected: {error}");
@@ -270,12 +207,6 @@ async fn change_password(
             ))
         }
     }
-}
-
-/// Treat an empty text input as "no value", the way the services' form
-/// fields express optional text.
-fn optional(text: String) -> Option<String> {
-    (!text.is_empty()).then_some(text)
 }
 
 // The fixed codes `crate::ui::auth` maps onto alert text. Service messages
@@ -306,7 +237,9 @@ pub fn register_code(error: &AppError) -> &'static str {
     }
 }
 
-fn profile_code(error: &AppError) -> &'static str {
+/// The fixed code for a refused profile save. The reactive twin in
+/// `crate::ui::auth` answers the same code, so both paths fail identically.
+pub fn profile_code(error: &AppError) -> &'static str {
     match error {
         AppError::Forbidden(_) => "forbidden",
         // `User::update` surfaces validation failures as Internal errors
@@ -316,7 +249,9 @@ fn profile_code(error: &AppError) -> &'static str {
     }
 }
 
-fn change_password_code(error: &AppError) -> &'static str {
+/// The fixed code for a refused password change, answered by both the
+/// javascript-off handler and its reactive twin.
+pub fn change_password_code(error: &AppError) -> &'static str {
     match error {
         AppError::BadRequest(_) => "mismatch",
         AppError::Unauthorized(message) if message == "Password does not match." => "current",
@@ -331,66 +266,10 @@ fn change_password_code(error: &AppError) -> &'static str {
 // `page_message`). Like the auth handlers, guests get steered to the login
 // page and the services re-check the real permissions.
 
-/// Fields of the label editor form. The hidden `id` parses leniently: a
-/// tampered value becomes 0 and the service answers with its fixed retry
-/// message.
-#[derive(Debug, serde::Deserialize)]
-struct LabelForm {
-    #[serde(default)]
-    id: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    isrc_base: String,
-}
-
-/// Fields of the page create form. Names are flat (the Leptos
-/// `page_form[...]` prefix encoding is a server-fn struct convention this
-/// plain-form surface does not need).
-#[derive(Debug, serde::Deserialize)]
-struct PageCreateForm {
-    #[serde(default)]
-    label_id: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    body: String,
-    /// Hidden full-date field (the stored value).
-    #[serde(default)]
-    published_at: String,
-    /// Visible `datetime-local` value, preferred when present.
-    #[serde(default)]
-    local_published_at: String,
-}
-
-/// Fields of the page update form: the create fields plus the addressed
-/// slug.
-#[derive(Debug, serde::Deserialize)]
-struct PageUpdateForm {
-    #[serde(default)]
-    slug: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    body: String,
-    #[serde(default)]
-    published_at: String,
-    #[serde(default)]
-    local_published_at: String,
-}
-
-/// The hidden slug of the delete/restore forms (pages and artists).
-#[derive(Debug, serde::Deserialize)]
-struct SlugForm {
-    #[serde(default)]
-    slug: String,
-}
+// The admin editors' posted fields arrive as the shared structs in
+// `crate::forms` (each turns itself into the form its service takes, so the
+// reactive twins in `crate::ui` and these handlers send the services the same
+// thing).
 
 /// Save the record label's details (`label_owner` only; the service
 /// enforces it). Success reloads the editor with `?updated=1` so the page
@@ -398,17 +277,16 @@ struct SlugForm {
 async fn update_label(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<LabelForm>,
+    Form(args): Form<LabelFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
     }
 
-    let id = args.id.parse::<i64>().unwrap_or_default();
     match services::record_label::update_record_label(
         &pool,
         current_user.as_ref(),
-        id,
+        args.parsed_id(),
         args.name,
         args.description,
         args.isrc_base,
@@ -429,20 +307,19 @@ async fn update_label(
 async fn create_page(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<PageCreateForm>,
+    Form(args): Form<PageCreateFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
     }
 
-    let form = CreatePageForm {
-        name: args.name,
-        description: args.description,
-        body: args.body,
-        label_id: args.label_id.parse::<i64>().unwrap_or_default(),
-        published_at: parse_form_date(&args.local_published_at, &args.published_at),
-    };
-    match services::page::create_page_service(&pool, current_user.as_ref(), form).await {
+    match services::page::create_page_service(
+        &pool,
+        current_user.as_ref(),
+        args.into_service_form(),
+    )
+    .await
+    {
         Ok(result) => Redirect::to(&format!("/admin/page/{}", result.page.slug)),
         Err(error) => {
             tracing::warn!("page create form rejected: {error}");
@@ -455,7 +332,7 @@ async fn create_page(
 async fn update_page(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<PageUpdateForm>,
+    Form(args): Form<PageUpdateFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -464,14 +341,13 @@ async fn update_page(
     // Keep the requested slug for the failure redirect (the service takes
     // the form by value).
     let addressed_slug = args.slug.clone();
-    let form = UpdatePageForm {
-        slug: args.slug,
-        name: args.name,
-        description: args.description,
-        body: args.body,
-        published_at: parse_form_date(&args.local_published_at, &args.published_at),
-    };
-    match services::page::update_page_service(&pool, current_user.as_ref(), form).await {
+    match services::page::update_page_service(
+        &pool,
+        current_user.as_ref(),
+        args.into_service_form(),
+    )
+    .await
+    {
         // `update` can re-slugify; redirect to the editor's *current* slug
         // like the Leptos action's result did.
         Ok(result) => Redirect::to(&format!("/admin/page/{}?updated=1", result.page.slug)),
@@ -492,7 +368,7 @@ async fn update_page(
 async fn delete_page(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<SlugForm>,
+    Form(args): Form<SlugFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -512,7 +388,7 @@ async fn delete_page(
 async fn restore_page(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<SlugForm>,
+    Form(args): Form<SlugFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -528,43 +404,6 @@ async fn restore_page(
     }
 }
 
-/// Fields of the artist create form (flat names, like the page forms).
-#[derive(Debug, serde::Deserialize)]
-struct ArtistCreateForm {
-    #[serde(default)]
-    label_id: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    website: String,
-    /// Hidden full-date field (the stored value).
-    #[serde(default)]
-    published_at: String,
-    /// Visible `datetime-local` value, preferred when present.
-    #[serde(default)]
-    local_published_at: String,
-}
-
-/// Fields of the artist update form: the create fields plus the addressed
-/// slug.
-#[derive(Debug, serde::Deserialize)]
-struct ArtistUpdateForm {
-    #[serde(default)]
-    slug: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    website: String,
-    #[serde(default)]
-    published_at: String,
-    #[serde(default)]
-    local_published_at: String,
-}
-
 /// Create an artist. Success 303s to the new artist's profile editor under
 /// the slug the server derived from the name (never echoing the submitted
 /// name), with no `?updated=1`: the Leptos create action redirected
@@ -572,20 +411,19 @@ struct ArtistUpdateForm {
 async fn create_artist(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<ArtistCreateForm>,
+    Form(args): Form<ArtistCreateFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
     }
 
-    let form = CreateArtistForm {
-        name: args.name,
-        description: args.description,
-        website: args.website,
-        label_id: args.label_id.parse::<i64>().unwrap_or_default(),
-        published_at: parse_form_date(&args.local_published_at, &args.published_at),
-    };
-    match services::artist::create_artist_service(&pool, current_user.as_ref(), form).await {
+    match services::artist::create_artist_service(
+        &pool,
+        current_user.as_ref(),
+        args.into_service_form(),
+    )
+    .await
+    {
         Ok(result) => Redirect::to(&format!("/admin/artist/{}", result.artist.slug)),
         Err(error) => {
             tracing::warn!("artist create form rejected: {error}");
@@ -599,7 +437,7 @@ async fn create_artist(
 async fn update_artist(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<ArtistUpdateForm>,
+    Form(args): Form<ArtistUpdateFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -608,14 +446,13 @@ async fn update_artist(
     // Keep the requested slug for the failure redirect (the service takes
     // the form by value).
     let addressed_slug = args.slug.clone();
-    let form = UpdateArtistForm {
-        slug: args.slug,
-        name: args.name,
-        description: args.description,
-        website: args.website,
-        published_at: parse_form_date(&args.local_published_at, &args.published_at),
-    };
-    match services::artist::update_artist_service(&pool, current_user.as_ref(), form).await {
+    match services::artist::update_artist_service(
+        &pool,
+        current_user.as_ref(),
+        args.into_service_form(),
+    )
+    .await
+    {
         // `Artist::update` re-slugifies from the name; redirect to the
         // editor's *current* slug, like the Leptos action's redirect did.
         Ok(result) => Redirect::to(&format!("/admin/artist/{}?updated=1", result.artist.slug)),
@@ -635,7 +472,7 @@ async fn update_artist(
 async fn delete_artist(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<SlugForm>,
+    Form(args): Form<SlugFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -656,7 +493,7 @@ async fn delete_artist(
 async fn restore_artist(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<SlugForm>,
+    Form(args): Form<SlugFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -673,73 +510,6 @@ async fn restore_artist(
     }
 }
 
-/// Fields of the release create form (flat names, minus `artist_ids`;
-/// see `split_form_pairs` for why that key is handled separately).
-#[derive(Debug, Default, serde::Deserialize)]
-struct ReleaseCreateFields {
-    #[serde(default)]
-    label_id: String,
-    /// The artist the page URL addresses (redirect targets).
-    #[serde(default)]
-    artist_slug: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    catalogue_number: String,
-    #[serde(default)]
-    primary_artist_id: String,
-    /// Hidden full-date fields (the stored values).
-    #[serde(default)]
-    release_date: String,
-    #[serde(default)]
-    published_at: String,
-    /// Visible `datetime-local` values, preferred when present.
-    #[serde(default)]
-    local_release_date: String,
-    #[serde(default)]
-    local_published_at: String,
-}
-
-/// Fields of the release update form: the create fields plus the addressed
-/// slug.
-#[derive(Debug, Default, serde::Deserialize)]
-struct ReleaseUpdateFields {
-    #[serde(default)]
-    slug: String,
-    #[serde(default)]
-    label_id: String,
-    #[serde(default)]
-    artist_slug: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    catalogue_number: String,
-    #[serde(default)]
-    primary_artist_id: String,
-    #[serde(default)]
-    release_date: String,
-    #[serde(default)]
-    published_at: String,
-    #[serde(default)]
-    local_release_date: String,
-    #[serde(default)]
-    local_published_at: String,
-}
-
-/// Release delete/restore: the release slug plus the artist slug the
-/// redirect targets are built under.
-#[derive(Debug, serde::Deserialize)]
-struct ReleaseSlugForm {
-    #[serde(default)]
-    slug: String,
-    #[serde(default)]
-    artist_slug: String,
-}
-
 /// The raw form pairs, with every value of `key` split out and the rest
 /// rebuilt as a JSON object for a field-by-field `serde_json` pass.
 ///
@@ -747,7 +517,10 @@ struct ReleaseSlugForm {
 /// `artist_ids` once per checked artist — plain HTML, no JS. A derived
 /// `Form<T>` struct cannot express that: one occurrence deserializes as a
 /// bare string (wrong type for a `Vec` field) and repeated occurrences trip
-/// serde's duplicate-field check, so the pairs are taken raw instead.
+/// serde's duplicate-field check, so the pairs are taken raw instead. The
+/// shared posted-field structs keep `artist_ids` as the comma-joined string
+/// their `into_service_form` passes on, so this only has to join the values it
+/// split out.
 fn split_form_pairs(pairs: Vec<(String, String)>, key: &str) -> (Vec<String>, serde_json::Value) {
     let mut values = Vec::new();
     let mut rest = serde_json::Map::new();
@@ -777,27 +550,27 @@ async fn create_release(
     // the default (empty) fields routes it through the service's own
     // validation (the `name_required` alert) rather than inventing a target.
     let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
-    let args: ReleaseCreateFields = serde_json::from_value(rest).unwrap_or_default();
-    let form = CreateReleaseForm {
-        artist_ids: artist_ids.join(","),
-        name: args.name,
-        description: args.description,
-        primary_artist_id: args.primary_artist_id.parse::<i64>().unwrap_or_default(),
-        catalogue_number: args.catalogue_number,
-        release_date: parse_form_date(&args.local_release_date, &args.release_date),
-        label_id: args.label_id.parse::<i64>().unwrap_or_default(),
-        published_at: parse_form_date(&args.local_published_at, &args.published_at),
-    };
-    match services::release::create_release_service(&pool, current_user.as_ref(), form).await {
+    let mut args: ReleaseCreateFields = serde_json::from_value(rest).unwrap_or_default();
+    args.artist_ids = artist_ids.join(",");
+    // Keep the addressed artist for the redirect targets (`into_service_form`
+    // consumes the rest of the fields).
+    let addressed_artist = args.artist_slug.clone();
+    match services::release::create_release_service(
+        &pool,
+        current_user.as_ref(),
+        args.into_service_form(),
+    )
+    .await
+    {
         Ok(result) => Redirect::to(&format!(
             "/admin/artist/{}/release/{}",
-            args.artist_slug, result.release.slug
+            addressed_artist, result.release.slug
         )),
         Err(error) => {
             tracing::warn!("release create form rejected: {error}");
             Redirect::to(&format!(
                 "/admin/artist/{}/releases/new?bad={}",
-                args.artist_slug,
+                addressed_artist,
                 release_code(&error)
             ))
         }
@@ -816,23 +589,19 @@ async fn update_release(
     }
 
     let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
-    let args: ReleaseUpdateFields = serde_json::from_value(rest).unwrap_or_default();
+    let mut args: ReleaseUpdateFields = serde_json::from_value(rest).unwrap_or_default();
+    args.artist_ids = artist_ids.join(",");
     // Keep the addressed slugs for the failure redirect (the service takes
     // the form by value).
     let addressed_slug = args.slug.clone();
     let addressed_artist = args.artist_slug.clone();
-    let form = UpdateReleaseForm {
-        artist_ids: artist_ids.join(","),
-        slug: args.slug,
-        name: args.name,
-        description: args.description,
-        primary_artist_id: args.primary_artist_id.parse::<i64>().unwrap_or_default(),
-        catalogue_number: args.catalogue_number,
-        release_date: parse_form_date(&args.local_release_date, &args.release_date),
-        label_id: args.label_id.parse::<i64>().unwrap_or_default(),
-        published_at: parse_form_date(&args.local_published_at, &args.published_at),
-    };
-    match services::release::update_release_service(&pool, current_user.as_ref(), form).await {
+    match services::release::update_release_service(
+        &pool,
+        current_user.as_ref(),
+        args.into_service_form(),
+    )
+    .await
+    {
         // `Release::update` re-slugifies from the name; redirect to the
         // editor's *current* slug, like the Leptos action's redirect did.
         Ok(result) => Redirect::to(&format!(
@@ -856,7 +625,7 @@ async fn update_release(
 async fn delete_release(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<ReleaseSlugForm>,
+    Form(args): Form<ReleaseSlugFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -887,7 +656,7 @@ async fn delete_release(
 async fn restore_release(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<ReleaseSlugForm>,
+    Form(args): Form<ReleaseSlugFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -914,81 +683,6 @@ async fn restore_release(
     }
 }
 
-/// Fields of the track create form (flat names, minus `artist_ids`;
-/// `split_form_pairs` handles that checkbox group as for releases).
-#[derive(Debug, Default, serde::Deserialize)]
-struct TrackCreateFields {
-    /// The release the page URL addresses (hidden field + redirect target).
-    #[serde(default)]
-    release_id: String,
-    #[serde(default)]
-    artist_slug: String,
-    #[serde(default)]
-    release_slug: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    lyrics: String,
-    #[serde(default)]
-    primary_artist_id: String,
-    #[serde(default)]
-    isrc_code: String,
-    #[serde(default)]
-    bpm: String,
-    #[serde(default)]
-    track_number: String,
-    #[serde(default)]
-    published_at: String,
-    #[serde(default)]
-    local_published_at: String,
-}
-
-/// Fields of the track update form: the create fields plus the addressed
-/// slug.
-#[derive(Debug, Default, serde::Deserialize)]
-struct TrackUpdateFields {
-    #[serde(default)]
-    slug: String,
-    #[serde(default)]
-    release_id: String,
-    #[serde(default)]
-    artist_slug: String,
-    #[serde(default)]
-    release_slug: String,
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    lyrics: String,
-    #[serde(default)]
-    primary_artist_id: String,
-    #[serde(default)]
-    isrc_code: String,
-    #[serde(default)]
-    bpm: String,
-    #[serde(default)]
-    track_number: String,
-    #[serde(default)]
-    published_at: String,
-    #[serde(default)]
-    local_published_at: String,
-}
-
-/// Track delete/restore: the track slug plus the artist and release slugs
-/// the redirect targets are built under.
-#[derive(Debug, serde::Deserialize)]
-struct TrackSlugForm {
-    #[serde(default)]
-    slug: String,
-    #[serde(default)]
-    artist_slug: String,
-    #[serde(default)]
-    release_slug: String,
-}
-
 /// Create a track. Success 303s to the new track's editor under the slug
 /// the server derived from the name, silently (no `?updated=1`), like the
 /// release and artist create handlers.
@@ -1002,32 +696,29 @@ async fn create_track(
     }
 
     let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
-    let args: TrackCreateFields = serde_json::from_value(rest).unwrap_or_default();
-    let form = CreateTrackForm {
-        artist_ids: artist_ids.join(","),
-        name: args.name,
-        description: args.description,
-        lyrics: args.lyrics,
-        primary_artist_id: args.primary_artist_id.parse::<i64>().unwrap_or_default(),
-        release_id: args.release_id.parse::<i64>().unwrap_or_default(),
-        // Blank stays Some(""): `tracks.isrc_code` is NOT NULL, and the
-        // validate step (Leptos parity) rejects short codes before insert.
-        isrc_code: Some(args.isrc_code),
-        bpm: args.bpm.parse::<i32>().ok(),
-        track_number: args.track_number.parse::<i32>().unwrap_or_default(),
-        published_at: parse_form_date(&args.local_published_at, &args.published_at),
-    };
-    match services::track::create_track_service(&pool, current_user.as_ref(), form).await {
+    let mut args: TrackCreateFields = serde_json::from_value(rest).unwrap_or_default();
+    args.artist_ids = artist_ids.join(",");
+    // Keep the addressed slugs for the redirect targets (`into_service_form`
+    // consumes the rest of the fields).
+    let addressed_artist = args.artist_slug.clone();
+    let addressed_release = args.release_slug.clone();
+    match services::track::create_track_service(
+        &pool,
+        current_user.as_ref(),
+        args.into_service_form(),
+    )
+    .await
+    {
         Ok(result) => Redirect::to(&format!(
             "/admin/artist/{}/release/{}/track/{}",
-            args.artist_slug, args.release_slug, result.track.slug
+            addressed_artist, addressed_release, result.track.slug
         )),
         Err(error) => {
             tracing::warn!("track create form rejected: {error}");
             Redirect::to(&format!(
                 "/admin/artist/{}/release/{}/tracks/new?bad={}",
-                args.artist_slug,
-                args.release_slug,
+                addressed_artist,
+                addressed_release,
                 track_code(&error)
             ))
         }
@@ -1046,26 +737,20 @@ async fn update_track(
     }
 
     let (artist_ids, rest) = split_form_pairs(pairs, "artist_ids");
-    let args: TrackUpdateFields = serde_json::from_value(rest).unwrap_or_default();
+    let mut args: TrackUpdateFields = serde_json::from_value(rest).unwrap_or_default();
+    args.artist_ids = artist_ids.join(",");
     // Keep the addressed slugs for the failure redirect (the service takes
     // the form by value).
     let addressed_slug = args.slug.clone();
     let addressed_artist = args.artist_slug.clone();
     let addressed_release = args.release_slug.clone();
-    let form = UpdateTrackForm {
-        artist_ids: artist_ids.join(","),
-        slug: args.slug,
-        name: args.name,
-        description: args.description,
-        lyrics: args.lyrics,
-        primary_artist_id: args.primary_artist_id.parse::<i64>().unwrap_or_default(),
-        release_id: args.release_id.parse::<i64>().unwrap_or_default(),
-        isrc_code: Some(args.isrc_code),
-        bpm: args.bpm.parse::<i32>().ok(),
-        track_number: args.track_number.parse::<i32>().unwrap_or_default(),
-        published_at: parse_form_date(&args.local_published_at, &args.published_at),
-    };
-    match services::track::update_track_service(&pool, current_user.as_ref(), form).await {
+    match services::track::update_track_service(
+        &pool,
+        current_user.as_ref(),
+        args.into_service_form(),
+    )
+    .await
+    {
         // `Track::update` re-slugifies from the name; redirect to the
         // editor's *current* slug.
         Ok(result) => Redirect::to(&format!(
@@ -1090,7 +775,7 @@ async fn update_track(
 async fn delete_track(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<TrackSlugForm>,
+    Form(args): Form<TrackSlugFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -1121,7 +806,7 @@ async fn delete_track(
 async fn restore_track(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
-    Form(args): Form<TrackSlugForm>,
+    Form(args): Form<TrackSlugFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
         return Redirect::to("/login");
@@ -1264,40 +949,21 @@ const fn links_code(error: &AppError) -> &'static str {
     }
 }
 
-/// Resolve a `DateField` submission: a submitted `datetime-local` value
-/// wins (interpreted as UTC — the browser's zone is not applied; see
-/// `ui::admin::pages`), else the hidden full-date field, else no date.
-fn parse_form_date(local: &str, hidden: &str) -> Option<DateTime<Utc>> {
-    if !local.is_empty() {
-        // `datetime-local` sends minute precision; some browsers append
-        // seconds (or fractions).
-        for format in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"] {
-            if let Ok(naive) = NaiveDateTime::parse_from_str(local, format) {
-                return Some(naive.and_utc());
-            }
-        }
-    }
-    if !hidden.is_empty() {
-        // The hidden field carries `DateTime<Utc>`'s Display form.
-        if let Ok(when) = DateTime::parse_from_rfc3339(hidden) {
-            return Some(when.to_utc());
-        }
-    }
-    None
-}
-
 // The fixed codes `crate::ui::admin` maps onto alert text; service and
 // model-validation messages are fixed strings, so comparing them is
-// stable. Unrecognised failures get the generic `server` code.
+// stable. Unrecognised failures get the generic `server` code. The tables are
+// `pub(crate)` because the reactive twins in `crate::ui` answer refusals as
+// data (`crate::api_types::edit::EditOutcome`) instead of putting the code in a
+// 303's query string, and both paths must report the same code.
 
-const fn label_code(error: &AppError) -> &'static str {
+pub const fn label_code(error: &AppError) -> &'static str {
     match error {
         AppError::Forbidden(_) => "forbidden",
         _ => "server",
     }
 }
 
-fn page_code(error: &AppError) -> &'static str {
+pub fn page_code(error: &AppError) -> &'static str {
     match error {
         AppError::Forbidden(_) => "forbidden",
         // Model validation failures surface wrapped as `Internal` with
@@ -1315,7 +981,7 @@ fn page_code(error: &AppError) -> &'static str {
 /// The artist services require both `admin` and `label_owner`, so a
 /// `label_owner`-only session reaches the form and then gets this
 /// `forbidden` code on submit (parity with the Leptos editors).
-fn artist_code(error: &AppError) -> &'static str {
+pub fn artist_code(error: &AppError) -> &'static str {
     match error {
         AppError::Forbidden(_) => "forbidden",
         AppError::Internal(message) if message.contains("Name is required.") => "name_required",
@@ -1328,7 +994,7 @@ fn artist_code(error: &AppError) -> &'static str {
 
 /// The release services also require both `admin` and `label_owner`; the
 /// extra codes come from `Release::validate` (fixed model messages).
-fn release_code(error: &AppError) -> &'static str {
+pub fn release_code(error: &AppError) -> &'static str {
     match error {
         AppError::Forbidden(_) => "forbidden",
         AppError::Internal(message) if message.contains("Name is required.") => "name_required",
@@ -1350,7 +1016,7 @@ fn release_code(error: &AppError) -> &'static str {
 /// extra codes come from `Track::validate` (fixed model messages; the
 /// track-number collision message embeds ids, so it is matched on its
 /// stable middle).
-fn track_code(error: &AppError) -> &'static str {
+pub fn track_code(error: &AppError) -> &'static str {
     match error {
         AppError::Forbidden(_) => "forbidden",
         AppError::Internal(message) if message.contains("Name is required.") => "name_required",
@@ -1371,12 +1037,7 @@ fn track_code(error: &AppError) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
-
-    use super::{
-        label_code, links_code, page_code, parse_form_date, release_code, split_form_pairs,
-        track_code,
-    };
+    use super::{label_code, links_code, page_code, release_code, split_form_pairs, track_code};
     use crate::error::AppError;
 
     #[test]
@@ -1407,13 +1068,6 @@ mod tests {
         let (none, rest) = split_form_pairs(vec![("name".into(), "n".into())], "artist_ids");
         assert_eq!(none, Vec::<String>::new());
         assert_eq!(rest["name"], serde_json::Value::String("n".into()));
-    }
-
-    #[test]
-    fn form_date_prefers_the_local_input() {
-        let parsed =
-            parse_form_date("2026-03-01T09:30", "2020-01-01T00:00:00+00:00").expect("date");
-        assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 3, 1, 9, 30, 0).unwrap());
     }
 
     #[test]
@@ -1503,27 +1157,6 @@ mod tests {
         );
         // Unknown and not-found failures get the generic code.
         assert_eq!(release_code(&AppError::NotFound("gone".into())), "server");
-    }
-
-    #[test]
-    fn form_date_accepts_seconds_in_the_local_input() {
-        let parsed = parse_form_date("2026-03-01T09:30:15", "").expect("date");
-        assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 3, 1, 9, 30, 15).unwrap());
-    }
-
-    #[test]
-    fn form_date_falls_back_to_the_hidden_field() {
-        let parsed = parse_form_date("", "2026-02-15T12:00:00+00:00").expect("date");
-        assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 2, 15, 12, 0, 0).unwrap());
-        // An unparseable local value also falls through.
-        let parsed = parse_form_date("not-a-date", "2026-02-15T12:00:00+00:00").expect("date");
-        assert_eq!(parsed, Utc.with_ymd_and_hms(2026, 2, 15, 12, 0, 0).unwrap());
-    }
-
-    #[test]
-    fn form_date_empty_both_means_no_date() {
-        assert!(parse_form_date("", "").is_none());
-        assert!(parse_form_date("garbage", "garbage").is_none());
     }
 
     #[test]

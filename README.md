@@ -228,20 +228,25 @@ CORS or `SameSite` work.
 
 dioxus blocks in-app navigation after the first load, so the plain-HTML 303 form
 fallbacks the SSR pages use are inert in the window: every form a user needs to
-submit natively goes through the reactive `use_action` + JSON-twin path (the
-links editor already had it). `http(s)://` links, by contrast, correctly open in
-the system browser. Login, register and logout joined them in slice 6d: three
-server fns under `/api/client/*`, next to the `/auth/*` handlers rather than on
-the same paths (the Leptos site still owns `POST /api/login` until Phase 8, and
-axum refuses a path twice), answering an `AuthOutcome` — `LoggedIn { user }`,
-`Done`, or `Failed { code }` with the same fixed codes the `?bad=` query carries.
-The navbar learns what happened from the `ui::SessionHint` context: the chrome
-outlives the navigation and a page resource resolves once per component, so the
-menu renders the action's own answer instead of guessing (dioxus ignores `key:`
-on a single node, so re-keying the menu would not have rebuilt it).
-Still open in slice 6e: the upload widget's reactive path has never run in the
-window, and its javascript-off multipart post is precisely the navigation the
-webview blocks.
+submit natively goes through the reactive `use_action` + JSON-twin path. Login,
+register and logout joined them in slice 6d: three server fns under
+`/api/client/*`, next to the `/auth/*` handlers rather than on the same paths
+(the Leptos site still owns `POST /api/login` until Phase 8, and axum refuses a
+path twice), answering an `AuthOutcome` — `LoggedIn { user }`, `Done`, or
+`Failed { code }` with the same fixed codes the `?bad=` query carries.
+
+Slice 6i finished the job for the rest of the app: the record-label, page,
+artist, release, track and links editors plus the profile and change-password
+pages each have a matching `/api/client/*` twin. They answer `EditOutcome` —
+`Saved(row)`, which the page renders straight from (a rename, a soft delete, a
+restore or an avatar change needs no reload), or `Failed { code }` carrying the
+very code the 303 would have put in `?bad=`, so one alert table serves both
+paths. The plain `<form action="/admin/forms/…">` post stays underneath as the
+javascript-off path. The navbar learns what happened from the `ui::SessionHint`
+context: the chrome outlives the navigation and a page resource resolves once per
+component, so the menu renders the action's own answer instead of guessing
+(dioxus ignores `key:` on a single node, so re-keying the menu would not have
+rebuilt it).
 
 The `server`-gated modules (router assembly, sessions, current-user
 extractor, ported API endpoints) have their own tests, but plain `cargo test`
@@ -249,7 +254,7 @@ extractor, ported API endpoints) have their own tests, but plain `cargo test`
 explicitly:
 
 ```bash
-cargo test --features server   # 513 lib tests, includes src/server/ + src/ui/ tests
+cargo test --features server   # 539 lib tests, includes src/server/ + src/ui/ tests
 cargo test --features server -- server::api   # just the API wire tests
 cargo test --features server -- ui::          # just the route-table + UI component tests
 ```

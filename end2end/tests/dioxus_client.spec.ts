@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Dioxus wasm client checks (MIGRATION.md Phase 5 slice 5e). Run against a
- * second gate server (port 8131) whose public dir is the `dx build` output,
- * so the SSR pages boot the wasm bundle: the router must take over
- * navigation, and the links editor's reactive submit path (`use_action`
- * against the `POST /api/update_links` twin) must replace the no-JS 303
- * flow. `run-dioxus-gate.sh` passes `DIOXUS_URL` for this server. The
- * bundle is a debug build, so wasm boot gets generous timeouts.
+ * Dioxus wasm client checks (MIGRATION.md Phase 5 slice 5e, Phase 6 slice 6i).
+ * Run against a second gate server (port 8131) whose public dir is the
+ * `dx build` output, so the SSR pages boot the wasm bundle: the router must
+ * take over navigation, and the editors' reactive submit path (`use_action`
+ * against the JSON twins under `/api/client/*`) must replace the no-JS 303
+ * flow without a document load. `run-dioxus-gate.sh` passes `DIOXUS_URL` for
+ * this server. The bundle is a debug build, so wasm boot gets generous
+ * timeouts.
  */
 const base = process.env.DIOXUS_URL ?? "http://127.0.0.1:8131";
 
@@ -123,6 +124,124 @@ test("the links editor submits reactively (no 303 round trip)", async ({ page })
   await page.fill('input[name="spotify"]', "");
   await page.getByRole("button", { name: "Update" }).click();
   await expect(page.locator('input[name="spotify"]')).toHaveValue("");
+});
+
+test("the release editor creates, saves, deletes and restores reactively", async ({ page }) => {
+  // The slice 6i twins (`/api/client/release/*`). A desktop window has no page
+  // load to carry `?updated=1` or `?bad=<code>`, so the twins answer the saved
+  // row (or the same code) as data and the editor renders from that. The web
+  // client runs the very same path, so no document request may go out.
+  requireAdmin();
+
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await loginAs(page, "e2e-admin");
+
+  // A unique name and catalogue number keep the run self-contained (the
+  // catalogue number has to be unique within the label, and the gate prunes
+  // `e2e-reactive-%` rows before each run).
+  const stamp = Date.now();
+  const name = `E2E Reactive ${stamp}`;
+  const renamed = `E2E Reactive ${stamp} Renamed`;
+
+  await page.goto(`${base}/admin/artist/e2e-tabs/releases/new`);
+  await expect(h1(page)).toHaveText("New Release");
+  await clientIsLive(page);
+  const loadsBefore = documentLoads;
+
+  // The no-JS fallback is still wired, but with the client live the submit is
+  // intercepted, and the new row's editor is reached by SPA navigation (what
+  // the 303 handler does with its Location).
+  await expect(page.locator('form[action="/admin/forms/release"]')).toHaveCount(1);
+  await page.fill('input[name="name"]', name);
+  await page.fill('input[name="catalogue_number"]', `E2E-${stamp}`);
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(h1(page)).toHaveText(`${name} - E2E Tabs Artist`, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/release\/e2e-reactive-\d+/, {
+    timeout: 15000,
+  });
+
+  // A reactive save renders from the answer instead of a reload: the alert and
+  // the header follow the rename, no `?updated=1` appears, and the hidden slug
+  // the next save (and the uploader) targets moves with it.
+  await page.fill('input[name="name"]', renamed);
+  await page.getByRole("button", { name: "Update" }).click();
+  await expect(page.locator(".alert-success")).toContainText(`${renamed} Updated!`, {
+    timeout: 15000,
+  });
+  await expect(page.locator(".alert-error")).toHaveCount(0);
+  await expect(h1(page)).toHaveText(`${renamed} - E2E Tabs Artist`);
+  await expect(page).not.toHaveURL(/updated=1/);
+  // The field form's hidden slug (the page also carries the uploader's and the
+  // delete/restore siblings', which follow the same row).
+  const slug = await page
+    .locator('form[action="/admin/forms/release/update"] input[name="slug"]')
+    .getAttribute("value");
+  expect(slug, "the hidden slug follows the rename").toMatch(/-renamed$/);
+
+  // Soft delete swaps the editor's Delete button for Restore with no page load
+  // (the row in the answer carries `deleted_at`), and restore swaps it back.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible({ timeout: 15000 });
+
+  // Leave the fixture soft-deleted: the other specs never need it, and the
+  // gate's prune step removes these rows before the next run.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible({ timeout: 15000 });
+
+  expect(documentLoads, "create, save, delete and restore are all fetches").toBe(loadsBefore);
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
+test("the profile page saves reactively and keeps the session", async ({ page }) => {
+  // The auth side of slice 6i: a window has no page load to carry
+  // `/profile?saved=1`, so the twin answers with the stored account, which the
+  // form re-fills and the navbar shows. An earlier build signed the window's
+  // user out on a profile save, so the chrome is part of what this checks.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await loginAs(page, "e2e-dioxus");
+  await page.goto(`${base}/profile`);
+  await expect(h1(page)).toHaveText("Edit Profile");
+  await clientIsLive(page);
+  const loadsBefore = documentLoads;
+
+  const stamp = Date.now();
+  const firstName = `E2E ${stamp}`;
+  await expect(page.locator('form[action="/auth/profile"]')).toHaveCount(1);
+  await page.fill('input[name="first_name"]', firstName);
+  await page.getByRole("button", { name: "Update" }).click();
+  await expect(page.locator(".alert-success")).toContainText("e2e-dioxus Updated!", {
+    timeout: 15000,
+  });
+  await expect(page.locator(".alert-error")).toHaveCount(0);
+  await expect(page).not.toHaveURL(/saved=1/);
+
+  // The form and the chrome both follow the answer the save gave.
+  await expect(page.locator('input[name="first_name"]')).toHaveValue(firstName);
+  await expect(page.locator(".navbar summary")).toContainText("e2e-dioxus");
+  expect(documentLoads, "the save is a fetch, not a form post").toBe(loadsBefore);
+
+  // The twin really wrote the account: a fresh document re-fills the same value
+  // from the session.
+  await page.goto(`${base}/profile`);
+  await expect(page.locator('input[name="first_name"]')).toHaveValue(firstName, {
+    timeout: 15000,
+  });
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
 
 test("the profile avatar upload runs through the server fns with a progress bar", async ({ page }) => {

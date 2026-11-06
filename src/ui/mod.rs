@@ -35,6 +35,8 @@ pub mod header;
 pub mod page;
 /// The artist-tabs layout the artist admin pages render inside.
 pub mod placeholders;
+/// Shared plumbing for the reactive editors.
+pub mod reactive;
 /// The record label home page.
 pub mod record_label;
 /// The public release page and its track list.

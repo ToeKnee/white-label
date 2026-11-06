@@ -135,6 +135,14 @@ if [ -n "${DATABASE_URL:-}" ]; then
             label_id = EXCLUDED.label_id,
             published_at = COALESCE(artists.published_at, EXCLUDED.published_at),
             deleted_at = NULL;" || echo "WARNING: could not seed the e2e-tabs artist (is psql installed?)"
+    # The release editor client spec creates a row per browser run (a unique
+    # name and catalogue number, left soft-deleted on purpose). Pruning first
+    # keeps the seeded artist's release list short and every run equivalent to
+    # the last, whatever earlier runs left behind.
+    psql "$DATABASE_URL" -c "DELETE FROM release_artists WHERE release_id IN
+            (SELECT id FROM releases WHERE slug LIKE 'e2e-reactive-%');
+        DELETE FROM releases WHERE slug LIKE 'e2e-reactive-%';" \
+        || echo "WARNING: could not prune the e2e-reactive releases (is psql installed?)"
 else
     echo "WARNING: DATABASE_URL not set; skipping the e2e-tabs seed"
 fi

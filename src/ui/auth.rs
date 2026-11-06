@@ -27,7 +27,10 @@
 //! through the [`crate::ui::SessionHint`] context: page components load the
 //! session when they mount, but the shell's navbar outlives client
 //! navigations, and a page resource resolves once per component, so the menu
-//! needs the action's own answer rather than another fetch.
+//! needs the action's own answer rather than another fetch. The profile page
+//! uses the same trick for a saved rename (slice 6i): the navbar's session
+//! resource resolved before the save, so a rename hands it the whole stored
+//! user rather than another fetch.
 //!
 //! The profile page also carries the avatar upload widget
 //! ([`crate::ui::upload::FileUploadWithProgress`], Phase 5 slice 5f); like
@@ -51,11 +54,15 @@ use dioxus::prelude::*;
 use dioxus::router::RouterContext;
 
 use crate::api_types::auth::AuthOutcome;
+use crate::api_types::edit::EditOutcome;
 use crate::config::upload::UploadConfiguration;
-use crate::forms::auth::{ClientLoginForm, ClientRegisterForm};
+use crate::forms::auth::{
+    ClientLoginForm, ClientPasswordFields, ClientProfileFields, ClientRegisterForm,
+};
 use crate::models::auth::User;
 use crate::ui::Route;
 use crate::ui::SessionHint;
+use crate::ui::reactive::{posted_fields, refused_code, saved_row, transport_message};
 use crate::ui::redirect;
 use crate::ui::upload::FileUploadWithProgress;
 use crate::ui::use_session_hint;
@@ -71,7 +78,7 @@ use crate::server::current_user::{
     login as record_login, logout as record_logout, remember_session,
 };
 #[cfg(feature = "server")]
-use crate::server::forms::{login_code, register_code};
+use crate::server::forms::{change_password_code, login_code, profile_code, register_code};
 #[cfg(feature = "server")]
 use crate::services;
 
@@ -119,7 +126,7 @@ pub fn Login(
                 action: "/auth/login",
                 onsubmit: move |evt| {
                     evt.prevent_default();
-                    submit.call(login_form_from_values(&evt));
+                    submit.call(posted_fields::<ClientLoginForm>(&evt));
                 },
                 div { class: "grid gap-6",
                     if let Some(message) = login_message(bad.as_deref()) {
@@ -207,7 +214,7 @@ pub fn Register(
                 action: "/auth/register",
                 onsubmit: move |evt| {
                     evt.prevent_default();
-                    submit.call(register_form_from_values(&evt));
+                    submit.call(posted_fields::<ClientRegisterForm>(&evt));
                 },
                 div { class: "grid gap-6",
                     if let Some(message) = register_message(bad.as_deref()) {
@@ -361,6 +368,11 @@ pub fn EditProfile(
 /// login page; the boundary's spinner only shows while the session
 /// resource is in flight (never during the redirect itself).
 ///
+/// Like the other editors from slice 6i, a client build saves reactively
+/// (the twin at the bottom of this module) while the plain post to
+/// `/auth/profile` stays as the javascript-off path, and the fields and the
+/// alerts follow the answer the save gave rather than a reload.
+///
 /// A finished avatar upload is handed to the navbar as a fresh
 /// [`SessionHint::SignedIn`] carrying the updated user: the avatar config
 /// renames the file to the uploader's username, and the upload stores it,
@@ -369,7 +381,8 @@ pub fn EditProfile(
 /// The hint carries the whole user, not just the filename, because the
 /// navbar cannot supply the rest: on a desktop window its own session
 /// resource resolved to a guest at launch and never reloads, so a hint that
-/// depended on it would sign the user out.
+/// depended on it would sign the user out. A reactive rename goes to the menu
+/// the same way, which is what keeps the navbar's name in step with the form.
 #[component]
 fn ProfileForm(
     /// Set when the profile has just been saved.
@@ -385,8 +398,23 @@ fn ProfileForm(
     // so the hook order stays put on the re-run (the navbar's `UserMenu`
     // follows the same order).
     let session_hint = use_session_hint();
+    let mut edit =
+        use_action(move |fields: ClientProfileFields| async move { update_profile(fields).await });
+
+    // A saved rename has to reach the navbar, and the hint is the only way it
+    // can (see the note above), so the answer the save gave is handed over as
+    // the new current user.
+    use_effect(move || {
+        if let Some(saved_user) = saved_row(edit.value()) {
+            record_session_hint(
+                Some(session_hint),
+                SessionHint::SignedIn(Box::new(saved_user)),
+            );
+        }
+    });
+
     let session = use_user()?;
-    let user = match session() {
+    let fetched = match session() {
         Ok(Some(user)) if user.is_active() => user,
         Ok(_) => {
             redirect(Route::Login { bad: None });
@@ -399,6 +427,17 @@ fn ProfileForm(
         }
     };
 
+    // The fields, the alerts and the upload slug follow the last save: after a
+    // rename the next save targets the new username (the service cross-checks
+    // `original_username` against the session), just as the 303 path's reload
+    // re-fills the form from the stored account.
+    let saved_user = saved_row(edit.value());
+    let just_saved = saved_user.is_some();
+    let user = saved_user.unwrap_or(fetched);
+    let reactive_message = refused_code(edit.value())
+        .and_then(|code| profile_message(Some(code.as_str())).map(str::to_string))
+        .or_else(|| transport_message(edit.value()));
+
     let success_message = format!("{} Updated!", user.username);
     let avatar_username = user.username.clone();
     // A copy for the upload callback: it hands the navbar the whole updated
@@ -407,7 +446,7 @@ fn ProfileForm(
     let user_for_fields = user;
     rsx! {
         // Leptos placed the avatar picker between the heading and the form.
-        // The slug follows the session user, so after a rename the next
+        // The slug follows the account being edited, so after a rename the next
         // upload still names the account it belongs to (the service checks
         // it against the session anyway).
         FileUploadWithProgress {
@@ -426,10 +465,18 @@ fn ProfileForm(
             },
         }
         form { method: "post", action: "/auth/profile",
+            onsubmit: move |evt| {
+                evt.prevent_default();
+                edit.call(posted_fields::<ClientProfileFields>(&evt));
+            },
             div { class: "grid gap-6",
-                Success { message: success_message, show: saved.is_some() }
+                Success { message: success_message, show: saved.is_some() || just_saved }
                 if let Some(message) = profile_message(bad.as_deref()) {
                     InlineError { message: message.to_string() }
+                }
+                if let Some(message) = reactive_message {
+                    // Same fixed-code table the `?bad=` redirect path uses.
+                    InlineError { message }
                 }
                 ProfileFields { user: user_for_fields }
             }
@@ -527,6 +574,12 @@ pub fn ChangePassword(
 }
 
 /// The password-change form plus its alerts, guarded on the session user.
+///
+/// The save is reactive for a client build (the twin at the bottom of this
+/// module) and the plain post to `/auth/change-password` stays as the
+/// javascript-off path; both answer the same fixed codes, so the alerts match
+/// either way. Nothing about the account changes, so the page has no row to
+/// re-render — the success alert is the whole answer.
 #[component]
 fn PasswordForm(
     /// Set when the password has just been changed.
@@ -534,6 +587,11 @@ fn PasswordForm(
     /// Error code from a failed change.
     bad: Option<String>,
 ) -> Element {
+    let mut submit =
+        use_action(
+            move |fields: ClientPasswordFields| async move { change_password(fields).await },
+        );
+
     let session = use_user()?;
     match session() {
         Ok(Some(user)) if user.is_active() => {}
@@ -548,15 +606,33 @@ fn PasswordForm(
         }
     }
 
+    let just_changed = matches!(answered(submit.value()), Some(AuthOutcome::Done));
+    let reactive_message = match &answered(submit.value()) {
+        // Same fixed-code table the `?bad=` redirect path uses.
+        Some(AuthOutcome::Failed { code }) => Some(
+            change_password_message(Some(code.as_str()))
+                .unwrap_or("Password change failed, try again later.")
+                .to_string(),
+        ),
+        _ => transport_message(submit.value()),
+    };
+
     rsx! {
         form { method: "post", action: "/auth/change-password",
+            onsubmit: move |evt| {
+                evt.prevent_default();
+                submit.call(posted_fields::<ClientPasswordFields>(&evt));
+            },
             div { class: "grid gap-6",
                 Success {
                     message: "Password Updated!".to_string(),
-                    show: updated.is_some(),
+                    show: updated.is_some() || just_changed,
                 }
                 if let Some(message) = change_password_message(bad.as_deref()) {
                     InlineError { message: message.to_string() }
+                }
+                if let Some(message) = reactive_message {
+                    InlineError { message }
                 }
 
                 label { class: "flex gap-2 items-center input",
@@ -587,7 +663,7 @@ fn PasswordForm(
 }
 
 // ---------------------------------------------------------------------------
-// Reactive twins of the `/auth/*` handlers (MIGRATION.md Phase 6 slice 6d)
+// Reactive twins of the `/auth/*` handlers (MIGRATION.md Phase 6 slices 6d, 6i)
 // ---------------------------------------------------------------------------
 //
 // Same services, same session records and same fixed failure codes as the form
@@ -682,9 +758,87 @@ pub async fn logout_client() -> core::result::Result<AuthOutcome, HttpError> {
     Ok(AuthOutcome::Done)
 }
 
+/// Saves the signed-in user's profile, answering the account as the server now
+/// holds it, which is what lets the page re-fill its own fields (and the navbar
+/// follow a rename) without a page load.
+///
+/// ```text
+/// POST /api/client/profile {"fields":{"original_username":"alice","username":"alicia",…}}
+/// 200 {"Saved":{"username":"alicia",…}}
+///
+/// POST /api/client/profile {"fields":{"original_username":"bob",…}}
+/// 200 {"Failed":{"code":"forbidden"}}
+/// ```
+///
+/// # Errors
+/// 401 when the session is gone, 500 with a retry message when the save could
+/// not run at all.
+#[post("/api/client/profile",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn update_profile(
+    fields: ClientProfileFields,
+) -> core::result::Result<EditOutcome<User>, HttpError> {
+    let Some(session_user) = user.0.as_ref() else {
+        // The page gate redirects guests before they reach this form; a
+        // hand-crafted POST gets the steer the 303 handler would have given.
+        return HttpError::unauthorized("Please log in to save.");
+    };
+    match services::user::update_user_service(&db.0, Some(session_user), fields.into_service_form())
+        .await
+    {
+        Ok(saved_user) => Ok(EditOutcome::Saved(saved_user)),
+        Err(error) => {
+            tracing::warn!("profile twin rejected: {error}");
+            Ok(EditOutcome::Failed {
+                code: profile_code(&error).to_string(),
+            })
+        }
+    }
+}
+
+/// Changes the signed-in user's password, answering `Done` (the javascript-off
+/// handler reports the same success with `?updated=1`); nothing about the
+/// account itself changes, so there is no row to hand back.
+///
+/// # Errors
+/// 401 when the session is gone, 500 with a retry message when the change could
+/// not run at all.
+#[post("/api/client/change-password",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn change_password(
+    fields: ClientPasswordFields,
+) -> core::result::Result<AuthOutcome, HttpError> {
+    let Some(session_user) = user.0.as_ref() else {
+        return HttpError::unauthorized("Please log in to save.");
+    };
+    match services::user::change_password_service(
+        &db.0,
+        Some(session_user),
+        fields.into_service_form(),
+    )
+    .await
+    {
+        Ok(_) => Ok(AuthOutcome::Done),
+        Err(error) => {
+            tracing::warn!("change-password twin rejected: {error}");
+            Ok(AuthOutcome::Failed {
+                code: change_password_code(&error).to_string(),
+            })
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Reactive plumbing shared by the three pages
+// Reactive plumbing shared by the auth pages
 // ---------------------------------------------------------------------------
+//
+// Reading a submit into a posted-field struct and turning an action's answer
+// into alert text is shared with the admin editors (`crate::ui::reactive`);
+// only the `AuthOutcome` shape below is specific to these pages.
 
 /// Navigates home from an auth action's success path. The router handle was
 /// looked up during render, so the routerless SSR markup tests stay put.
@@ -719,41 +873,6 @@ fn record_profile_update(
 /// The action's outcome, out of the signal dioxus keeps an action's value in.
 fn answered(value: Option<Result<ReadSignal<AuthOutcome>, CapturedError>>) -> Option<AuthOutcome> {
     value.and_then(|result| result.ok().map(|value| value.cloned()))
-}
-
-/// A transport failure from an auth action (the API was unreachable, or the
-/// twin answered 500): the captured error's own text, as the links editor
-/// shows it — for these endpoints the message is always ours, never the
-/// database's.
-fn transport_message(
-    value: Option<Result<ReadSignal<AuthOutcome>, CapturedError>>,
-) -> Option<String> {
-    value.and_then(|result| result.err().map(|error| error.to_string()))
-}
-
-/// A form submit's text inputs as a JSON object. Dioxus' `parsed_values`
-/// deserializer sits behind a dioxus-html feature the meta crate does not
-/// expose, so the fields are mapped by hand, as in `ui::admin::links`.
-fn text_fields(evt: &FormEvent) -> serde_json::Map<String, serde_json::Value> {
-    let mut fields = serde_json::Map::new();
-    for (name, value) in evt.values() {
-        if let FormValue::Text(text) = value {
-            fields.insert(name, serde_json::Value::String(text));
-        }
-    }
-    fields
-}
-
-/// The login page's fields for the reactive path. `remember` only arrives when
-/// the box is ticked, exactly as in the form-encoded post; an unparsable body
-/// becomes an empty form, which the service rejects as `required`.
-fn login_form_from_values(evt: &FormEvent) -> ClientLoginForm {
-    serde_json::from_value(serde_json::Value::Object(text_fields(evt))).unwrap_or_default()
-}
-
-/// The register page's fields for the reactive path.
-fn register_form_from_values(evt: &FormEvent) -> ClientRegisterForm {
-    serde_json::from_value(serde_json::Value::Object(text_fields(evt))).unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
