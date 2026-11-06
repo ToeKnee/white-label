@@ -63,6 +63,15 @@ them. The rest of the weight is the non-optional `leptos*` dependencies
 themselves — `src/store` uses `reactive_stores` and `src/utils` still uses
 `leptos_router`/`ServerFnError` — which Phase 8 optionalizes or drops.
 
+A debug wasm bundle always tries one websocket we do not serve: `ws://<host
+the page came from>/_dioxus`, dioxus-web's hot-patch channel (`devtools::init`,
+gated `all(feature = "devtools", debug_assertions)`), which only `dx serve`
+answers. Firefox logs one failed-connection line per attempt and the client
+backs off to 4 s between tries; nothing in the app depends on it, and a release
+bundle (`--prof`) does not contain the code at all. Serving that path ourselves
+would mean an unauthenticated websocket endpoint for no functional gain, so the
+axum router deliberately does not have one.
+
 There is **no `dx serve` web watch mode** for this crate (verified, 0.7.10):
 `dx serve --fullstack` builds a _native_ "server build" of the selected bin, so
 `dx serve --platform web --bin dioxus-web --features web --no-default-features`
@@ -186,7 +195,7 @@ and pages that show the image pass `on_uploaded` to the widget and swap their
 page cannot refetch its own page data, since `use_page` never exposes its
 resource.
 
-### The desktop window (slices 6a–6b)
+### The desktop window (slices 6a–6f)
 
 The same `src/ui` page tree also builds as a native window (`dioxus-desktop`:
 a tao window around the system webview — on Linux that means `webkit2gtk-4.1`,
@@ -218,8 +227,31 @@ renders unstyled. The native resolver (`dioxus-asset-resolver::native`) reads
 the bundle address `/assets/main.css` on desktop while web and SSR keep
 `/main.css`, and gives `/uploads/…` images the absolute API origin (plain `<img>`
 subresources, so no CORS). Repeat the copy after every `dx build --platform
-desktop` — the build recreates that directory; `dx bundle` will take the same
-files from `[bundle] resources` in `Dioxus.toml` (slice 6f).
+desktop` — the build recreates that directory.
+
+`dx bundle` cannot carry that tree today, and it is worth knowing why before
+Phase 7 tries it: `[bundle] resources` entries are copied **file by file, flat**
+into `usr/lib/<product name>/` (only the file name is kept, and a directory
+entry fails the bundle), while the window asks for `/assets/images/…` with its
+subdirectories. `dx` does recurse into `asset_dir` (`assets/` by default) and
+maps it to `assets/…` in the bundle, which is exactly the shape the resolver
+wants — so when real packaging matters the options are to move the statics
+under `assets/`, register them with `asset!()`, or serve them from the API
+origin instead of the bundle.
+
+The window's title (`White Label`) and icon come from code, not `Dioxus.toml`:
+0.7.10 has no `[desktop]` config section, and the CLI only bakes `[web.app]
+title` into release builds, so a plain `dx build` window would otherwise be
+called "Dioxus App". `src/bin/dioxus_desktop.rs` passes a
+`dioxus::desktop::Config` (title, 1280x800 starting size) through
+`dioxus::LaunchBuilder::with_cfg`, and decodes `public/Logo.png` — compiled in
+with `include_bytes!`, so the icon does not depend on the bundle layout — into a
+`tao` RGBA icon; a decode failure is logged and the default icon is used. The
+`[bundle]` table in `Dioxus.toml` (identifier, publisher, descriptions,
+copyright, `icon = [Logo.png, Logo.svg]`) is separate: those are the values
+`dx bundle` puts in the Linux `.desktop` entry and hicolor theme, and the
+identifier is the permanent store identity on Android/iOS. No `dx bundle` has
+been run yet, so that table is staged rather than proven.
 
 There is no SSR in this target: the app boots client-side and every server fn
 in `ui/data.rs` is an HTTP call made by dioxus' own `reqwest` client, which
