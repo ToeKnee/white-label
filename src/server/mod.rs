@@ -1009,6 +1009,18 @@ mod tests {
             alerted.contains("alert alert-success") && alerted.contains("Password Updated!"),
             "success alert:\n{alerted}"
         );
+        // The three fields share a key icon, so their placeholders are what
+        // tells the user which is which.
+        for marker in [
+            "placeholder=\"Current Password\"",
+            "placeholder=\"New Password\"",
+            "placeholder=\"New Password Confirmation\"",
+        ] {
+            assert!(
+                alerted.contains(marker),
+                "SSR body missing `{marker}`:\n{alerted}"
+            );
+        }
 
         // The old password is dead and the new one logs in.
         let stale = post_form(

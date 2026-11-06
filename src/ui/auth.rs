@@ -580,6 +580,10 @@ pub fn ChangePassword(
 /// javascript-off path; both answer the same fixed codes, so the alerts match
 /// either way. Nothing about the account changes, so the page has no row to
 /// re-render — the success alert is the whole answer.
+///
+/// Each of the three fields carries a placeholder (named the way the register
+/// page names its password fields): they share one key icon, so the placeholder
+/// is the only thing that tells them apart. An SSR test pins all three.
 #[component]
 fn PasswordForm(
     /// Set when the password has just been changed.
@@ -637,12 +641,12 @@ fn PasswordForm(
 
                 label { class: "flex gap-2 items-center input",
                     KeyIcon {}
-                    input { r#type: "password", class: "grow", name: "password" }
-                }
-
-                label { class: "flex gap-2 items-center input",
-                    KeyIcon {}
-                    input { r#type: "password", class: "grow", name: "new_password" }
+                    input {
+                        r#type: "password",
+                        class: "grow",
+                        placeholder: "Current Password",
+                        name: "password",
+                    }
                 }
 
                 label { class: "flex gap-2 items-center input",
@@ -650,6 +654,17 @@ fn PasswordForm(
                     input {
                         r#type: "password",
                         class: "grow",
+                        placeholder: "New Password",
+                        name: "new_password",
+                    }
+                }
+
+                label { class: "flex gap-2 items-center input",
+                    KeyIcon {}
+                    input {
+                        r#type: "password",
+                        class: "grow",
+                        placeholder: "New Password Confirmation",
                         name: "new_password_confirmation",
                     }
                 }
