@@ -287,7 +287,7 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
         }
     };
 
-    // Reactive create (slice 6i): the twin answers the new row and the page
+    // Reactive create: the twin answers the new row and the page
     // navigates to its editor, which is what the 303 does without a client
     // build. The router is looked up rather than hooked (`use_navigator` would
     // panic) because the routerless SSR markup tests render this page alone.
@@ -473,7 +473,7 @@ fn EditReleaseBody(
         }
     };
 
-    // Reactive saves (slice 6i): update, delete and restore all go through one
+    // Reactive saves: update, delete and restore all go through one
     // action, so "the last thing the user did" is a single answer to read. With
     // a client build the `onsubmit` handlers below prevent the post and call
     // the twins at the bottom of this module; the plain form posts stay as the
@@ -635,7 +635,7 @@ fn EditReleaseBody(
         }
             }
             div { class: "w-1/3",
-                // Slice 5c: the sidebar is the real track list now, fed by
+                // The sidebar is the real track list, fed by
                 // the same fetch as the form.
                 TrackList {
                     artist_slug: artist_slug.clone(),
@@ -804,7 +804,7 @@ fn release_message(code: Option<&str>) -> Option<&'static str> {
 }
 
 // ---------------------------------------------------------------------------
-// Reactive twins of the `/admin/forms/release*` handlers (slice 6i)
+// Reactive twins of the `/admin/forms/release*` handlers
 // ---------------------------------------------------------------------------
 //
 // Same services and same fixed codes as the javascript-off handlers in

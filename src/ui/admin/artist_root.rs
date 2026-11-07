@@ -1,27 +1,5 @@
-//! The artist-tabs layout for the route table (MIGRATION.md Phase 3).
-//!
-//! This module held the placeholder pages every route variant needed in
-//! Phase 3; the slices since then replaced each group with its real
-//! component:
-//!
-//! - public pages → done (Phase 4 slice 2: see `record_label`, `artist`,
-//!   `release` and `page`)
-//! - auth pages → done (Phase 4 slice 3: see `auth`)
-//! - admin dashboard/label/pages and the `AdminRoot` layout → done
-//!   (Phase 4 slice 4: see `admin`)
-//! - admin artist profile (`CreateArtist`/`EditArtist`) → done
-//!   (Phase 4 slice 5a: see `admin::artist`)
-//! - admin releases list/forms (`Releases`/`CreateRelease`/`EditRelease`)
-//!   → done (Phase 4 slice 5b: see `admin::release`)
-//! - admin tracks (`Tracks`/`CreateTrack`/`EditTrack`) → done
-//!   (Phase 4 slice 5c: see `admin::track`)
-//! - admin artist links (`EditArtistLinks`) → done (Phase 4 slice 5d: see
-//!   `admin::links`)
-//! - admin artist images (`EditArtistImages`) → done (Phase 5 slice 5g: see
-//!   `admin::images`)
-//!
-//! [`crate::ui::placeholders::AdminArtistRoot`] is all that is left; it moves
-//! in with the Phase 8 cleanup, once nothing here has to be a stub.
+//! The artist-tabs layout the artist admin editors render inside
+//! (`Profile` / `Releases` / `Links` / `Images` above an `Outlet`).
 
 use dioxus::prelude::*;
 
@@ -32,7 +10,7 @@ use crate::ui::Route;
 /// `artist_slug` is injected by the router from the variant's field, which
 /// is why the layout starts at the slug routes rather than at the nest base
 /// ([`Route::CreateArtist`] has no slug to show tabs for). Active-tab state
-/// is a plain comparison of the current route — Phase 5 may refine it.
+/// is a plain comparison of the current route.
 #[component]
 pub fn AdminArtistRoot(artist_slug: String) -> Element {
     // Query codes carried by the profile, links and images editors (`?updated=1`,

@@ -22,6 +22,7 @@
 //!   empty submenus, create links), the shape `AdminMenu::default()` yields.
 
 pub mod artist;
+pub mod artist_root;
 pub mod dashboard;
 pub mod images;
 pub mod label;

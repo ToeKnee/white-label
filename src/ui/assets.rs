@@ -1,4 +1,4 @@
-//! How the app addresses static files (MIGRATION.md Phase 6 slice 6b).
+//! How the app addresses static files.
 //!
 //! Web and SSR pages use root-relative paths, which the SSR server answers
 //! from its public dir and its `/uploads` mount. A native window has no such

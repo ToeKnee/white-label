@@ -5,14 +5,16 @@
 //! pages, forms and auth guards.
 //!
 //! Only the dioxus targets build it: the SSR server (`server`), the wasm
-//! client (`web`) and the desktop window (`desktop`); the mobile target joins
-//! in Phase 7. Server-only code inside is gated by the fullstack macros.
+//! client (`web`) and the desktop window (`desktop`); the mobile targets are
+//! the remaining packaging work. Server-only code inside is gated by the
+//! fullstack macros.
 
 /// Admin section (dashboard, label/page editors, `AdminRoot` layout with
-/// its side menu and admin gate).
+/// its side menu and admin gate, and the artist-tabs layout in
+/// `artist_root`).
 ///
-/// Phase 4 slice 4; the admin form posts land on `crate::server::forms`
-/// handlers under `/admin/forms/*`.
+/// The admin form posts land on `crate::server::forms` handlers under
+/// `/admin/forms/*`.
 pub mod admin;
 /// Artist index and artist page, plus the shared artist card.
 pub mod artist;
@@ -20,7 +22,7 @@ pub mod artist;
 pub mod assets;
 /// Auth pages (login/register/logout/profile/change-password).
 ///
-/// Phase 4 slice 3; form posts are handled by `crate::server::forms`.
+/// Their form posts are handled by `crate::server::forms`.
 pub mod auth;
 /// Dioxus-native data endpoints (`#[get]` server fns) behind the page
 /// resources.
@@ -31,8 +33,6 @@ pub mod footer;
 pub mod header;
 /// Marketing/legal page details.
 pub mod page;
-/// The artist-tabs layout the artist admin pages render inside.
-pub mod placeholders;
 /// Shared plumbing for the reactive editors.
 pub mod reactive;
 /// The record label home page.
@@ -46,7 +46,7 @@ pub mod shell;
 /// Uploads with progress: the picker widget and its upload endpoints.
 pub mod upload;
 /// Shared presentational pieces (alerts, badges, spinner, error/404 heroes)
-/// and the auth redirect guards — Phase 4 slice 1 of the component port.
+/// and the auth redirect guards.
 pub mod utils;
 
 pub use routes::Route;

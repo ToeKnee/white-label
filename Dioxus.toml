@@ -1,6 +1,5 @@
-# Dioxus CLI config (migration in progress — see MIGRATION.md).
-# `dx` builds the web, desktop and (later) mobile targets; the axum server in
-# `src/server` is a separate bin and is run directly.
+# Dioxus CLI config. `dx` builds the web, desktop and (later) mobile targets;
+# the axum server in `src/server` is a separate bin and is run directly.
 
 [application]
 name = "white-label"
@@ -11,14 +10,15 @@ title = "White Label"
 [web.watcher]
 watch_path = ["src", "public", "style"]
 
-# Packaging metadata, read by `dx bundle` and by the mobile packagers (Phase 7).
-# The Linux `.deb` bundle has been run (phase 8); the gate still only runs
+# Packaging metadata, read by `dx bundle` and by the mobile packagers.
+# The Linux `.deb` bundle has been built once; the gate still only runs
 # `dx build`. The identifier is here because `dx bundle` otherwise fills the
 # app with its own defaults, and because it becomes the app's permanent store
 # identity.
 [bundle]
 # Reverse-domain id — provisional. It is the durable identity on Android/iOS
-# and cannot change after the first store release, so settle it in Phase 7.
+# and cannot change after the first store release, so settle it before shipping
+# to any store.
 identifier = "net.ynottony.whitelabel"
 publisher = "Anthony Batchelor"
 # Parsed as dx's `AppCategory`; a value outside its list silently leaves

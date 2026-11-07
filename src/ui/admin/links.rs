@@ -102,12 +102,12 @@ fn EditArtistLinksBody(
         }
     };
 
-    // Reactive artist delete/restore (slice 6i): the links form's row buttons
+    // Reactive artist delete/restore: the links form's row buttons
     // point at the sibling forms below; with a client build their `onsubmit`
     // calls the artist twins in `super::artist` instead of posting. The row
     // they answer replaces the fetched one, so the header name, the
     // Delete/Restore swap and the fixed-code alerts follow the save — the
-    // links themselves keep their own action (slice 5d) below.
+    // links themselves keep their own action below.
     let mut artist_row =
         use_action(
             move |request: ArtistRowEdit| async move { apply_artist_row_edit(request).await },
@@ -149,7 +149,7 @@ fn EditArtistLinksBody(
     };
 
     // The links form addresses the slug from the URL: the reactive artist
-    // save (slice 6i) replaces the row on screen, not the page's address, and
+    // save replaces the row on screen, not the page's address, and
     // the sibling forms below post `row_slug` instead.
     let form_artist_slug = artist_slug;
 
@@ -224,7 +224,7 @@ fn EditArtistLinksBody(
 /// What the links page's artist row buttons ask the twins to do.
 ///
 /// Delete and restore share one action so the page has a single answer to
-/// read; the links save keeps its own action (slice 5d).
+/// read; the links save keeps its own action.
 enum ArtistRowEdit {
     Delete(SlugFields),
     Restore(SlugFields),

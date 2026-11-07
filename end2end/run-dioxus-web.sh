@@ -1,5 +1,5 @@
 #!/bin/sh
-# Web dev launcher (MIGRATION.md Phase 6).
+# Web dev launcher.
 #
 # Builds the wasm client and serves the hydrated site — the shape the deployed
 # site has — in one command. The bare SSR server (`DIOXUS_PUBLIC_PATH=public`)

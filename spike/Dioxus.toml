@@ -1,8 +1,0 @@
-[application]
-name = "spike"
-
-[web.app]
-title = "White Label - Dioxus Spike"
-
-[web.watcher]
-watch_path = ["src", "assets", "style"]

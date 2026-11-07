@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Anthony Batchelor <tony@ynottony.net>"]
 
-# Server binary (MIGRATION.md). Serves the pages, the form posts, the JSON
+# Server binary. Serves the pages, the form posts, the JSON
 # server fns, sessions and uploads from one axum router (`src/server`).
 [[bin]]
 name = "dioxus-server"
 path = "src/bin/dioxus_server.rs"
 required-features = ["server"]
 
-# Web (wasm) client entry for `dx build` (MIGRATION.md Phase 5). The SSR
+# Web (wasm) client entry for `dx build`. The SSR
 # server injects this bundle into the page via the public dir's index.html;
 # once it boots, server fns route over HTTP and the pages hydrate.
 [[bin]]
@@ -19,8 +19,8 @@ name = "dioxus-web"
 path = "src/bin/dioxus_web.rs"
 required-features = ["web"]
 
-# Desktop client entry for `dx build --platform desktop` (MIGRATION.md
-# Phase 6). The same `src/ui` app in a tao window with a system webview,
+# Desktop client entry for `dx build --platform desktop`. The same `src/ui`
+# app in a tao window with a system webview,
 # talking to the API over HTTP.
 [[bin]]
 name = "dioxus-desktop"

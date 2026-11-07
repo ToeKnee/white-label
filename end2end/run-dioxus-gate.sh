@@ -1,14 +1,24 @@
 #!/bin/sh
-# Phase 3+ runtime gate (MIGRATION.md): serve the Dioxus SSR app from the
-# real crate against the dev database, then smoke-test shell navigation with
-# Playwright (chromium) plus a few curl spot checks. Since Phase 5 a second
-# server (8131) serves the `dx build` client bundle, and
-# `tests/dioxus_client.spec.ts` checks hydration/router takeover against it.
-# Uses ports 8127/8131 so it never collides with the Leptos app (3000) or
-# other local services (8080).
+# Runtime gate: serve the Dioxus SSR app from the real crate against the dev
+# database, then smoke-test shell navigation with Playwright (chromium and
+# firefox) plus a few curl spot checks. A second server (8131) serves the
+# `dx build` client bundle, and `tests/dioxus_client.spec.ts` checks
+# hydration/router takeover against it. Uses ports 8127/8131 to keep clear
+# of other local dev services.
 #
 # Run from anywhere:  sh end2end/run-dioxus-gate.sh
 set -u
+
+# Refuse to start on occupied ports: a leaked server on 8127/8131 would
+# otherwise answer the pins from its own (stale) code and only fail as a
+# confusing timing test.
+for port in 8127 8131; do
+    if ss -ltn 2>/dev/null | grep -q ":$port "; then
+        echo "port $port is already in use — kill the stale server first"
+        exit 1
+    fi
+done
+
 ROOT=/home/anthony/Projects/Rust/white-label
 OUT=/tmp/dioxus-shell-gate
 rm -rf "$OUT"
@@ -17,7 +27,8 @@ cd "$ROOT" || exit 1
 
 # A missing page marker must fail the gate. `grep -c` prints a count and
 # exits 0 whatever it counts, so pins never reached the exit status on their
-# own (the images pins sat at 0 for a whole slice without anyone noticing).
+# own (an images pin once sat at 0 for a whole development cycle without
+# anyone noticing).
 # Every check below goes through `pin`/`no_pin`, and the failures are folded
 # into the exit status at the end.
 pin_failed=0
@@ -43,7 +54,7 @@ cargo build --offline --no-default-features --features server --bin dioxus-serve
     echo "BUILD FAILED"; tail -n 30 "$OUT/build.log"; exit 1
 }
 
-# The web client bundle (Phase 5): index.html + /wasm glue, with the
+# The web client bundle: index.html + /wasm glue, with the
 # static public dir copied in, served by the second server below.
 dx build --platform web --bin dioxus-web --features web --no-default-features >"$OUT/client-build.log" 2>&1 || {
     echo "CLIENT BUILD FAILED"; tail -n 30 "$OUT/client-build.log"; exit 1
@@ -141,7 +152,7 @@ else
 fi
 
 echo "== seed the uploads directories (idempotent) =="
-# The Leptos `setup` creates these; the dioxus server only reads UPLOAD_PATH,
+# The dioxus server only reads UPLOAD_PATH and never creates these directories,
 # so the gate makes sure the avatar upload in `dioxus_client.spec.ts` has
 # somewhere to write.
 if [ -n "${UPLOAD_PATH:-}" ]; then
@@ -181,21 +192,21 @@ if [ "$admin_ok" -eq 1 ]; then
     pin "$OUT/admin_dashboard.html" 'Admin Dashboard'
     pin "$OUT/admin_dashboard.html" 'w-56 menu bg-base-200 rounded-box'
     # The nested tab layout only renders behind the admin gate. The
-    # releases tab is real since slice 5b, so it needs a live artist row
+    # releases tab is a real form, so it needs a live artist row
     # (the seed above); a missing slug would render NotFound instead.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/nested.html" -w "nested status=%{http_code}\n" "$base/admin/artist/e2e-tabs/releases"
     pin "$OUT/nested.html" 'tabs tabs-border'
     pin "$OUT/nested.html" 'E2E Tabs Artist Releases'
-    # (slice 5a) The artist create page serves the real form handlers.
+    # The artist create page serves the real form handlers.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_create.html" "$base/admin/artist"
     pin "$OUT/artist_create.html" 'action="/admin/forms/artist"'
-    # (slice 5b) The release create page serves its real form handlers too.
+    # The release create page serves its real form handlers too.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/release_create.html" "$base/admin/artist/e2e-tabs/releases/new"
     pin "$OUT/release_create.html" 'action="/admin/forms/release"'
-    # (slice 5d) The artist links editor serves its real form handler.
+    # The artist links editor serves its real form handler.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_links.html" "$base/admin/artist/e2e-tabs/links"
     pin "$OUT/artist_links.html" 'action="/admin/forms/links"'
-    # (slice 5g) The artist Images tab serves the upload picker; the upload
+    # The artist Images tab serves the upload picker; the upload
     # itself is the wasm client's job (checked in dioxus_client.spec.ts).
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_images.html" \
       -w "artist images status=%{http_code}\n" "$base/admin/artist/e2e-tabs/images"
@@ -224,7 +235,7 @@ curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \
   --data-urlencode "password=definitely-wrong" \
   "$base/auth/login"
 
-echo "== profile upload widget (slice 5f SSR markup) =="
+echo "== profile upload widget (SSR markup) =="
 # With a session the profile page serves the picker; the upload itself runs
 # only through the wasm client (checked in dioxus_client.spec.ts).
 curl -sS -c "$OUT/user-cookies.txt" -o /dev/null -w "e2e-dioxus login status=%{http_code}\n" \

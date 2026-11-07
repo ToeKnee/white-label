@@ -47,7 +47,7 @@ pub fn App() -> Element {
         document::Title { "White Label" }
         // Tailwind + daisyUI build (`npm run css`). The server mounts
         // `public/main.css` at this exact path, ahead of the SSR fallback; a
-        // desktop window loads it from its own bundle instead (slice 6b).
+        // desktop window loads it from its own bundle instead.
         document::Stylesheet { href: bundled_asset("/main.css") }
         Router::<Route> {}
     }

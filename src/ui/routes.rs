@@ -12,6 +12,7 @@
 
 use dioxus::prelude::*;
 
+use super::admin::artist_root::AdminArtistRoot;
 use super::admin::{
     AdminRoot, CreateArtist, CreatePage, CreateRelease, CreateTrack, Dashboard, EditArtist,
     EditArtistImages, EditArtistLinks, EditLabel, EditPage, EditRelease, EditTrack, Releases,
@@ -20,7 +21,6 @@ use super::admin::{
 use super::artist::{ArtistPage, ArtistsPage};
 use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
 use super::page::PageDetails;
-use super::placeholders::AdminArtistRoot;
 use super::record_label::RecordLabelHome;
 use super::release::ReleasePage;
 use super::shell::AppShell;
@@ -85,7 +85,7 @@ pub enum Route {
     },
     /// Edit the signed-in user's profile. `saved` and `bad` carry fixed
     /// codes from the profile form's redirect; `uploaded` and `bad_upload`
-    /// carry the avatar upload form's (Phase 6: uploading without javascript).
+    /// carry the avatar upload form's (uploading without javascript).
     #[route("/profile?:saved&:bad&:uploaded&:bad_upload")]
     EditProfile {
         /// Set when the profile has just been saved.
@@ -533,7 +533,7 @@ mod tests {
     }
 
     /// The admin forms 303 back to these pages with fixed status codes in
-    /// the query string (the auth-code pattern from slice 3).
+    /// the query string (the auth-code pattern).
     #[test]
     fn admin_routes_carry_query_codes() {
         assert_eq!(
@@ -659,7 +659,7 @@ mod tests {
     }
 
     /// One variant matches both the bare and trailing-slash spellings of a
-    /// path (MIGRATION.md risk 4).
+    /// path, so both serve the same page.
     #[test]
     fn trailing_slashes_are_tolerated() {
         assert_eq!(parse("/admin/"), Route::Dashboard {});
@@ -711,8 +711,8 @@ mod tests {
                 slug: "cookies".into(),
             },
             // The nest-base route renders its canonical trailing slash and
-            // still parses back (the quirk recorded in the Phase 0 spike);
-            // the short form with the profile form's codes round-trips too.
+            // still parses back; the short form with the profile form's
+            // codes round-trips too.
             Route::EditArtist {
                 artist_slug: "jimi".into(),
                 updated: None,

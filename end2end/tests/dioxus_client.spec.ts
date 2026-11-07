@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Dioxus wasm client checks (MIGRATION.md Phase 5 slice 5e, Phase 6 slice 6i).
+ * Dioxus wasm client checks.
  * Run against a second gate server (port 8131) whose public dir is the
  * `dx build` output, so the SSR pages boot the wasm bundle: the router must
  * take over navigation, and the editors' reactive submit path (`use_action`
@@ -132,7 +132,7 @@ test("the links editor submits reactively (no 303 round trip)", async ({ page })
 });
 
 test("the release editor creates, saves, deletes and restores reactively", async ({ page }) => {
-  // The slice 6i twins (`/api/*_release`). A desktop window has no page
+  // The `/api/*_release` twins. A desktop window has no page
   // load to carry `?updated=1` or `?bad=<code>`, so the twins answer the saved
   // row (or the same code) as data and the editor renders from that. The web
   // client runs the very same path, so no document request may go out.
@@ -206,7 +206,7 @@ test("the release editor creates, saves, deletes and restores reactively", async
 });
 
 test("the profile page saves reactively and keeps the session", async ({ page }) => {
-  // The auth side of slice 6i: a window has no page load to carry
+  // A window has no page load to carry
   // `/profile?saved=1`, so the twin answers with the stored account, which the
   // form re-fills and the navbar shows. An earlier build signed the window's
   // user out on a profile save, so the chrome is part of what this checks.
@@ -347,7 +347,7 @@ test("the profile avatar upload runs through the server fns with a progress bar"
 });
 
 test("auth submits reactively: same document, navbar follows the session", async ({ page }) => {
-  // The slice 6d twins (`/api/login|logout`) rather than the 303 form
+  // The `/api/login|logout` twins rather than the 303 form
   // handlers. A marker set on the live document is the proof: a form post
   // would load a fresh document and take it with it.
   const pageErrors: string[] = [];
@@ -435,8 +435,7 @@ test("the artist images tab uploads and shows the new image", async ({ page }) =
   await page.getByRole("button", { name: "Upload" }).click();
 
   // The alert names the stored file (`<timestamp>-<artist slug>.png`) and the
-  // `<img>` moves onto it without a reload — Leptos kept showing the previous
-  // file until the page was reloaded.
+  // `<img>` moves onto it without a reload.
   await expect(page.locator(".alert-success")).toContainText(/Uploaded .+-e2e-tabs\.png/, {
     timeout: 30000,
   });

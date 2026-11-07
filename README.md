@@ -1,12 +1,11 @@
 # White Label - a record label management website
 
-> **Status:** the app is now the Dioxus stack (branch `dioxus`, in
-> [MIGRATION.md](MIGRATION.md)): an axum server with Dioxus SSR pages, a wasm
-> client that hydrates them, and a desktop webview window — one codebase, with
-> iOS/Android still to come (Phase 7). The old Leptos site is gone. Notes below
-> describe the Dioxus setup.
+> **Status:** one Dioxus codebase with three surfaces: an axum server that
+> serves Dioxus SSR pages, a wasm client that hydrates them, and a desktop
+> webview window. iOS/Android packaging is still to come. Notes below
+> describe the current setup.
 
-## Migration checkpoint (branch `dioxus`)
+## How the app fits together
 
 The Dioxus app lives in
 `src/server/` (axum router: sessions, uploads, current-user extractor, the
@@ -15,8 +14,8 @@ the JSON server fns under `/api/*`, and the public-dir and `/uploads` static
 mounts; uploads finish through the shared
 `services::files::upload` tail) and `src/ui/` (the whole page tree: route
 table, layouts, header/footer chrome, public pages, auth pages, the admin
-dashboard and the artist/release/track/links/images editors). The old Leptos
-default binary is deleted, so this _is_ the app now:
+dashboard and the artist/release/track/links/images editors). The three
+`dioxus-*` bins are the whole app now:
 
 ```bash
 npm install && npm run css   # tailwind + daisyUI -> public/main.css
@@ -34,7 +33,7 @@ features — including every upload (see the uploads note below) — need the
 client build. `sh end2end/run-dioxus-web.sh` builds it and serves the hydrated
 site, which is the shape the deployed site will have.
 
-### The wasm client (slice 5e)
+### The wasm client
 
 `src/ui` also builds for the browser; that bundle is what hydrates the
 SSR-rendered pages (SPA navigation, reactive forms, client-side redirects):
@@ -56,8 +55,8 @@ The gate starts a second `dioxus-server` whose `DIOXUS_PUBLIC_PATH` is that
 `dx` output — the bundle's `index.html` is what makes the SSR renderer
 inject the wasm bootstrap into every page — so the gate runs two servers:
 8127 (SSR-only, `public/`) and 8131 (hydrated). `sh end2end/run-dioxus-web.sh`
-does the build-and-serve pair for manual work. With the Leptos stack deleted
-(Phase 8) the bundle is pure Dioxus, and a debug bundle is still big
+does the build-and-serve pair for manual work. The bundle is pure Dioxus, and
+a debug bundle is still big
 (~25 MB of wasm): the whole app plus the dioxus runtime, compiled
 unoptimised — `dx build --release` is the shape that ships.
 
@@ -80,8 +79,8 @@ non-wasm targets` (js-sys) — and the dev server only answers
 side launched by dioxus itself (`dioxus::launch` under the `server` feature,
 which would also have to be handed our axum router for sessions, uploads and
 statics) or per-build features (`dx serve`'s `@client`/`@server` argument
-lists). Both are open questions in MIGRATION.md; until one lands, the
-build-and-serve commands above are the dev flow.
+lists). Neither has landed; until one does, the build-and-serve commands above
+are the dev flow.
 
 `cargo test` covers the SSR side; the hydrated client side
 is covered by `end2end/tests/dioxus_client.spec.ts` (SPA nav issues no extra
@@ -116,7 +115,7 @@ in `end2end/` once if the `chromium-1117` / `firefox-1449` builds are missing �
 the client spec runs in both browsers now, and an `npx` from elsewhere installs
 builds this version cannot launch.)
 
-### Uploads with progress (slices 5f–5g)
+### Uploads with progress
 
 `src/ui/upload.rs` holds the picker widget and its two dioxus endpoints. It is
 rendered on the profile page (`/profile`, the signed-in user's avatar), the
@@ -159,9 +158,9 @@ file dialog reads only extensions and would otherwise offer every file on disk.
 Two things a deployment has to know:
 
 - The uploads root (`UPLOAD_PATH`) needs its `tmp/`, `avatars/`, `artists/`
-  and `releases/` directories. The Leptos `setup` used to create them; the
-  dioxus server only reads `UPLOAD_PATH`, so `run-dioxus-gate.sh` now
-  `mkdir -p`s them.
+  and `releases/` directories. The dioxus server only reads `UPLOAD_PATH`
+  and never creates them, so deployments must `mkdir -p` them
+  (`run-dioxus-gate.sh` does).
 - Nothing in the transport caps a streamed body, so the per-configuration
   limit (10 MB avatars, 100 MB artist/release images) is enforced while
   streaming (413, partial file removed). A reverse proxy still needs its own
@@ -176,9 +175,9 @@ needs the client build above. The widget's markup is also a real
 javascript off, or on the SSR-only server (which serves no wasm bundle), the
 click is a browser form post to `/forms/upload` (`server::upload_form`), which
 stores the file, attaches it to the row and 303s back with `?uploaded=1` or
-`?bad_upload=<code>`. A file input in a form with neither POST nor multipart was
-exactly what made uploads do nothing before slice 6c — the browser drops the file
-and says so in the console. The javascript-off path has no progress bar: the
+`?bad_upload=<code>`. A file input in a form with neither POST nor multipart is
+exactly what made uploads do nothing during development — the browser drops the
+file and says so in the console. The javascript-off path has no progress bar: the
 browser's own network UI is the feedback.
 
 Attaching the file is deliberately narrow. The shared tail
@@ -190,11 +189,10 @@ attach a picture silently renames any row whose slug does not match its name
 (that bug reached the gate: the `e2e-tabs` fixture lost its slug and every
 admin check behind it served NotFound). The endpoint answers the stored name,
 and pages that show the image pass `on_uploaded` to the widget and swap their
-`<img src>` from it, which is what Leptos' reactive refresh looked like — a
-page cannot refetch its own page data, since `use_page` never exposes its
-resource.
+`<img src>` from it — a page cannot refetch its own page data, since `use_page`
+never exposes its resource.
 
-### The desktop window (slices 6a–6f)
+### The desktop window
 
 The same `src/ui` page tree also builds as a native window (`dioxus-desktop`:
 a tao window around the system webview — on Linux that means `webkit2gtk-4.1`,
@@ -229,7 +227,7 @@ subresources, so no CORS). Repeat the copy after every `dx build --platform
 desktop` — the build recreates that directory.
 
 `dx bundle` cannot carry that tree today, and it is worth knowing why before
-Phase 7 tries it: `[bundle] resources` entries are copied **file by file, flat**
+mobile packaging leans on it: `[bundle] resources` entries are copied **file by file, flat**
 into `usr/lib/<product name>/` (only the file name is kept, and a directory
 entry fails the bundle), while the window asks for `/assets/images/…` with its
 subdirectories. `dx` does recurse into `asset_dir` (`assets/` by default) and
@@ -250,7 +248,7 @@ with `include_bytes!`, so the icon does not depend on the bundle layout — into
 copyright, `icon = [Logo.png, Logo.svg]`) is separate: those are the values
 `dx bundle` puts in the Linux `.desktop` entry and hicolor theme, and the
 identifier is the permanent store identity on Android/iOS. A first
-`dx bundle --platform desktop --package-types deb` (phase 8) proved the table
+`dx bundle --platform desktop --package-types deb` proved the table
 and surfaced two quirks: `dx`'s `AppCategory` parser does not accept `Office`
 (it silently emitted an empty `Categories=`; the accepted spelling that maps
 to freedesktop `Office;` is `Business`), and the launcher names come from the
@@ -265,14 +263,14 @@ session cookie round-trips without any CORS or `SameSite` work.
 dioxus blocks in-app navigation after the first load, so the plain-HTML 303 form
 fallbacks the SSR pages use are inert in the window: every form a user needs to
 submit natively goes through the reactive `use_action` + JSON-twin path. Login,
-register and logout joined them in slice 6d: three server fns under
+register and logout joined them: three server fns under
 `/api/login`, `/api/register` and `/api/logout`, next to the `/auth/*`
 handlers rather than on the same path
 (axum refuses a method+path twice), answering an `AuthOutcome` —
 `LoggedIn { user }`, `Done`, or `Failed { code }` with the same fixed codes the
 `?bad=` query carries.
 
-Slice 6i finished the job for the rest of the app: the record-label, page,
+The same reactive path covers the rest of the app: the record-label, page,
 artist, release, track and links editors plus the profile and change-password
 pages each have a matching JSON twin under `/api/*` (e.g. `/api/update_artist`,
 `/api/restore_track`). They answer `EditOutcome` —
@@ -299,7 +297,7 @@ cargo test -- ui::       # just the route-table + UI component tests
 ## Running the project
 
 The dev flow is build-and-serve (there is no `dx serve` web watch mode for
-this crate — the note above and MIGRATION.md risk 10 explain why):
+this crate — the wasm client note above explains why):
 
 ```bash
 sh end2end/run-dioxus-web.sh      # wasm client, served hydrated on 127.0.0.1:8131
@@ -326,17 +324,26 @@ release deploys as that bundle plus the server binary, with
 `DIOXUS_PUBLIC_PATH` pointing at the bundle directory. Desktop packaging
 works: `dx bundle --platform desktop --package-types deb --bin dioxus-desktop
 --features desktop --no-default-features --release` produces an installable
-`.deb` under `target/dx/dioxus-desktop/bundle/linux/deb/` (proven in phase 8;
+`.deb` under `target/dx/dioxus-desktop/bundle/linux/deb/` (proven;
 the statics gap noted in the desktop section still applies). Mobile
-packaging is Phase 7 work.
+packaging (iOS/Android) is the remaining target, and it carries non-code
+work to schedule: pin the deployed API's cross-origin session semantics for
+native clients (CORS plus deliberate `Secure`/`HttpOnly`/`SameSite`
+choices — today the native clients keep cookies in the reqwest jar inside
+the app process, not in the webview), and the App Store review / Play Data
+Safety declarations. Desktop and mobile render through the system webview
+(wry): the same HTML/CSS everywhere and no native widgets — an accepted
+design choice.
 
-Dependency policy: `Cargo.lock` is committed (this crate ships as binaries)
+Dependency policy: `Cargo.lock` is committed (this crate ships binaries)
 and CI/release builds pass `--locked` — `dx build` and `dx bundle` accept it
 as `--cargo-args --locked`. A lockfile that is stale or missing should fail
 the build rather than silently re-resolve. Dependency updates mean
-regenerating the lockfile in its own commit and rerunning the gate. (Fresh
-lock-free resolution works since the yanked `axum_session` stack left with
-Leptos — but builds should not depend on that; see MIGRATION.md risk 9.)
+regenerating the lockfile in its own commit and rerunning the gate. Keep
+the `dx` CLI and the `dioxus` crates on the same 0.7.x (0.7.10 at the
+moment); re-evaluate when 0.8 goes stable. CI/CD is deliberately not set up
+for this repo — anything needing signing secrets (mobile builds) is a
+decision to make first.
 
 ## Testing Your Project
 

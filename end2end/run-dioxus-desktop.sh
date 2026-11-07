@@ -1,5 +1,5 @@
 #!/bin/sh
-# Desktop dev launcher (MIGRATION.md Phase 6 slice 6b).
+# Desktop dev launcher.
 #
 # Builds the desktop client with `dx`, puts the app's static files where the
 # native asset resolver looks for them, then opens the window against the API.
@@ -7,7 +7,7 @@
 # `dx` only bundles files registered with `asset!()`, and this app keeps its
 # statics in `public/` (shared with the web and SSR targets), so they are
 # copied into the bundle here. `dx bundle` will take them from
-# `[bundle] resources` instead (slice 6e).
+# `[bundle] resources` instead.
 #
 # Start the API first, if it is not already running:
 #   IP=127.0.0.1 PORT=8127 DIOXUS_PUBLIC_PATH=public ./target/debug/dioxus-server

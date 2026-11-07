@@ -1,11 +1,11 @@
 //! The record-label editor.
 //!
-//! Like the slice-3 auth pages, the form posts to a plain-HTML handler in
+//! Like the auth pages, the form posts to a plain-HTML handler in
 //! `crate::server::forms` (`POST /admin/forms/label`), and the page reads
 //! the handler's fixed query codes: `?updated=1` after a successful save,
 //! `?bad=<code>` after a failure.
 //!
-//! From Phase 6 slice 6i the editor also saves **reactively**: with a client
+//! The editor also saves **reactively**: with a client
 //! build `onsubmit` prevents the post and a `use_action` calls the JSON twin
 //! at the bottom of this module (`/api/update_record_label`), which answers
 //! the saved `LabelResult` (or the same fixed codes as data). The header and
@@ -84,7 +84,7 @@ fn EditLabelBody(
         }
     };
 
-    // Reactive save (slice 6i): with a client build the `onsubmit` below
+    // Reactive save: with a client build the `onsubmit` below
     // prevents the post and calls the twin at the bottom of this module; the
     // plain form post stays as the javascript-off path (and is the only path
     // a browser without one has).
@@ -264,7 +264,7 @@ fn label_message(code: Option<&str>) -> Option<&'static str> {
 }
 
 // ---------------------------------------------------------------------------
-// Reactive twin of the `/admin/forms/label` handler (slice 6i)
+// Reactive twin of the `/admin/forms/label` handler
 // ---------------------------------------------------------------------------
 //
 // Same service and same fixed codes as the javascript-off handler in

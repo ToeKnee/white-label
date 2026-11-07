@@ -1,4 +1,4 @@
-//! Dioxus-native data loading for the UI (MIGRATION.md Phase 4 slice 2).
+//! Dioxus-native data loading for the UI.
 //!
 //! Page components reach these through `super::use_page` (with `page_data`
 //! adapting the result), which suspends the enclosing `SuspenseBoundary`

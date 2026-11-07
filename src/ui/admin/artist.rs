@@ -8,7 +8,7 @@
 //! maps the codes to text mirroring the service's messages — the parameter
 //! value is never echoed.
 //!
-//! From Phase 6 slice 6i the editors also save **reactively**: with a client
+//! The editors also save **reactively**: with a client
 //! build `onsubmit` prevents the post and one `use_action` calls the JSON
 //! twins at the bottom of this module (`/api/*_artist`), which answer
 //! the page's own `ArtistResult` (or the same fixed codes as data). The row on
@@ -96,7 +96,7 @@ fn CreateArtistBody(
         }
     };
 
-    // Reactive create (slice 6i): the twin answers the new row and the page
+    // Reactive create: the twin answers the new row and the page
     // navigates to its editor, which is what the 303 does without a client
     // build. The router is looked up rather than hooked (`use_navigator` would
     // panic) because the routerless SSR markup tests render this page alone.
@@ -221,7 +221,7 @@ fn EditArtistBody(artist_slug: String, updated: Option<String>, bad: Option<Stri
         }
     };
 
-    // Reactive saves (slice 6i): update, delete and restore all go through one
+    // Reactive saves: update, delete and restore all go through one
     // action, so "the last thing the user did" is a single answer to read. With
     // a client build the `onsubmit` handlers below prevent the post and call
     // the twins at the bottom of this module; the plain form posts stay as the
@@ -388,7 +388,7 @@ pub(super) fn artist_message(code: Option<&str>) -> Option<&'static str> {
 }
 
 // ---------------------------------------------------------------------------
-// Reactive twins of the `/admin/forms/artist*` handlers (slice 6i)
+// Reactive twins of the `/admin/forms/artist*` handlers
 // ---------------------------------------------------------------------------
 //
 // Same services and same fixed codes as the javascript-off handlers in

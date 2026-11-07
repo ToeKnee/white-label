@@ -1,4 +1,4 @@
-//! Shared plumbing for the reactive editors (MIGRATION.md Phase 6 slice 6i).
+//! Shared plumbing for the reactive editors.
 //!
 //! Every admin editor has two submission paths that must behave the same: the
 //! javascript-off `<form action="/admin/forms/…">` post (whose 303 the page

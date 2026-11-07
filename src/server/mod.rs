@@ -1,4 +1,4 @@
-//! Dioxus server side of the migration (see MIGRATION.md, Phases 1–3).
+//! The server side of the app: the axum stack behind every target.
 //!
 //! Assembles the axum router that `dioxus::serve` wraps: the app database
 //! pool as a request extension, `tower-sessions` backed by Postgres,
@@ -249,12 +249,12 @@ mod tests {
     async fn guests_visiting_admin_routes_get_the_login_form(pool: PgPool) {
         let server = test_server(pool, None).await;
 
-        // (slice 4) The `AdminRoot` layout gates every admin route: guests
-        // get the login page rendered in place of the guarded route (the
-        // slice-3 pattern; the redirect swaps the route out of the SSR
-        // render, so the admin menu never appears). The seeded artist
-        // profile (slice 5a) is asserted with an admin session below, as
-        // are the placeholder release/track pages.
+        // The `AdminRoot` layout gates every admin route: guests get the
+        // login page rendered in place of the guarded route (the same
+        // pattern as the auth guard; the redirect swaps the route out of the
+        // SSR render, so the admin menu never appears). The seeded artist
+        // profile is asserted with an admin session below, as are the
+        // release and track editors.
         let routes = [
             "/admin",
             "/admin/label",
@@ -421,7 +421,7 @@ mod tests {
             .expect("label_owner user fixture");
 
         // `save_cookies` carries the login session into the SSR requests —
-        // the extractor side of slice 2's data loading.
+        // the extractor side of the page data loading.
         let server = api_server(pool).await;
 
         let guest_body = server.get("/artists").await.text();
@@ -440,7 +440,7 @@ mod tests {
         );
     }
 
-    // --- Auth form flows (MIGRATION.md Phase 4 slice 3) -----------------
+    // --- Auth form flows -----------------
     //
     // The pages in `crate::ui::auth` post to the 303-redirect handlers in
     // `crate::server::forms`; `api_server`'s cookie jar plays the browser.
@@ -614,7 +614,7 @@ mod tests {
         assert!(home.contains("Register"), "session should be gone:\n{home}");
     }
 
-    // --- Reactive auth twins (`POST /api/login` & co, Phase 6 slice 6d) ----
+    // --- Reactive auth twins (`POST /api/login` & co) ----
     //
     // The desktop window and the wasm client cannot post a form and follow the
     // 303, so these JSON twins carry the same flows as data. They share the
@@ -1019,7 +1019,7 @@ mod tests {
         assert_eq!(location(&fresh), "/");
     }
 
-    // --- Reactive profile and change-password twins (Phase 6 slice 6i) ---
+    // --- Reactive profile and change-password twins ---
     //
     // A webview window cannot follow the `/profile?saved=1` and
     // `?bad=<code>` redirects these handlers answer with, so the twins carry the
@@ -1214,7 +1214,7 @@ mod tests {
         );
     }
 
-    // --- Admin pages and forms (MIGRATION.md Phase 4 slice 4) ----------
+    // --- Admin pages and forms ----------
 
     /// Log `test-<n>` (password "password") into an `api_server` jar, through
     /// the login server fn the Dioxus clients use.
@@ -1626,7 +1626,7 @@ mod tests {
         assert_eq!(location(&response), "/admin/page?bad=forbidden");
     }
 
-    // --- Artist profile forms (MIGRATION.md Phase 4 slice 5a) ----------
+    // --- Artist profile forms ----------
 
     #[expect(
         clippy::future_not_send,
@@ -1683,7 +1683,7 @@ mod tests {
             ],
         );
 
-        // Renaming re-slugifies (like `Page::update` did in slice 4): the
+        // Renaming re-slugifies (`Page::update` does the same): the
         // redirect carries the *new* slug with the success code.
         let renamed = post_form(
             &server,
@@ -2165,7 +2165,7 @@ mod tests {
         let server = api_server(pool).await;
         login_as(&server, 1).await;
 
-        // The release editor's tracks sidebar (slice 5c) renders from the
+        // The release editor's tracks sidebar renders from the
         // editor's own release fetch; a release without tracks gets the
         // empty-state row plus the Add link.
         let editor = server
@@ -2540,7 +2540,7 @@ mod tests {
         );
     }
 
-    /// Slice 5d: the links editor page and its no-JS form handler. The GET
+    /// The links editor page and its no-JS form handler. The GET
     /// renders one input per platform, the 303 handler
     /// saves and steers back with `?updated=1`, and failures carry fixed
     /// codes.
@@ -2926,7 +2926,7 @@ mod tests {
         );
     }
 
-    /// The artist Images tab (Phase 5 slice 5g): the SSR body carries the
+    /// The artist Images tab: the SSR body carries the
     /// upload widget addressed to the artist slug, and the artist's current
     /// primary image below it (the site logo until one is stored).
     #[expect(
@@ -2981,7 +2981,7 @@ mod tests {
         );
     }
 
-    /// The release editor's image uploader (slice 5g) renders below the field
+    /// The release editor's image uploader renders below the field
     /// form — a sibling, never nested inside it — with the release's current
     /// image under it.
     #[expect(
@@ -3041,9 +3041,9 @@ mod tests {
     )]
     #[sqlx::test]
     async fn nested_admin_layouts_render_outside_in(pool: PgPool) {
-        // Slice 5a made the profile editor real, so this check now runs with
+        // The profile editor is a real form, so this check runs with
         // an admin + label_owner session and a seeded artist (the tab layout
-        // is `AdminArtistRoot`, still in `ui::placeholders`).
+        // is `AdminArtistRoot` in `ui::admin::artist_root`).
         create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
             .await
             .expect("admin + label_owner user");
@@ -3075,7 +3075,7 @@ mod tests {
             ],
         );
 
-        // Slice 5b: the Releases tab now serves the real list page (the
+        // The Releases tab serves the real list page (the
         // seeded artist has no releases yet, hence the empty-state row).
         let releases = server.get("/admin/artist/test-artist-1/releases").await;
         assert_shell(
@@ -3087,7 +3087,7 @@ mod tests {
             ],
         );
 
-        // Slice 5d: the Links tab inside the artist tab layout.
+        // The Links tab inside the artist tab layout.
         let links = server.get("/admin/artist/test-artist-1/links").await;
         assert_shell(
             &links,
@@ -3123,7 +3123,7 @@ mod tests {
         let server = api_server(pool).await;
         login_as(&server, 1).await;
 
-        // Slice 5c made the track editor real: it loads the seeded row all
+        // The track editor loads the seeded row all
         // the way down the artist/release/track path.
         let deep = server
             .get("/admin/artist/test-artist-1/release/test-release-1/track/test-track-1")
@@ -3152,8 +3152,8 @@ mod tests {
         );
 
         // One route variant parses both the exact and trailing-slash forms
-        // of a path (MIGRATION.md risk 4); the trailing-slash profile URL
-        // now serves the real editor.
+        // of a path; the trailing-slash profile URL now serves the real
+        // editor.
         let slashed = server.get("/admin/artist/test-artist-1/").await;
         assert_shell(
             &slashed,

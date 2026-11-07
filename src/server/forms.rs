@@ -1,5 +1,4 @@
-//! Server-side handlers for the app's plain HTML forms (MIGRATION.md
-//! Phase 4 slices 3-5).
+//! Server-side handlers for the app's plain HTML forms.
 //!
 //! The `crate::ui::auth` pages render `<form method="post">` elements that
 //! post to these handlers under the `/auth` namespace — deliberately *not*
@@ -21,7 +20,7 @@
 //! - The session cookie (tower-sessions defaults) is `HttpOnly` +
 //!   SameSite=Lax, which blocks cross-site form posts from modern
 //!   browsers. `Secure`/`SameSite=None` decisions for deployment and an
-//!   optional CSRF-token pass are tracked as a follow-up in MIGRATION.md.
+//!   optional CSRF-token pass remain open follow-ups for deployment.
 //! - Login and register failures answer fixed codes (see [`login_code`]
 //!   and [`register_code`]), the same ones the Dioxus auth server fns
 //!   return; bcrypt work happens only for an existing username.
@@ -69,12 +68,12 @@ pub fn form_routes() -> Router {
         .route("/auth/logout", post(logout))
         .route("/auth/profile", post(update_profile))
         .route("/auth/change-password", post(change_password))
-        // Admin forms (slices 4-5). These post under the separate
+        // Admin forms. These post under the separate
         // `/admin/forms` namespace rather than the pages' own paths: the
         // EditPage route `/admin/page/:slug` would swallow POSTs sent to
         // `/admin/page/<anything>` (and likewise every dynamic admin GET
         // path), and registering methods on page paths would 405 their SSR
-        // GETs (the slice-3 lesson).
+        // GETs.
         .route("/admin/forms/label", post(update_label))
         .route("/admin/forms/page", post(create_page))
         .route("/admin/forms/page/update", post(update_page))
@@ -93,7 +92,7 @@ pub fn form_routes() -> Router {
         .route("/admin/forms/track/delete", post(delete_track))
         .route("/admin/forms/track/restore", post(restore_track))
         .route("/admin/forms/links", post(submit_links))
-        // The upload widget's javascript-off form (Phase 6). Not under
+        // The upload widget's javascript-off form. Not under
         // `/admin/forms` because the avatar upload lives on `/profile`.
         .route(
             super::upload_form::PATH_UPLOAD_FORM,
@@ -258,7 +257,7 @@ pub fn change_password_code(error: &AppError) -> &'static str {
     }
 }
 
-// --- Admin forms (MIGRATION.md Phase 4 slice 4) --------------------------
+// --- Admin forms --------------------------
 //
 // The dashboard-side editors in `crate::ui::admin` post here; the fixed
 // codes below are mapped to alert text there (`label_message`,

@@ -1,6 +1,4 @@
-//! Desktop client entry (MIGRATION.md Phase 6 slice 6a, window metadata 6f).
-//!
-//! The same `crate::ui` page tree, launched in a system webview window
+//! Desktop client entry: the same `crate::ui` page tree, launched in a system webview window
 //! (`dioxus-desktop`: tao window + wry webview). There is no SSR here: the
 //! app boots client-side and every fullstack call in `ui/data.rs` becomes an
 //! HTTP request made by dioxus' own `reqwest` client, which keeps a
@@ -29,7 +27,7 @@
 //! (`IP`/`PORT` of the SSR server, e.g. the gate's 8127). Note that the
 //! window's own origin is `http://dioxus.index.html/`, so links inside the app
 //! have to be typed `Route`s (see `ui/assets.rs` for the equivalent rule about
-//! files, and `MIGRATION.md` slice 6g for why plain `<a href>` escapes).
+//! files: a plain `<a href>` would navigate the window off its own origin).
 
 /// Title bar text, and the window class Linux desktop environments use to
 /// match the taskbar entry to the `.desktop` file.

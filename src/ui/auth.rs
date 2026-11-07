@@ -14,7 +14,7 @@
 //!   hydrated web
 //!   client and the desktop window submit without a page load. For the window
 //!   this is not an optimisation but the only path: a webview cannot follow a
-//!   303, which is why it could not log in before slice 6d.
+//!   303.
 //!
 //! Both paths fail identically. The twins answer with
 //! [`crate::api_types::auth::AuthOutcome`], carrying the same fixed codes
@@ -28,7 +28,7 @@
 //! session when they mount, but the shell's navbar outlives client
 //! navigations, and a page resource resolves once per component, so the menu
 //! needs the action's own answer rather than another fetch. The profile page
-//! uses the same trick for a saved rename (slice 6i): the navbar's session
+//! uses the same trick for a saved rename: the navbar's session
 //! resource resolved before the save, so a rename hands it the whole stored
 //! user rather than another fetch.
 //!
@@ -365,7 +365,7 @@ pub fn EditProfile(
 /// login page; the boundary's spinner only shows while the session
 /// resource is in flight (never during the redirect itself).
 ///
-/// Like the other editors from slice 6i, a client build saves reactively
+/// Like the other editors, a client build saves reactively
 /// (the twin at the bottom of this module) while the plain post to
 /// `/auth/profile` stays as the javascript-off path, and the fields and the
 /// alerts follow the answer the save gave rather than a reload.
@@ -675,7 +675,7 @@ fn PasswordForm(
 }
 
 // ---------------------------------------------------------------------------
-// Reactive twins of the `/auth/*` handlers (MIGRATION.md Phase 6 slices 6d, 6i)
+// Reactive twins of the `/auth/*` handlers
 // ---------------------------------------------------------------------------
 //
 // Same services, same session records and same fixed failure codes as the form

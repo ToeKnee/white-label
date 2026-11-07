@@ -287,7 +287,7 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
     };
     let release_id = release.id;
 
-    // Reactive create (slice 6i): the twin answers the new row and the page
+    // Reactive create: the twin answers the new row and the page
     // navigates to its editor, which is what the 303 does without a client
     // build. The router is looked up rather than hooked (`use_navigator` would
     // panic) because the routerless SSR markup tests render this page alone.
@@ -511,7 +511,7 @@ fn EditTrackBody(
         }
     };
 
-    // Reactive saves (slice 6i): update, delete and restore all go through one
+    // Reactive saves: update, delete and restore all go through one
     // action, so "the last thing the user did" is a single answer to read. With
     // a client build the `onsubmit` handlers below prevent the post and call
     // the twins at the bottom of this module; the plain form posts stay as the
@@ -732,7 +732,7 @@ fn track_message(code: Option<&str>) -> Option<&'static str> {
 }
 
 // ---------------------------------------------------------------------------
-// Reactive twins of the `/admin/forms/track*` handlers (slice 6i)
+// Reactive twins of the `/admin/forms/track*` handlers
 // ---------------------------------------------------------------------------
 //
 // Same services and same fixed codes as the javascript-off handlers in

@@ -1,4 +1,4 @@
-//! Web (wasm) client entry (MIGRATION.md Phase 5). Built to
+//! Web (wasm) client entry. Built to
 //! `wasm32-unknown-unknown` by `dx build`; the SSR server injects the
 //! bundle into every page when the public dir it serves contains the
 //! generated `index.html` (see `dioxus_server::ServeConfig`).

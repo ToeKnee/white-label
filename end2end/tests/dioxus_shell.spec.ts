@@ -1,24 +1,23 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Dioxus shell navigation smoke test (see MIGRATION.md Phases 3-4). Run against
+ * Dioxus shell navigation smoke test. Run against
  * a live Dioxus server via `end2end/run-dioxus-gate.sh`; override the target
  * with DIOXUS_URL. The public site (home, artists, artist, release, page),
  * the auth pages (login/register/logout/profile) and the admin section
  * (gate, dashboard, label/page/artist-profile/release/track/links editors)
- * are real since slices 2-5d and are rendered server-side from the gate's
+ * are real forms rendered server-side from the gate's
  * database, so these assertions read
  * the label and artist names from the page instead of hardcoding fixture
  * data. The gate seeds an `e2e-dioxus`/`password` account through the app's
  * own register handler (idempotent across runs); admin tests need an
  * `e2e-admin` account seeded with the admin/label_owner permissions
- * out-of-band and are skipped unless the gate reports `E2E_ADMIN_OK`.
- * The artist images tab is real since Phase 5 slice 5g. Since Phase 6 the
+ * out-of-band and are skipped unless the gate reports `E2E_ADMIN_OK`. The
  * upload widget also renders a plain multipart form, so this spec (which runs
  * against the server with no wasm bundle) uploads for real the way a
  * javascript-off browser does; the client spec covers the streaming path.
  * There is no wasm bundle on this server, so clicks are full page loads
- * (hydration smoke coverage comes once the client targets land, Phases 4-7).
+ * (hydration smoke coverage is `dioxus_client.spec.ts`).
  */
 const base = process.env.DIOXUS_URL ?? "http://127.0.0.1:8127";
 
@@ -128,7 +127,7 @@ test("the signed-in flow: user menu, profile form and logout", async ({ page }) 
 });
 
 test("a guest visiting a guarded page is served the login page", async ({ page }) => {
-  // Deviation note (MIGRATION.md slice 3): a component-level redirect renders
+  // A component-level redirect renders
   // the login page *inside* the current URL (dioxus has no 303 from SSR
   // components); the login form is what the guest gets to interact with.
   await page.goto(`${base}/profile`);
@@ -137,7 +136,7 @@ test("a guest visiting a guarded page is served the login page", async ({ page }
 });
 
 test("a guest visiting an admin page is served the login page too", async ({ page }) => {
-  // The slice-4 `AdminRoot` gate uses the same pattern; the admin menu
+  // The `AdminRoot` gate uses the same pattern; the admin menu
   // never renders for guests.
   await page.goto(`${base}/admin`);
   await expect(h1(page)).toHaveText("Login");
@@ -156,8 +155,7 @@ test("the artists index lists the public artists", async ({ page }) => {
 
 test("an unknown artist slug renders an empty artist page", async ({ page }) => {
   // A missing artist is logged and rendered as an empty artist page rather
-  // than redirected, as the Leptos original did; the 404 comes from the data
-  // endpoint, not from the route.
+  // than redirected; the 404 comes from the data endpoint, not from the route.
   await page.goto(`${base}/artists/there-is-no-such-artist`);
   await expect(page).toHaveURL(/\/artists\/[a-z-]+$/);
   await expect(page.locator(".navbar")).toBeVisible();
@@ -165,12 +163,11 @@ test("an unknown artist slug renders an empty artist page", async ({ page }) => 
 });
 
 test("an unknown release route keeps the shell and shows 404", async ({ page }) => {
-  // Deviation from the Leptos originals, which answered a missing artist or
-  // release under `/artists/...` with a 303 redirect. Dioxus cannot re-render
-  // an ancestor route out of a nested one while streaming SSR, so the unmatched
-  // segment falls through to the app's 404 page inside the shell. The Rust SSR
-  // tests in `crate::server` cover the in-process redirect attempts; revisit
-  // once the client router lands (Phases 6-7).
+  // A missing artist or release under `/artists/...` is not answered with a
+  // 303 redirect: dioxus cannot re-render an ancestor route out of a nested
+  // one while streaming SSR, so the unmatched segment falls through to the
+  // app's 404 page inside the shell. The Rust SSR tests in `crate::server`
+  // cover the in-process redirect attempts.
   await page.goto(`${base}/`);
   await labelName(page);
   await page.goto(`${base}/artists/there-is-no-such-artist/releases/nonsense`);
@@ -180,10 +177,9 @@ test("an unknown release route keeps the shell and shows 404", async ({ page }) 
 });
 
 test("an unknown release slug under a known artist shows 404", async ({ page }) => {
-  // Deviation from the Leptos original, which redirected to the artist page:
-  // dioxus cannot re-render an ancestor route out of a nested one during SSR,
+  // Dioxus cannot re-render an ancestor route out of a nested one during SSR,
   // so the deeper segment stays unmatched and the app's NotFound page renders.
-  // See the open note in MIGRATION.md (Phase 4 slice 2). The artist slug comes
+  // The artist slug comes
   // from the artists index so this needs no fixture names.
   await page.goto(`${base}/artists`);
   const firstCard = page
@@ -204,7 +200,7 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
   await loginAs(page, "e2e-admin");
 
   // `e2e-tabs` is seeded idempotently by end2end/run-dioxus-gate.sh; the
-  // profile editor (slice 5a) fetches the real row, so the header is the
+  // profile editor fetches the real row, so the header is the
   // artist name + "Profile" rather than the old placeholder.
   await page.goto(`${base}/admin/artist/e2e-tabs`);
   await expect(h1(page)).toHaveText("E2E Tabs Artist Profile");
@@ -213,14 +209,14 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
 
   await page.getByRole("tab", { name: "Releases" }).click();
   await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/releases\/?$/);
-  // Slice 5b made the releases tab real: the list header names the artist.
+  // The releases tab is a real list: the header names the artist.
   await expect(h1(page)).toHaveText("E2E Tabs Artist Releases");
   await expect(page.getByRole("tab", { name: "Releases" })).toHaveClass(/tab-active/);
 
   await page.getByRole("tab", { name: "Links" }).click();
   // (Links to routes with optional query segments render a trailing `?`.)
   await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/links\??$/);
-  // Slice 5d made the links tab real: the editor header names the artist.
+  // The links tab's editor header names the artist.
   await expect(h1(page)).toHaveText("E2E Tabs Artist Links");
   await expect(page.getByRole("tab", { name: "Links" })).toHaveClass(/tab-active/);
 
@@ -228,7 +224,7 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
   // The images tab carries the upload form's query codes too, so its link
   // renders the trailing `?` like the links tab above.
   await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\/?\??$/);
-  // Slice 5g made the images tab real: header + the upload picker; the
+  // The images tab shows the header + the upload picker; the
   // javascript-off upload below and the client spec cover the upload itself.
   await expect(h1(page)).toHaveText("E2E Tabs Artist Images");
   await expect(page.getByRole("tab", { name: "Images" })).toHaveClass(/tab-active/);
@@ -239,7 +235,7 @@ test("an upload works without javascript, as a multipart form post", async ({ pa
   requireAdmin();
   await loginAs(page, "e2e-admin");
 
-  // Phase 6: this server serves no wasm bundle, so clicking Upload is exactly
+  // This server serves no wasm bundle, so clicking Upload is exactly
   // what a javascript-off browser does — a multipart POST to /forms/upload,
   // which stores the file and 303s back to the images tab with ?uploaded=1.
   await page.goto(`${base}/admin/artist/e2e-tabs/images`);
@@ -370,7 +366,7 @@ test("release create, rename, delete and restore round-trip", async ({ page }) =
 
   // Create through the releases list Add button; the 303 lands silently on
   // the release editor under the slug derived from the name (the create
-  // handler carries no ?updated=1, parity with the Leptos action).
+  // handler carries no ?updated=1).
   const stamp = Date.now();
   await page.goto(`${base}/admin/artist/e2e-tabs/releases`);
   await page.getByRole("link", { name: "Add" }).click();
@@ -418,7 +414,7 @@ test("track create, rename, delete and restore round-trip", async ({ page }) => 
   await page.getByRole("button", { name: "Create" }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/artist/e2e-tabs/release/e2e-track-release-${stamp}$`));
 
-  // The release editor's Tracks sidebar (real since slice 5c) links to the
+  // The release editor's Tracks sidebar links to the
   // track create page through its Add button.
   await page.getByRole("link", { name: "Add" }).click();
   // (Links to routes with optional query segments render a trailing `?`.)
@@ -473,7 +469,7 @@ test("artist links save and clear through the 303 fallback", async ({ page }) =>
   requireAdmin();
   await loginAs(page, "e2e-admin");
 
-  // The links editor (slice 5d) renders one input per platform with the
+  // The links editor renders one input per platform with the
   // saved URL pre-filled. There is no wasm client yet, so Update is a
   // full-page POST that 303s back with ?updated=1 and the alert.
   const stamp = Date.now();

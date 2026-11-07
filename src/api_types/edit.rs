@@ -1,5 +1,4 @@
-//! The shared outcome type for the reactive editors (MIGRATION.md Phase 6
-//! slice 6i).
+//! The shared outcome type for the reactive editors.
 
 /// What a reactive editor action answered.
 ///

@@ -1,4 +1,4 @@
-//! The javascript-off upload form (MIGRATION.md Phase 6).
+//! The javascript-off upload form.
 //!
 //! The dioxus upload widget speaks a request-body protocol
 //! (`POST /api/upload` with a streamed `FileStream`), which needs the wasm
