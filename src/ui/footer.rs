@@ -6,7 +6,7 @@
 use dioxus::prelude::*;
 
 use crate::ui::Route;
-use crate::ui::use_global_state;
+use crate::ui::use_label;
 
 /// A footer link to one of the marketing/legal pages.
 fn page_link(slug: &str, label: &str) -> Element {
@@ -24,7 +24,6 @@ fn page_link(slug: &str, label: &str) -> Element {
 /// Renders the application footer.
 #[component]
 pub fn LabelFooter() -> Element {
-    let state = use_global_state();
     rsx! {
         footer { class: "p-10 footer bg-neutral text-neutral-content md:footer-horizontal",
             nav {
@@ -35,7 +34,15 @@ pub fn LabelFooter() -> Element {
                 {page_link("advertisment", "Advertisement")}
             }
             nav {
-                h6 { class: "footer-title", "{state.read().record_label.name}" }
+                // The heading is the label's name from the same resource as
+                // the navbar brand, so nothing else in the column waits on it.
+                h6 {
+                    class: "footer-title",
+                    SuspenseBoundary {
+                        fallback: |_context: SuspenseContext| rsx! {},
+                        LabelName {}
+                    }
+                }
                 {page_link("about-us", "About us")}
                 {page_link("contact", "Contact")}
                 {page_link("press-kit", "Press kit")}
@@ -48,4 +55,16 @@ pub fn LabelFooter() -> Element {
             }
         }
     }
+}
+
+/// The footer's label column heading: the record label's name
+/// (empty until a label exists).
+#[component]
+fn LabelName() -> Element {
+    let label = use_label()?;
+    let name = match label() {
+        Ok(result) => result.record_label.name,
+        Err(_) => String::new(),
+    };
+    rsx! { "{name}" }
 }

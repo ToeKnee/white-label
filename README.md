@@ -249,8 +249,13 @@ with `include_bytes!`, so the icon does not depend on the bundle layout — into
 `[bundle]` table in `Dioxus.toml` (identifier, publisher, descriptions,
 copyright, `icon = [Logo.png, Logo.svg]`) is separate: those are the values
 `dx bundle` puts in the Linux `.desktop` entry and hicolor theme, and the
-identifier is the permanent store identity on Android/iOS. No `dx bundle` has
-been run yet, so that table is staged rather than proven.
+identifier is the permanent store identity on Android/iOS. A first
+`dx bundle --platform desktop --package-types deb` (phase 8) proved the table
+and surfaced two quirks: `dx`'s `AppCategory` parser does not accept `Office`
+(it silently emitted an empty `Categories=`; the accepted spelling that maps
+to freedesktop `Office;` is `Business`), and the launcher names come from the
+bin (`Package: dioxus-desktop`, `Name=DioxusDesktop`), not `[application]`'s
+`name`.
 
 There is no SSR in this target: the app boots client-side and every server fn
 in `ui/data.rs` is a dioxus server fn that becomes an HTTP call, made by
@@ -319,8 +324,19 @@ dx build --release --platform web --bin dioxus-web --features web --no-default-f
 The `dx` web bundle lands in `target/dx/dioxus-web/release/web/public`; the
 release deploys as that bundle plus the server binary, with
 `DIOXUS_PUBLIC_PATH` pointing at the bundle directory. Desktop packaging
-(`dx bundle`) is staged but unproven — see the note in the desktop section
-and Phase 7 in MIGRATION.md.
+works: `dx bundle --platform desktop --package-types deb --bin dioxus-desktop
+--features desktop --no-default-features --release` produces an installable
+`.deb` under `target/dx/dioxus-desktop/bundle/linux/deb/` (proven in phase 8;
+the statics gap noted in the desktop section still applies). Mobile
+packaging is Phase 7 work.
+
+Dependency policy: `Cargo.lock` is committed (this crate ships as binaries)
+and CI/release builds pass `--locked` — `dx build` and `dx bundle` accept it
+as `--cargo-args --locked`. A lockfile that is stale or missing should fail
+the build rather than silently re-resolve. Dependency updates mean
+regenerating the lockfile in its own commit and rerunning the gate. (Fresh
+lock-free resolution works since the yanked `axum_session` stack left with
+Leptos — but builds should not depend on that; see MIGRATION.md risk 9.)
 
 ## Testing Your Project
 

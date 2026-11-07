@@ -56,9 +56,7 @@ pub use shell::App;
 use dioxus::prelude::*;
 
 use crate::api_types::record_label::LabelResult;
-use crate::models::artist::Artist;
 use crate::models::auth::User;
-use crate::models::record_label::RecordLabel;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// The error a page resource carries: the message and status the server
@@ -155,9 +153,9 @@ where
     resource.suspend()
 }
 
-/// The record label load used by the navbar brand and the home/artists
-/// headings (created per component — see the load-order note in
-/// `LabelHomeBody`).
+/// The record label load used by the navbar brand, the footer's label column
+/// and the home/artists headings (created per component — see the load-order
+/// note in `LabelHomeBody`).
 ///
 /// The `?` on the result suspends the enclosing `SuspenseBoundary`.
 ///
@@ -179,29 +177,6 @@ pub fn markdown_html(source: &str) -> String {
             String::new()
         }
     }
-}
-
-/// The chrome's coarse app state: the label and artist the current page is
-/// about.
-///
-/// [`App`] provides it as a `Signal` and the footer reads the label name out of
-/// it. Nothing writes it yet — each page answers with its own record — so the
-/// footer's title is empty until a slice feeds it from [`use_label`].
-#[derive(Clone, Debug, Default)]
-pub struct GlobalState {
-    /// The record label being viewed.
-    pub record_label: RecordLabel,
-    /// The artist being viewed.
-    pub artist: Artist,
-}
-
-/// The [`GlobalState`] store provided by [`App`] and read by the chrome.
-///
-/// A coarse `Signal` for now; field-level projections if update patterns need
-/// finer subscriptions.
-#[must_use]
-pub fn use_global_state() -> Signal<GlobalState> {
-    use_context()
 }
 
 /// The current user's session, loaded through the `GET /api/user` twin.

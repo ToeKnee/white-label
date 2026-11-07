@@ -89,6 +89,11 @@ test("the bundle boots clean and the router takes over navigation", async ({ pag
   await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs(?:\/|\/\?)?$/, { timeout: 15000 });
   expect(documentLoads, "the Profile click should be SPA navigation").toBe(loadsBeforeTabs);
 
+  // The footer's label column heading hydrates through its own boundary.
+  await expect(page.locator("footer .footer-title").nth(1)).not.toHaveText("", {
+    timeout: 15000,
+  });
+
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
 

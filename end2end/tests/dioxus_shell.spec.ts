@@ -70,6 +70,9 @@ test("home renders the shell: navbar, main, footer", async ({ page }) => {
   await expect(page).toHaveTitle(label);
 
   await expect(page.locator("footer").getByText("Services")).toBeVisible();
+  // The footer's label column heads with the same label name (the boundary
+  // inlines it during SSR, like the brand above).
+  await expect(page.locator("footer .footer-title").nth(1)).toHaveText(label);
 });
 
 test("navbar and footer links navigate", async ({ page }) => {

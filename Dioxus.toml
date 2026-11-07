@@ -12,17 +12,20 @@ title = "White Label"
 watch_path = ["src", "public", "style"]
 
 # Packaging metadata, read by `dx bundle` and by the mobile packagers (Phase 7).
-# Only `dx build` runs today, so none of this is exercised by the gate yet; it
-# is here because `dx bundle` otherwise fills the app with its own defaults,
-# and because the identifier becomes the app's permanent store identity.
+# The Linux `.deb` bundle has been run (phase 8); the gate still only runs
+# `dx build`. The identifier is here because `dx bundle` otherwise fills the
+# app with its own defaults, and because it becomes the app's permanent store
+# identity.
 [bundle]
 # Reverse-domain id — provisional. It is the durable identity on Android/iOS
 # and cannot change after the first store release, so settle it in Phase 7.
 identifier = "net.ynottony.whitelabel"
 publisher = "Anthony Batchelor"
-# Parsed as `AppCategory`; a value it does not recognise silently leaves
-# `Categories=` empty in the Linux `.desktop` file, so re-check on first bundle.
-category = "Office"
+# Parsed as dx's `AppCategory`; a value outside its list silently leaves
+# `Categories=` empty in the Linux `.desktop` file (`Office` was such a value —
+# first-bundle proof). `Business` is the accepted spelling that maps to the
+# freedesktop `Office;` category.
+category = "Business"
 short_description = "White Label: releases, artists, tracks and pages for a record label"
 long_description = """
 White Label is a record-label back office: a catalog of releases, artists and
@@ -42,4 +45,7 @@ icon = ["public/Logo.png", "public/Logo.svg"]
 # `asset_dir` (`assets/` by default), so the options when real packaging
 # matters are to move the statics there, register them with `asset!()`, or
 # serve them from the API origin. Until then the desktop launcher copies
-# `public/` in (see `end2end/run-dioxus-desktop.sh`).
+# `public/` in (see `end2end/run-dioxus-desktop.sh`). The first `.deb` also
+# showed the launcher names come from the bin, not `[application] name`
+# (`Package: dioxus-desktop`, `Name=DioxusDesktop`), and its empty
+# `usr/lib/DioxusDesktop` is the `asset_dir` riding along with nothing in it.

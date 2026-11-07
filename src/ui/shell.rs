@@ -18,7 +18,6 @@
 
 use dioxus::prelude::*;
 
-use crate::ui::GlobalState;
 use crate::ui::Route;
 use crate::ui::SessionHint;
 use crate::ui::assets::bundled_asset;
@@ -28,15 +27,15 @@ use crate::ui::header::LabelHeader;
 /// The application root — handed to `dioxus::server::router` in
 /// `crate::server::build_router`.
 ///
-/// Provides the `GlobalState` context and sets up the document head. (The
+/// Sets up the document head and provides the chrome's [`SessionHint`]. (The
 /// current user is not a context: every component that needs it reads the
-/// session through `super::use_user`.)
+/// session through `super::use_user`, and the label the chrome shows comes
+/// from `super::use_label` in the components that render it.)
 ///
-/// The session hint is the exception: it is what a reactive sign-in or
-/// sign-out hands the chrome, which outlives the navigation and cannot
-/// re-read its own page resource (see [`SessionHint`]).
+/// The session hint is what a reactive sign-in or sign-out hands the chrome,
+/// which outlives the navigation and cannot re-read its own page resource
+/// (see [`SessionHint`]).
 pub fn App() -> Element {
-    use_context_provider(|| Signal::new(GlobalState::default()));
     use_context_provider(|| Signal::new(SessionHint::Unknown));
 
     rsx! {
