@@ -37,6 +37,8 @@ use crate::models::record_label::RecordLabel;
 // below (the fullstack macros cfg them out of client builds).
 #[cfg(feature = "server")]
 use crate::services;
+#[cfg(feature = "server")]
+use crate::services::visibility_for;
 
 /// Maps a service-layer [`AppError`] onto a dioxus `HttpError` with the
 /// status from [`AppError::status`], keeping the message user-presentable.
@@ -53,13 +55,6 @@ pub(crate) fn to_http_error<T>(error: &AppError) -> core::result::Result<T, Http
         404 => HttpError::not_found(message),
         _ => HttpError::internal_server_error(message),
     }
-}
-
-/// Whether hidden (unpublished or deleted) content is listed — the same
-/// `label_owner` check the admin pages and the form handlers apply.
-#[cfg(feature = "server")]
-fn show_hidden(current_user: Option<&User>) -> bool {
-    current_user.is_some_and(|user| user.permissions.contains("label_owner"))
 }
 
 /// The first record label, which drives the navbar brand, the page title
@@ -82,15 +77,19 @@ pub async fn get_record_label() -> core::result::Result<LabelResult, HttpError> 
 }
 
 /// The label's artists. Guests only see published, non-deleted artists;
-/// `label_owner` sessions also see hidden ones.
+/// `label_owner` sessions also see unpublished ones, and
+/// `include_deleted` (the admin "show deleted" toggle) adds soft-deleted
+/// ones.
 ///
 /// # Errors
 /// 500 with a retry message when the label or artists cannot be loaded.
-#[get("/api/record_label_artists",
+#[get("/api/record_label_artists?include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
-pub async fn get_label_artists() -> core::result::Result<LabelArtistResult, HttpError> {
+pub async fn get_label_artists(
+    include_deleted: bool,
+) -> core::result::Result<LabelArtistResult, HttpError> {
     let record_label = match RecordLabel::first(&db.0).await {
         Ok(record_label) => record_label,
         Err(error) => {
@@ -99,7 +98,7 @@ pub async fn get_label_artists() -> core::result::Result<LabelArtistResult, Http
         }
     };
     let artists = match record_label
-        .artists(&db.0, show_hidden(user.0.as_ref()))
+        .artists(&db.0, visibility_for(user.0.as_ref(), include_deleted))
         .await
     {
         Ok(artists) => artists,
@@ -156,36 +155,53 @@ pub async fn update_links(form: LinksForm) -> core::result::Result<LinksResult, 
     }
 }
 
-/// An artist's releases. `label_owner` sessions also see hidden releases.
+/// An artist's releases. `label_owner` sessions also see unpublished
+/// releases; `include_deleted` (the admin "show deleted" toggle) adds
+/// soft-deleted ones.
 ///
 /// # Errors
 /// 404 when the slug matches no artist, 500 on database failure.
-#[get("/api/get_releases?slug",
+#[get("/api/get_releases?slug&include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
-pub async fn get_releases(slug: String) -> core::result::Result<ReleasesResult, HttpError> {
-    match services::release::get_releases_service(&db.0, user.0.as_ref(), slug).await {
+pub async fn get_releases(
+    slug: String,
+    include_deleted: bool,
+) -> core::result::Result<ReleasesResult, HttpError> {
+    match services::release::get_releases_service(&db.0, user.0.as_ref(), slug, include_deleted)
+        .await
+    {
         Ok(result) => Ok(result),
         Err(error) => to_http_error(&error),
     }
 }
 
-/// One release through its artist (the public release page data).
+/// One release through its artist (the public release page data). The
+/// single release row is openable by a `label_owner` session even when
+/// deleted (so an admin can restore it); its track list is a listing and
+/// follows `include_deleted` (the admin "show deleted" toggle).
 ///
 /// # Errors
 /// 404 when the release is not visible to this viewer, 500 on database
 /// failure.
-#[get("/api/get_release?artist_slug&release_slug",
+#[get("/api/get_release?artist_slug&release_slug&include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
 pub async fn get_release(
     artist_slug: String,
     release_slug: String,
+    include_deleted: bool,
 ) -> core::result::Result<ReleaseResult, HttpError> {
-    match services::release::get_release_service(&db.0, user.0.as_ref(), artist_slug, release_slug)
-        .await
+    match services::release::get_release_service(
+        &db.0,
+        user.0.as_ref(),
+        artist_slug,
+        release_slug,
+        include_deleted,
+    )
+    .await
     {
         Ok(result) => Ok(result),
         Err(error) => to_http_error(&error),
@@ -255,34 +271,37 @@ pub async fn get_current_user() -> core::result::Result<Option<User>, HttpError>
 /// The admin side menu: label, artists with their releases, and pages,
 /// each with its admin URL. `crate::services::menu` requires the `admin`
 /// permission, so guests get a 401 the `AdminMenu` component answers with
-/// its static skeleton.
+/// its static skeleton. `include_deleted` is the admin "show deleted"
+/// toggle: soft-deleted rows join the menu only when it is on.
 ///
 /// # Errors
 /// 401/403 when the session is not an admin, 500 with a retry message when
 /// any part of the menu data fails to load.
-#[get("/api/admin_menu",
+#[get("/api/admin_menu?include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
-pub async fn get_admin_menu() -> core::result::Result<AdminMenu, HttpError> {
-    match services::menu::admin_menu(&db.0, user.0.as_ref()).await {
+pub async fn get_admin_menu(include_deleted: bool) -> core::result::Result<AdminMenu, HttpError> {
+    match services::menu::admin_menu(&db.0, user.0.as_ref(), include_deleted).await {
         Ok(menu) => Ok(menu),
         Err(error) => to_http_error(&error),
     }
 }
 
-/// The label's pages by label id, for the dashboard's pages table.
-/// Guests only see published, non-deleted pages; `label_owner` sessions
-/// also see hidden ones.
+/// The label's pages by label id, for the dashboard's pages table. Guests
+/// only see published, non-deleted pages; `label_owner` sessions also see
+/// unpublished ones, and `include_deleted` (the admin "show deleted"
+/// toggle) adds soft-deleted ones.
 ///
 /// # Errors
 /// 500 with a retry message when the label or pages cannot be loaded.
-#[get("/api/record_label_pages?record_label_id",
+#[get("/api/record_label_pages?record_label_id&include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
 pub async fn get_label_pages(
     record_label_id: i64,
+    include_deleted: bool,
 ) -> core::result::Result<LabelPageResult, HttpError> {
     let record_label = match RecordLabel::get_by_id(&db.0, record_label_id).await {
         Ok(record_label) => record_label,
@@ -292,7 +311,7 @@ pub async fn get_label_pages(
         }
     };
     let pages = match record_label
-        .pages(&db.0, show_hidden(user.0.as_ref()))
+        .pages(&db.0, visibility_for(user.0.as_ref(), include_deleted))
         .await
     {
         Ok(pages) => pages,

@@ -43,8 +43,9 @@ fn LabelHomeBody() -> Element {
         }
     };
     // Cloning inside the closure: `use_page` keeps it as an `FnMut` it may
-    // call again on a later refetch.
-    let artists = use_page(move || page_data(get_label_artists()))?;
+    // call again on a later refetch. Deleted rows are never shown on the
+    // public side (`false` is fixed here; the toggle is admin-only chrome).
+    let artists = use_page(move || page_data(get_label_artists(false)))?;
     let artists = match artists() {
         Ok(result) => result.artists,
         Err(error) => {

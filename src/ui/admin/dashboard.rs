@@ -130,7 +130,8 @@ fn ArtistsTableBody() -> Element {
         .ok()
         .flatten()
         .is_some_and(|user| user.permissions.contains("label_owner"));
-    let artists_resource = use_page(move || page_data(get_label_artists()))?;
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
+    let artists_resource = use_page(move || page_data(get_label_artists(show_deleted())))?;
     let artists = match artists_resource() {
         Ok(result) => result.artists,
         Err(error) => {
@@ -222,6 +223,7 @@ fn PagesTableBody() -> Element {
         .ok()
         .flatten()
         .is_some_and(|user| user.permissions.contains("label_owner"));
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
 
     // Dependent loads: `use_page`'s `?` waits for the label, so the pages
     // resource below can use its id.
@@ -233,7 +235,7 @@ fn PagesTableBody() -> Element {
             0
         }
     };
-    let pages_resource = use_page(move || page_data(get_label_pages(label_id)))?;
+    let pages_resource = use_page(move || page_data(get_label_pages(label_id, show_deleted())))?;
     let pages = match pages_resource() {
         Ok(result) => result.pages,
         Err(error) => {

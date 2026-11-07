@@ -4,8 +4,9 @@ use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
+use super::visibility_for;
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
-use crate::models::{artist::Artist, auth::User, release::Release};
+use crate::models::{Visibility, artist::Artist, auth::User, release::Release};
 
 /// `Release::find_by_slug` wired onto the service error ladder: a missing
 /// row is a 404 with the model's message, a database failure stays a 500.
@@ -53,11 +54,17 @@ pub async fn get_next_scheduled_release_service(
                 tracing::error!("{err}");
                 AppError::internal(e)
             })?;
-            let tracks = release.get_tracks(pool).await.map_err(|e| {
-                let err = format!("Error while getting tracks: {e:?}");
-                tracing::error!("{err}");
-                AppError::internal(e)
-            })?;
+            // The countdown previews an unreleased (future) release, so its
+            // track list is read at `Hidden`: unpublished tracks stay
+            // visible for the preview, deleted ones do not belong.
+            let tracks = release
+                .get_tracks(pool, Visibility::Hidden)
+                .await
+                .map_err(|e| {
+                    let err = format!("Error while getting tracks: {e:?}");
+                    tracing::error!("{err}");
+                    AppError::internal(e)
+                })?;
 
             Ok(Some(ReleaseResult {
                 release,
@@ -89,6 +96,7 @@ pub async fn get_releases_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
+    include_deleted: bool,
 ) -> Result<ReleasesResult, AppError> {
     let artist = match Artist::find_by_slug(pool, slug.clone()).await {
         Ok(Some(artist)) => artist,
@@ -106,15 +114,14 @@ pub async fn get_releases_service(
         }
     };
 
-    let include_hidden =
-        user.is_some_and(|current_user| current_user.permissions.contains("label_owner"));
+    let visibility = visibility_for(user, include_deleted);
 
     Ok(ReleasesResult {
         releases: match Release::list_by_artist_and_record_label(
             pool,
             artist.id,
             artist.label_id,
-            include_hidden,
+            visibility,
         )
         .await
         {
@@ -149,6 +156,7 @@ pub async fn get_release_service(
     user: Option<&User>,
     artist_slug: String,
     release_slug: String,
+    include_deleted: bool,
 ) -> Result<ReleaseResult, AppError> {
     let artist = match Artist::get_by_slug(pool, artist_slug).await {
         Ok(artist) => artist,
@@ -159,6 +167,9 @@ pub async fn get_release_service(
         }
     };
 
+    // Opening one known row: a `label_owner` session reaches unpublished
+    // and deleted releases too, so admins can open a row they deleted in
+    // this session and restore it.
     let include_hidden =
         user.is_some_and(|current_user| current_user.permissions.contains("label_owner"));
 
@@ -180,11 +191,16 @@ pub async fn get_release_service(
         tracing::error!("{err}");
         AppError::internal(e)
     })?;
-    let tracks = release.get_tracks(pool).await.map_err(|e| {
-        let err = format!("Error while getting tracks: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    // The track list under a release is a listing, so it sits on the
+    // visibility ladder (unlike the single release row above).
+    let tracks = release
+        .get_tracks(pool, visibility_for(user, include_deleted))
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting tracks: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?;
 
     Ok(ReleaseResult {
         release,
@@ -199,6 +215,8 @@ pub async fn get_release_service(
 /// pool: `PgPool` - The database connection pool
 /// user: Option<&User> - The user creating the release
 /// `form`: `CreateReleaseForm` - The form to create the release
+/// `include_deleted`: The admin "show deleted" toggle of the calling page;
+///   it decides which tracks the Saved payload carries back
 ///
 /// # Returns
 /// Result<`ReleaseResult`, `AppError`> - The created release
@@ -212,6 +230,7 @@ pub async fn create_release_service(
     pool: &PgPool,
     user: Option<&User>,
     form: CreateReleaseForm,
+    include_deleted: bool,
 ) -> Result<ReleaseResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
@@ -251,11 +270,16 @@ pub async fn create_release_service(
         tracing::error!("{err}");
         AppError::internal(e)
     })?;
-    let tracks = release.get_tracks(pool).await.map_err(|e| {
-        let err = format!("Error while getting tracks: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    // The Saved payload feeds the reactive editor's tracks table, so its
+    // tracks sit on the same ladder the editor's page render used.
+    let tracks = release
+        .get_tracks(pool, visibility_for(user, include_deleted))
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting tracks: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?;
 
     Ok(ReleaseResult {
         release,
@@ -268,21 +292,24 @@ pub async fn create_release_service(
 ///
 /// # Arguments
 /// `pool`: `PgPool` - The database connection pool
-/// `user`: `Option<&User>` - The user creating the release
-/// `form`: `CreateReleaseForm` - The form to create the release
+/// `user`: `Option<&User>` - The user updating the release
+/// `form`: `UpdateReleaseForm` - The form carrying the new field values
+/// `include_deleted`: The admin "show deleted" toggle of the calling page;
+///   it decides which tracks the Saved payload carries back
 ///
 /// # Returns
-/// Result<`ReleaseResult`, `AppError`> - The created release
+/// Result<`ReleaseResult`, `AppError`> - The release as now stored
 ///
 /// # Errors
-/// If the name is empty, return an error
-/// If the release cannot be created, return an error
+/// If the release cannot be found, return an error
+/// If the release cannot be updated, return an error
 /// If the user does not have the required permissions, return an error
 #[cfg(feature = "server")]
 pub async fn update_release_service(
     pool: &PgPool,
     user: Option<&User>,
     form: UpdateReleaseForm,
+    include_deleted: bool,
 ) -> Result<ReleaseResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
@@ -319,11 +346,16 @@ pub async fn update_release_service(
         tracing::error!("{err}");
         AppError::internal(e)
     })?;
-    let tracks = release.get_tracks(pool).await.map_err(|e| {
-        let err = format!("Error while getting tracks: {e:?}");
-        tracing::error!("{err}");
-        AppError::internal(e)
-    })?;
+    // The Saved payload feeds the reactive editor's tracks table, so its
+    // tracks sit on the same ladder the editor's page render used.
+    let tracks = release
+        .get_tracks(pool, visibility_for(user, include_deleted))
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting tracks: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?;
 
     Ok(ReleaseResult {
         release,
@@ -338,6 +370,8 @@ pub async fn update_release_service(
 /// pool: `PgPool` - The database connection pool
 /// user: Option<&User> - The user deleting the release
 /// slug: String - The slug of the release
+/// `include_deleted`: The admin "show deleted" toggle of the calling page;
+///   it decides which tracks the Saved payload carries back
 ///
 /// # Returns
 /// Result<`ReleaseResult`, `AppError`> - The deleted release
@@ -350,6 +384,7 @@ pub async fn delete_release_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
+    include_deleted: bool,
 ) -> Result<ReleaseResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
@@ -369,11 +404,14 @@ pub async fn delete_release_service(
             tracing::error!("{err}");
             AppError::internal(e)
         })?,
-        tracks: release.get_tracks(pool).await.map_err(|e| {
-            let err = format!("Error while getting tracks: {e:?}");
-            tracing::error!("{err}");
-            AppError::internal(e)
-        })?,
+        tracks: release
+            .get_tracks(pool, visibility_for(user, include_deleted))
+            .await
+            .map_err(|e| {
+                let err = format!("Error while getting tracks: {e:?}");
+                tracing::error!("{err}");
+                AppError::internal(e)
+            })?,
     })
 }
 
@@ -381,8 +419,10 @@ pub async fn delete_release_service(
 ///
 /// # Arguments
 /// pool: `PgPool` - The database connection pool
-/// user: Option<&User> - The user deleting the release
+/// user: Option<&User> - The user restoring the release
 /// slug: String - The slug of the release
+/// `include_deleted`: The admin "show deleted" toggle of the calling page;
+///   it decides which tracks the Saved payload carries back
 ///
 /// # Returns
 /// Result<`ReleaseResult`, `AppError`> - The restored release
@@ -395,6 +435,7 @@ pub async fn restore_release_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
+    include_deleted: bool,
 ) -> Result<ReleaseResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
@@ -416,11 +457,14 @@ pub async fn restore_release_service(
             tracing::error!("{err}");
             AppError::internal(e)
         })?,
-        tracks: release.get_tracks(pool).await.map_err(|e| {
-            let err = format!("Error while getting tracks: {e:?}");
-            tracing::error!("{err}");
-            AppError::internal(e)
-        })?,
+        tracks: release
+            .get_tracks(pool, visibility_for(user, include_deleted))
+            .await
+            .map_err(|e| {
+                let err = format!("Error while getting tracks: {e:?}");
+                tracing::error!("{err}");
+                AppError::internal(e)
+            })?,
     })
 }
 
@@ -454,7 +498,7 @@ mod tests {
         unpublished_release.release_date = None;
         unpublished_release.clone().update(&pool).await.unwrap();
 
-        let releases = get_releases_service(&pool, Some(&user), artist.slug.clone())
+        let releases = get_releases_service(&pool, Some(&user), artist.slug.clone(), false)
             .await
             .unwrap();
 
@@ -478,7 +522,7 @@ mod tests {
         unpublished_release.published_at = None;
         unpublished_release.clone().update(&pool).await.unwrap();
 
-        let releases = get_releases_service(&pool, None, artist.slug.clone())
+        let releases = get_releases_service(&pool, None, artist.slug.clone(), false)
             .await
             .unwrap();
 
@@ -503,7 +547,7 @@ mod tests {
         unpublished_release.published_at = None;
         unpublished_release.clone().update(&pool).await.unwrap();
 
-        let releases = get_releases_service(&pool, Some(&user), artist.slug.clone())
+        let releases = get_releases_service(&pool, Some(&user), artist.slug.clone(), false)
             .await
             .unwrap();
 
@@ -569,6 +613,7 @@ mod tests {
             Some(&user),
             artist.slug.clone(),
             release.slug.clone(),
+            false,
         )
         .await
         .unwrap();
@@ -602,6 +647,7 @@ mod tests {
             Some(&user),
             artist.slug.clone(),
             unpublished_release.slug.clone(),
+            false,
         )
         .await;
         assert!(release_result.is_err());
@@ -628,6 +674,7 @@ mod tests {
             None,
             artist.slug.clone(),
             unpublished_release.slug.clone(),
+            false,
         )
         .await;
         assert!(release_result.is_err());
@@ -635,6 +682,105 @@ mod tests {
             release_result.unwrap_err().to_string(),
             "Could not find release test-release-1 for artist with id 1 and record label with id 1.".to_string()
         );
+    }
+
+    #[sqlx::test]
+    async fn test_get_releases_service_show_deleted_toggle(pool: PgPool) {
+        let permissions = vec!["label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let deleted_release = create_test_release(&pool, 2, Some(artist.clone()))
+            .await
+            .unwrap();
+        deleted_release.clone().delete(&pool).await.unwrap();
+
+        // Toggle off: a `label_owner` listing excludes the deleted release.
+        let releases = get_releases_service(&pool, Some(&user), artist.slug.clone(), false)
+            .await
+            .unwrap();
+        assert_eq!(releases.releases.len(), 1);
+        assert_eq!(releases.releases[0].id, release.id);
+
+        // Toggle on: the deleted release joins the listing.
+        let releases = get_releases_service(&pool, Some(&user), artist.slug.clone(), true)
+            .await
+            .unwrap();
+        assert_eq!(releases.releases.len(), 2);
+
+        // Guests never see deleted rows, even with the toggle on.
+        let releases = get_releases_service(&pool, None, artist.slug.clone(), true)
+            .await
+            .unwrap();
+        assert_eq!(releases.releases.len(), 1);
+        assert_eq!(releases.releases[0].id, release.id);
+    }
+
+    #[sqlx::test]
+    async fn test_get_release_service_tracks_follow_visibility(pool: PgPool) {
+        let permissions = vec!["label_owner"];
+        let user = create_test_user_with_permissions(&pool, 1, permissions)
+            .await
+            .unwrap();
+
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let published_track =
+            create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        let deleted_track =
+            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        deleted_track.clone().delete(&pool).await.unwrap();
+
+        // Staff default: the live track is in, the deleted track out.
+        let result = get_release_service(
+            &pool,
+            Some(&user),
+            artist.slug.clone(),
+            release.slug.clone(),
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.tracks.len(), 1);
+        assert_eq!(result.tracks[0].track.id, published_track.id);
+
+        // Toggle on: the deleted track appears as well.
+        let result = get_release_service(
+            &pool,
+            Some(&user),
+            artist.slug.clone(),
+            release.slug.clone(),
+            true,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.tracks.len(), 2);
+
+        // Guest: only published tracks — deleted (and unpublished) tracks
+        // never reach the public release page.
+        let result =
+            get_release_service(&pool, None, artist.slug.clone(), release.slug.clone(), true)
+                .await
+                .unwrap();
+        assert_eq!(result.tracks.len(), 1);
+        assert_eq!(result.tracks[0].track.id, published_track.id);
     }
 
     #[sqlx::test]
@@ -660,7 +806,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), form.clone())
+        let release_result = create_release_service(&pool, Some(&user), form.clone(), false)
             .await
             .unwrap();
 
@@ -701,7 +847,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), form).await;
+        let release_result = create_release_service(&pool, Some(&user), form, false).await;
         assert!(release_result.is_err());
         assert_eq!(
             release_result.unwrap_err().to_string(),
@@ -732,7 +878,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), form).await;
+        let release_result = create_release_service(&pool, Some(&user), form, false).await;
         assert!(release_result.is_err());
         assert_eq!(
             release_result.unwrap_err().to_string(),
@@ -763,7 +909,7 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), form).await;
+        let release_result = create_release_service(&pool, Some(&user), form, false).await;
         assert!(release_result.is_ok());
         let release = release_result.unwrap();
 
@@ -779,7 +925,8 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let update_result = update_release_service(&pool, Some(&user), update_form.clone()).await;
+        let update_result =
+            update_release_service(&pool, Some(&user), update_form.clone(), false).await;
         assert!(update_result.is_ok());
         let updated_release = update_result.unwrap();
 
@@ -820,16 +967,16 @@ mod tests {
             artist_ids: artist.id.to_string(),
         };
 
-        let release_result = create_release_service(&pool, Some(&user), form).await;
+        let release_result = create_release_service(&pool, Some(&user), form, false).await;
         assert!(release_result.is_ok());
         let release = release_result.unwrap();
 
         let delete_result =
-            delete_release_service(&pool, Some(&user), release.release.slug.clone()).await;
+            delete_release_service(&pool, Some(&user), release.release.slug.clone(), false).await;
         assert!(delete_result.is_ok());
 
         let get_result =
-            get_release_service(&pool, Some(&user), artist.slug, release.release.slug).await;
+            get_release_service(&pool, Some(&user), artist.slug, release.release.slug, false).await;
         assert!(get_result.is_ok());
         assert!(get_result.unwrap().release.deleted_at.is_some());
     }
@@ -842,7 +989,7 @@ mod tests {
             .unwrap();
 
         let delete_result =
-            delete_release_service(&pool, Some(&user), "not-found".to_string()).await;
+            delete_release_service(&pool, Some(&user), "not-found".to_string(), false).await;
         assert!(delete_result.is_err());
         assert_eq!(
             delete_result.unwrap_err().to_string(),
@@ -865,13 +1012,15 @@ mod tests {
             .await
             .unwrap();
 
-        let delete_result = delete_release_service(&pool, Some(&user), release.slug.clone()).await;
+        let delete_result =
+            delete_release_service(&pool, Some(&user), release.slug.clone(), false).await;
         assert_eq!(
             delete_result.unwrap_err().to_string(),
             "You do not have permission.".to_string()
         );
 
-        let get_result = get_release_service(&pool, Some(&user), artist.slug, release.slug).await;
+        let get_result =
+            get_release_service(&pool, Some(&user), artist.slug, release.slug, false).await;
         assert!(get_result.is_ok());
     }
 
@@ -884,9 +1033,10 @@ mod tests {
 
         let release = create_test_release(&pool, 1, None).await.unwrap();
         let release = release.delete(&pool).await.unwrap();
-        let restored_release = restore_release_service(&pool, Some(&user), release.slug.clone())
-            .await
-            .unwrap();
+        let restored_release =
+            restore_release_service(&pool, Some(&user), release.slug.clone(), false)
+                .await
+                .unwrap();
 
         assert!(restored_release.release.deleted_at.is_none());
     }
@@ -899,7 +1049,7 @@ mod tests {
             .unwrap();
 
         let restored_release =
-            restore_release_service(&pool, Some(&user), "missing".to_string()).await;
+            restore_release_service(&pool, Some(&user), "missing".to_string(), false).await;
         assert!(restored_release.is_err());
         assert_eq!(
             restored_release.unwrap_err().to_string(),
@@ -912,7 +1062,8 @@ mod tests {
         let release = create_test_release(&pool, 1, None).await.unwrap();
         let release = release.delete(&pool).await.unwrap();
         let restored_release =
-            restore_release_service(&pool, Some(&User::default()), release.slug.clone()).await;
+            restore_release_service(&pool, Some(&User::default()), release.slug.clone(), false)
+                .await;
         assert!(restored_release.is_err());
         assert_eq!(
             restored_release.unwrap_err().to_string(),
@@ -928,7 +1079,7 @@ mod tests {
         let release = create_test_release(&pool, 1, None).await.unwrap();
         let release = release.delete(&pool).await.unwrap();
         let restored_release =
-            restore_release_service(&pool, Some(&user), release.slug.clone()).await;
+            restore_release_service(&pool, Some(&user), release.slug.clone(), false).await;
         assert!(restored_release.is_err());
         assert_eq!(
             restored_release.unwrap_err().to_string(),

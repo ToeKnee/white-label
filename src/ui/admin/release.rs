@@ -112,10 +112,13 @@ fn ReleasesBody(artist_slug: String) -> Element {
         }
     };
 
-    // `label_owner` sessions get hidden (unpublished/soft-deleted) rows too,
-    // through the service's visibility check.
+    // Staff visibility comes from the service; the shared "show deleted"
+    // toggle decides about soft-deleted rows (read inside the closure so
+    // flipping it re-runs this load).
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
     let releases_slug = artist_slug.clone();
-    let releases_resource = use_page(move || page_data(get_releases(releases_slug.clone())))?;
+    let releases_resource =
+        use_page(move || page_data(get_releases(releases_slug.clone(), show_deleted())))?;
     let releases = match releases_resource() {
         Ok(result) => result.releases,
         Err(error) => {
@@ -292,8 +295,11 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
     // build. The router is looked up rather than hooked (`use_navigator` would
     // panic) because the routerless SSR markup tests render this page alone.
     let router = try_use_context::<RouterContext>();
-    let mut create =
-        use_action(move |fields: ReleaseCreateFields| async move { create_release(fields).await });
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
+    let mut create = use_action(move |fields: ReleaseCreateFields| {
+        let include_deleted = show_deleted();
+        async move { create_release(include_deleted, fields).await }
+    });
     let new_release_artist = artist_slug.clone();
     use_effect(move || {
         // The action resolves only after the submit handler has returned, so
@@ -450,14 +456,17 @@ fn EditReleaseBody(
         }
     };
 
-    // `label_owner` sessions see soft-deleted rows too (the service's
-    // visibility check), so the Restore button can appear.
+    // The single release row stays openable even when deleted (so Restore
+    // can appear); its track listing follows the shared "show deleted"
+    // toggle.
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
     let release_artist_slug = artist_slug.clone();
     let release_slug_for_resource = release_slug.clone();
     let release_resource = use_page(move || {
         page_data(get_release(
             release_artist_slug.clone(),
             release_slug_for_resource.clone(),
+            show_deleted(),
         ))
     })?;
     let fetched = match release_resource() {
@@ -478,8 +487,12 @@ fn EditReleaseBody(
     // a client build the `onsubmit` handlers below prevent the post and call
     // the twins at the bottom of this module; the plain form posts stay as the
     // javascript-off path (and are the only path a browser without one has).
-    let mut edit =
-        use_action(move |request: ReleaseEdit| async move { apply_release_edit(request).await });
+    let mut edit = use_action(move |request: ReleaseEdit| {
+        // The Saved payload's track list should match what the page
+        // currently shows, so the toggle is read when the action runs.
+        let include_deleted = show_deleted();
+        async move { apply_release_edit(request, include_deleted).await }
+    });
     let saved = saved_row(edit.value());
     let just_saved = saved.is_some();
     // The row on screen follows the last save: a rename brings its new slug
@@ -717,8 +730,12 @@ pub fn ArtistSelect(
 #[component]
 fn ArtistSelectBody(primary_artist_id: i64, selected_ids: Vec<i64>) -> Element {
     // The label's artists, visibility-filtered by the service (a
-    // `label_owner` picks from every artist on the label).
-    let artists_resource = use_page(move || page_data(get_label_artists()))?;
+    // `label_owner` picks from every artist on the label). Soft-deleted
+    // artists only surface with the "show deleted" toggle on; leaving
+    // them out of the picker keeps a deleted artist from being
+    // (re)linked by a save.
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
+    let artists_resource = use_page(move || page_data(get_label_artists(show_deleted())))?;
     let artists = match artists_resource() {
         Ok(result) => result.artists,
         Err(error) => {
@@ -842,11 +859,12 @@ enum ReleaseEdit {
 /// calls reach the generated stubs, so this lives on both sides.
 async fn apply_release_edit(
     request: ReleaseEdit,
+    include_deleted: bool,
 ) -> core::result::Result<EditOutcome<ReleaseResult>, HttpError> {
     match request {
-        ReleaseEdit::Update(fields) => update_release(fields).await,
-        ReleaseEdit::Delete(target) => delete_release(target).await,
-        ReleaseEdit::Restore(target) => restore_release(target).await,
+        ReleaseEdit::Update(fields) => update_release(include_deleted, fields).await,
+        ReleaseEdit::Delete(target) => delete_release(include_deleted, target).await,
+        ReleaseEdit::Restore(target) => restore_release(include_deleted, target).await,
     }
 }
 
@@ -856,11 +874,12 @@ async fn apply_release_edit(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the create could
 /// not run at all. Refusals (validation, permissions) answer `Failed`.
-#[post("/api/create_release",
+#[post("/api/create_release?include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
 pub async fn create_release(
+    include_deleted: bool,
     fields: ReleaseCreateFields,
 ) -> core::result::Result<EditOutcome<ReleaseResult>, HttpError> {
     let Some(session_user) = user.0.as_ref() else {
@@ -872,6 +891,7 @@ pub async fn create_release(
         &db.0,
         Some(session_user),
         fields.into_service_form(),
+        include_deleted,
     )
     .await
     {
@@ -894,11 +914,12 @@ pub async fn create_release(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the save could
 /// not run at all.
-#[post("/api/update_release",
+#[post("/api/update_release?include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
 pub async fn update_release(
+    include_deleted: bool,
     fields: ReleaseUpdateFields,
 ) -> core::result::Result<EditOutcome<ReleaseResult>, HttpError> {
     let Some(session_user) = user.0.as_ref() else {
@@ -908,6 +929,7 @@ pub async fn update_release(
         &db.0,
         Some(session_user),
         fields.into_service_form(),
+        include_deleted,
     )
     .await
     {
@@ -927,17 +949,25 @@ pub async fn update_release(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the delete could
 /// not run at all.
-#[post("/api/delete_release",
+#[post("/api/delete_release?include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
 pub async fn delete_release(
+    include_deleted: bool,
     target: ReleaseSlugFields,
 ) -> core::result::Result<EditOutcome<ReleaseResult>, HttpError> {
     let Some(session_user) = user.0.as_ref() else {
         return HttpError::unauthorized("Please log in to save.");
     };
-    match services::release::delete_release_service(&db.0, Some(session_user), target.slug).await {
+    match services::release::delete_release_service(
+        &db.0,
+        Some(session_user),
+        target.slug,
+        include_deleted,
+    )
+    .await
+    {
         Ok(result) => Ok(EditOutcome::Saved(result)),
         Err(error) => {
             tracing::warn!("release delete twin rejected: {error}");
@@ -953,17 +983,25 @@ pub async fn delete_release(
 /// # Errors
 /// 401 when the session is gone, 500 with a retry message when the restore
 /// could not run at all.
-#[post("/api/restore_release",
+#[post("/api/restore_release?include_deleted",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser
 )]
 pub async fn restore_release(
+    include_deleted: bool,
     target: ReleaseSlugFields,
 ) -> core::result::Result<EditOutcome<ReleaseResult>, HttpError> {
     let Some(session_user) = user.0.as_ref() else {
         return HttpError::unauthorized("Please log in to save.");
     };
-    match services::release::restore_release_service(&db.0, Some(session_user), target.slug).await {
+    match services::release::restore_release_service(
+        &db.0,
+        Some(session_user),
+        target.slug,
+        include_deleted,
+    )
+    .await
+    {
         Ok(result) => Ok(EditOutcome::Saved(result)),
         Err(error) => {
             tracing::warn!("release restore twin rejected: {error}");

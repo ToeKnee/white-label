@@ -10,6 +10,8 @@ use sqlx::{FromRow, PgPool, Row};
 use super::record_label::RecordLabel;
 use super::traits::Validate;
 #[cfg(feature = "server")]
+use super::visibility::Visibility;
+#[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
 
 /// The Page struct is used to represent a page in the database.
@@ -195,7 +197,9 @@ impl Page {
     ///
     /// # Arguments
     /// * `pool` - The database connection pool
-    /// * `include_hidden` - Whether to include hidden pages
+    /// * `visibility` - How far down the visibility ladder to go
+    ///   ([`Visibility`]: `Published` is the public face, `Hidden` adds
+    ///   unpublished pages, `Deleted` adds soft-deleted ones)
     ///
     /// # Returns
     /// A vector of pages
@@ -203,16 +207,24 @@ impl Page {
     /// # Errors
     /// If the pages cannot be listed, return an error
     #[cfg(feature = "server")]
-    pub async fn list(pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Self>> {
-        let query = if include_hidden {
-            "SELECT * FROM pages
-            ORDER BY deleted_at DESC, published_at DESC, name ASC"
-        } else {
-            "SELECT pages.* FROM pages
+    pub async fn list(pool: &PgPool, visibility: Visibility) -> anyhow::Result<Vec<Self>> {
+        let query = match visibility {
+            Visibility::Published => {
+                "SELECT * FROM pages
             WHERE deleted_at IS NULL
             AND published_at < NOW()
             AND published_at IS NOT NULL
             ORDER BY published_at DESC, name ASC"
+            }
+            Visibility::Hidden => {
+                "SELECT * FROM pages
+            WHERE deleted_at IS NULL
+            ORDER BY published_at DESC, name ASC"
+            }
+            Visibility::Deleted => {
+                "SELECT * FROM pages
+            ORDER BY deleted_at DESC, published_at DESC, name ASC"
+            }
         };
 
         let rows = sqlx::query(query).fetch_all(pool).await;
@@ -594,7 +606,7 @@ mod tests {
             .await
             .unwrap();
 
-        let pages = Page::list(&pool, false).await.unwrap();
+        let pages = Page::list(&pool, Visibility::Published).await.unwrap();
         assert_eq!(pages.len(), 2);
         assert!(pages.contains(&page1));
         assert!(pages.contains(&page2));
@@ -614,10 +626,28 @@ mod tests {
         page2.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1)); // Set to future date
         page2 = page2.clone().update(&pool).await.unwrap();
 
-        let pages = Page::list(&pool, true).await.unwrap();
+        let pages = Page::list(&pool, Visibility::Deleted).await.unwrap();
         assert_eq!(pages.len(), 2); // Should include the deleted page
         assert!(pages.contains(&page1));
         assert!(pages.contains(&page2));
+    }
+
+    #[sqlx::test]
+    async fn test_list_hidden_excludes_deleted(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let deleted_page = create_test_page(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let deleted_page = deleted_page.delete(&pool).await.unwrap();
+
+        // The staff default (`Hidden`) leaves deleted pages out…
+        let pages = Page::list(&pool, Visibility::Hidden).await.unwrap();
+        assert_eq!(pages, [] as [Page; 0]);
+
+        // …and the admin "show deleted" view brings them back.
+        let pages = Page::list(&pool, Visibility::Deleted).await.unwrap();
+        assert_eq!(pages.len(), 1);
+        assert!(pages.contains(&deleted_page));
     }
 
     #[sqlx::test]

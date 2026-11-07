@@ -4,6 +4,8 @@ use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
+#[cfg(feature = "server")]
+use super::visibility_for;
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
 use crate::models::{artist::Artist, auth::User, release::Release, track::Track};
 
@@ -54,6 +56,7 @@ async fn find_track_by_slug(pool: &PgPool, slug: &str) -> Result<Track, AppError
 /// * `user` - The current user
 /// * `artist_slug` - The slug of the artist
 /// * `release_slug` - The slug of the release
+/// * `include_deleted` - The admin "show deleted" toggle
 ///
 /// # Returns
 /// The tracks for the artist
@@ -69,12 +72,10 @@ pub async fn get_tracks_service(
     user: Option<&User>,
     artist_slug: String,
     release_slug: String,
+    include_deleted: bool,
 ) -> Result<TracksResult, AppError> {
     let artist = lookup_artist(pool, artist_slug).await?;
     let release = lookup_release(pool, release_slug).await?;
-
-    let include_hidden =
-        user.is_some_and(|current_user| current_user.permissions.contains("label_owner"));
 
     Ok(TracksResult {
         tracks: match Track::list_by_release_and_artist_and_record_label(
@@ -82,7 +83,7 @@ pub async fn get_tracks_service(
             release.id,
             artist.id,
             artist.label_id,
-            include_hidden,
+            visibility_for(user, include_deleted),
         )
         .await
         {
@@ -398,6 +399,7 @@ mod tests {
             Some(&user),
             artist.slug.clone(),
             release.slug.clone(),
+            false,
         )
         .await
         .unwrap();
@@ -425,9 +427,15 @@ mod tests {
         unpublished_track.published_at = None;
         unpublished_track.clone().update(&pool).await.unwrap();
 
-        let tracks = get_tracks_service(&pool, None, artist.slug.clone(), release.slug.clone())
-            .await
-            .unwrap();
+        let tracks = get_tracks_service(
+            &pool,
+            None,
+            artist.slug.clone(),
+            release.slug.clone(),
+            false,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(tracks.tracks.len(), 1);
         assert_eq!(tracks.tracks[0].id, track.id);
@@ -459,6 +467,7 @@ mod tests {
             Some(&user),
             artist.slug.clone(),
             release.slug.clone(),
+            false,
         )
         .await
         .unwrap();

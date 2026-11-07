@@ -2777,10 +2777,10 @@ mod tests {
         let server = api_server(pool.clone()).await;
         login_as(&server, 1).await;
 
-        // The dioxus client sends the server-fn arguments by name, so the body
-        // key here is the twin's argument name (`fields` for the update form).
+        // The dioxus client sends the server-fn arguments by name (body key
+        // `fields` here) and the path's `?include_deleted` as a query param.
         let answer = server
-            .post("/api/update_release")
+            .post("/api/update_release?include_deleted=false")
             .json(&serde_json::json!({
                 "fields": {
                     "slug": "test-release-1",
@@ -2811,7 +2811,7 @@ mod tests {
         // A refusal carries the code the 303 handler puts in `?bad=`, which the
         // editor maps through the same alert table it uses for the query.
         let answer = server
-            .post("/api/update_release")
+            .post("/api/update_release?include_deleted=false")
             .json(&serde_json::json!({
                 "fields": {
                     "slug": "renamed-album",
@@ -2835,7 +2835,7 @@ mod tests {
         // `deleted_at`, which is what swaps the editor's Delete button for
         // Restore without a page load.
         let answer = server
-            .post("/api/delete_release")
+            .post("/api/delete_release?include_deleted=false")
             .json(&serde_json::json!({
                 "target": { "slug": "renamed-album", "artist_slug": "test-artist-1" }
             }))
@@ -2848,7 +2848,7 @@ mod tests {
         );
 
         let answer = server
-            .post("/api/restore_release")
+            .post("/api/restore_release?include_deleted=false")
             .json(&serde_json::json!({
                 "target": { "slug": "renamed-album", "artist_slug": "test-artist-1" }
             }))
@@ -2865,7 +2865,7 @@ mod tests {
         // would have given, as an answer a client can act on.
         let guest_server = api_server(pool).await;
         let unauthorized = guest_server
-            .post("/api/delete_release")
+            .post("/api/delete_release?include_deleted=false")
             .json(&serde_json::json!({
                 "target": { "slug": "test-release-1", "artist_slug": "test-artist-1" }
             }))

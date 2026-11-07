@@ -19,7 +19,14 @@
 //!   table has no `/admin/artists` or `/admin/pages` index routes to point
 //!   them at.
 //! - Menu load failures fall back to the static skeleton (Dashboard link,
-//!   empty submenus, create links), the shape `AdminMenu::default()` yields.
+//!   empty submenus, create links), the shape `AdminMenu::default()`
+//!   yields.
+//! - Deleted rows are hidden by default; the "Show deleted" checkbox at
+//!   the top of the menu flips the [`crate::ui::admin::AdminPrefs`] signal,
+//!   which re-runs the menu load and every admin listing that read it (they
+//!   read it inside their `use_page` closure, the one place
+//!   [`crate::ui::use_page`] tracks). See [`crate::models::Visibility`] for
+//!   the ladder behind it.
 
 pub mod artist;
 pub mod artist_root;
@@ -53,9 +60,26 @@ use crate::ui::use_user;
 use crate::ui::utils::Loading;
 use dioxus::router::Link;
 
+/// The admin section's shared preferences, provided by `AdminRoot` and
+/// read by the menu and the listing pages.
+#[derive(Clone, Copy)]
+pub struct AdminPrefs {
+    /// The "Show deleted" toggle: when on, admin listings reach the
+    /// `Deleted` rung of [`crate::models::Visibility`] and soft-deleted
+    /// rows appear. Default off: deleted rows are hidden.
+    pub show_deleted: Signal<bool>,
+}
+
 /// The admin layout: menu + permission gate around every admin page.
 #[component]
 pub fn AdminRoot() -> Element {
+    // Provided here (above the Outlet) so every admin page and the menu
+    // share one toggle that survives admin navigation. The signal is made
+    // outside the provider closure — hooks inside a provider closure
+    // violate Dioxus's hook rules and panic during render.
+    let show_deleted = use_signal(|| false);
+    use_context_provider(|| AdminPrefs { show_deleted });
+
     rsx! {
         div { class: "flex",
             // The menu has its own boundary so a slow (or failing) admin
@@ -98,10 +122,14 @@ fn AdminGateBody() -> Element {
 }
 
 /// The side menu, loaded from the `admin_menu` service (403/401 for
-/// non-admins, which falls through to the skeleton below).
+/// non-admins, which falls through to the skeleton below). The
+/// "Show deleted" checkbox flips the shared signal; reading it inside the
+/// `use_page` closure re-runs the menu load when it changes.
 #[component]
 fn AdminMenuBody() -> Element {
-    let menu = use_page(move || page_data(get_admin_menu()))?;
+    let prefs = use_context::<AdminPrefs>();
+    let mut show_deleted = prefs.show_deleted;
+    let menu = use_page(move || page_data(get_admin_menu(show_deleted())))?;
     let menu = match menu() {
         Ok(menu) => menu,
         Err(error) => {
@@ -112,6 +140,19 @@ fn AdminMenuBody() -> Element {
 
     rsx! {
         ul { class: "w-56 menu bg-base-200 rounded-box",
+            li {
+                // Without javascript this checkbox does nothing, so the
+                // no-JS admin surface keeps deleted rows hidden
+                // (restore still works from a row's own editor).
+                label { class: "flex items-center gap-2 cursor-pointer",
+                    input {
+                        r#type: "checkbox",
+                        checked: show_deleted(),
+                        onchange: move |event| show_deleted.set(event.checked()),
+                    }
+                    "Show deleted"
+                }
+            }
             li { Link { to: Route::Dashboard {}, "Dashboard" } }
             li {
                 Link { to: Route::EditLabel { updated: None, bad: None },

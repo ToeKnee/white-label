@@ -8,6 +8,8 @@ use sqlx::{FromRow, PgPool, Row};
 
 use super::traits::Validate;
 #[cfg(feature = "server")]
+use super::visibility::Visibility;
+#[cfg(feature = "server")]
 use super::{artist::Artist, page::Page};
 #[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
@@ -223,6 +225,9 @@ impl RecordLabel {
     ///
     /// # Arguments
     /// * `pool` - The database connection pool
+    /// * `visibility` - How far down the visibility ladder to go
+    ///   ([`Visibility`]: `Published` is the public face, `Hidden` adds
+    ///   unpublished artists, `Deleted` adds soft-deleted ones)
     ///
     /// # Returns
     /// The artists signed to the label
@@ -230,20 +235,34 @@ impl RecordLabel {
     /// # Errors
     /// If the artists cannot be retrieved, return an error
     #[cfg(feature = "server")]
-    pub async fn artists(self, pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Artist>> {
-        let query = if include_hidden {
-            "SELECT *
+    pub async fn artists(
+        self,
+        pool: &PgPool,
+        visibility: Visibility,
+    ) -> anyhow::Result<Vec<Artist>> {
+        let query = match visibility {
+            Visibility::Published => {
+                "SELECT *
              FROM artists
              WHERE label_id = $1
-             ORDER BY deleted_at DESC, name ASC"
-        } else {
-            "SELECT *
-            FROM artists
-            WHERE label_id = $1
               AND deleted_at IS NULL
               AND published_at < NOW()
               AND published_at IS NOT NULL
-            ORDER BY name ASC"
+             ORDER BY name ASC"
+            }
+            Visibility::Hidden => {
+                "SELECT *
+             FROM artists
+             WHERE label_id = $1
+              AND deleted_at IS NULL
+             ORDER BY name ASC"
+            }
+            Visibility::Deleted => {
+                "SELECT *
+             FROM artists
+             WHERE label_id = $1
+             ORDER BY deleted_at DESC, name ASC"
+            }
         };
 
         let artists = sqlx::query_as::<_, Artist>(query)
@@ -265,6 +284,9 @@ impl RecordLabel {
     ///
     /// # Arguments
     /// * `pool` - The database connection pool
+    /// * `visibility` - How far down the visibility ladder to go
+    ///   ([`Visibility`]: `Published` is the public face, `Hidden` adds
+    ///   unpublished pages, `Deleted` adds soft-deleted ones)
     ///
     /// # Returns
     /// The pages signed to the label
@@ -272,20 +294,30 @@ impl RecordLabel {
     /// # Errors
     /// If the pages cannot be retrieved, return an error
     #[cfg(feature = "server")]
-    pub async fn pages(self, pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Page>> {
-        let query = if include_hidden {
-            "SELECT *
+    pub async fn pages(self, pool: &PgPool, visibility: Visibility) -> anyhow::Result<Vec<Page>> {
+        let query = match visibility {
+            Visibility::Published => {
+                "SELECT *
              FROM pages
              WHERE label_id = $1
-             ORDER BY deleted_at DESC, name ASC"
-        } else {
-            "SELECT *
-            FROM pages
-            WHERE label_id = $1
               AND deleted_at IS NULL
               AND published_at < NOW()
               AND published_at IS NOT NULL
-            ORDER BY name ASC"
+             ORDER BY name ASC"
+            }
+            Visibility::Hidden => {
+                "SELECT *
+             FROM pages
+             WHERE label_id = $1
+              AND deleted_at IS NULL
+             ORDER BY name ASC"
+            }
+            Visibility::Deleted => {
+                "SELECT *
+             FROM pages
+             WHERE label_id = $1
+             ORDER BY deleted_at DESC, name ASC"
+            }
         };
 
         let pages = sqlx::query_as::<_, Page>(query)
@@ -555,7 +587,10 @@ mod tests {
             .await
             .unwrap();
         deleted_artist.clone().delete(&pool).await.unwrap();
-        let artists = record_label.artists(&pool, false).await.unwrap();
+        let artists = record_label
+            .artists(&pool, Visibility::Published)
+            .await
+            .unwrap();
         assert_eq!(artists, vec![published_artist]);
     }
 
@@ -582,7 +617,10 @@ mod tests {
             .await
             .unwrap();
         let deleted_artist = deleted_artist.clone().delete(&pool).await.unwrap();
-        let artists = record_label.artists(&pool, true).await.unwrap();
+        let artists = record_label
+            .artists(&pool, Visibility::Deleted)
+            .await
+            .unwrap();
         assert_eq!(
             artists,
             vec![
@@ -591,6 +629,41 @@ mod tests {
                 future_artist,
                 deleted_artist,
             ]
+        );
+    }
+
+    #[cfg(feature = "server")]
+    #[sqlx::test]
+    async fn test_artists_hidden_excludes_deleted(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let mut unpublished_artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        unpublished_artist.published_at = None;
+        let unpublished_artist = unpublished_artist.clone().update(&pool).await.unwrap();
+        let mut published_artist = create_test_artist(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        published_artist.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        let published_artist = published_artist.clone().update(&pool).await.unwrap();
+        let mut future_artist = create_test_artist(&pool, 3, Some(record_label.clone()))
+            .await
+            .unwrap();
+        future_artist.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        let future_artist = future_artist.clone().update(&pool).await.unwrap();
+        let deleted_artist = create_test_artist(&pool, 4, Some(record_label.clone()))
+            .await
+            .unwrap();
+        deleted_artist.clone().delete(&pool).await.unwrap();
+
+        // The staff default (`Hidden`) leaves the deleted artist out.
+        let artists = record_label
+            .artists(&pool, Visibility::Hidden)
+            .await
+            .unwrap();
+        assert_eq!(
+            artists,
+            vec![unpublished_artist, published_artist, future_artist,]
         );
     }
 
@@ -617,7 +690,10 @@ mod tests {
             .await
             .unwrap();
         deleted_page.clone().delete(&pool).await.unwrap();
-        let pages = record_label.pages(&pool, false).await.unwrap();
+        let pages = record_label
+            .pages(&pool, Visibility::Published)
+            .await
+            .unwrap();
         assert_eq!(pages, vec![published_page]);
     }
 
@@ -644,10 +720,42 @@ mod tests {
             .await
             .unwrap();
         let deleted_page = deleted_page.clone().delete(&pool).await.unwrap();
-        let pages = record_label.pages(&pool, true).await.unwrap();
+        let pages = record_label
+            .pages(&pool, Visibility::Deleted)
+            .await
+            .unwrap();
         assert_eq!(
             pages,
             vec![unpublished_page, published_page, future_page, deleted_page,]
         );
+    }
+
+    #[cfg(feature = "server")]
+    #[sqlx::test]
+    async fn test_pages_hidden_excludes_deleted(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let mut unpublished_page = create_test_page(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        unpublished_page.published_at = None;
+        let unpublished_page = unpublished_page.clone().update(&pool).await.unwrap();
+        let mut published_page = create_test_page(&pool, 2, Some(record_label.clone()))
+            .await
+            .unwrap();
+        published_page.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        let published_page = published_page.clone().update(&pool).await.unwrap();
+        let mut future_page = create_test_page(&pool, 3, Some(record_label.clone()))
+            .await
+            .unwrap();
+        future_page.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1));
+        let future_page = future_page.clone().update(&pool).await.unwrap();
+        let deleted_page = create_test_page(&pool, 4, Some(record_label.clone()))
+            .await
+            .unwrap();
+        deleted_page.clone().delete(&pool).await.unwrap();
+
+        // The staff default (`Hidden`) leaves the deleted page out.
+        let pages = record_label.pages(&pool, Visibility::Hidden).await.unwrap();
+        assert_eq!(pages, vec![unpublished_page, published_page, future_page,]);
     }
 }

@@ -12,3 +12,6 @@ pub mod test_helpers;
 pub mod track;
 pub mod track_with_artists;
 pub mod traits;
+pub mod visibility;
+
+pub use visibility::Visibility;

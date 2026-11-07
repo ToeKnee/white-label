@@ -61,10 +61,14 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
         }
     };
 
+    // The public release page: `false` because the "show deleted" toggle
+    // is admin-only chrome; the service still lets a `label_owner` session
+    // open unpublished rows for its own preview.
     let release = use_page(move || {
         page_data(get_release(
             release_artist_slug.clone(),
             release_slug.clone(),
+            false,
         ))
     })?;
     let release_result = match release() {

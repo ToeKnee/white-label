@@ -4,7 +4,7 @@ use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
 use crate::models::release::Release;
-use crate::models::{artist::Artist, auth::User};
+use crate::models::{Visibility, artist::Artist, auth::User};
 
 /// Get release for artist
 ///
@@ -27,7 +27,9 @@ pub async fn get_releases_for_artist_service(
         Ok(_) => (),
         Err(e) => return Err(e),
     }
-    let include_hidden = user.is_some_and(|user| user.permissions.contains("label_owner"));
+    // The gate above guarantees `label_owner`, so staff visibility is a
+    // plain `Hidden` here (unpublished rows in, deleted rows out).
+    let visibility = Visibility::Hidden;
 
     let artist = Artist::find_by_id(pool, artist_id).await.map_err(|x| {
         let err = format!("Error while getting artist {artist_id}: {x:?}");
@@ -40,7 +42,7 @@ pub async fn get_releases_for_artist_service(
         ));
     };
 
-    Release::list_by_artist_and_record_label(pool, artist.id, artist.label_id, include_hidden)
+    Release::list_by_artist_and_record_label(pool, artist.id, artist.label_id, visibility)
         .await
         .map_err(|x| {
             let err = format!(

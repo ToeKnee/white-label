@@ -8,6 +8,8 @@ use sqlx::{FromRow, PgPool};
 
 use super::traits::Validate;
 #[cfg(feature = "server")]
+use super::visibility::Visibility;
+#[cfg(feature = "server")]
 use super::{artist::Artist, release::Release};
 #[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
@@ -128,7 +130,9 @@ impl Track {
     /// This is broken out from the main validate function to simplify the code
     #[cfg(feature = "server")]
     async fn validate_track_number(&self, release: &Release, pool: &PgPool) -> anyhow::Result<()> {
-        if let Ok(tracks) = release.get_tracks(pool).await {
+        // Number uniqueness is checked against every track of the release,
+        // including deleted ones, so a number never gets reused.
+        if let Ok(tracks) = release.get_tracks(pool, Visibility::Deleted).await {
             if tracks.iter().any(|tracks_with_artists| {
                 tracks_with_artists.track.track_number == self.track_number
                     && tracks_with_artists.track.id != self.id
@@ -350,7 +354,9 @@ impl Track {
     /// * `release_id` - The ID of the relase
     /// * `artist_id` - The ID of the artist
     /// * `record_label_id` - The ID of the record label
-    /// * `include_hidden` - Whether to include untrackd tracks
+    /// * `visibility` - How far down the visibility ladder to go
+    ///   ([`Visibility`]: `Published` is the public face, `Hidden` adds
+    ///   unpublished tracks, `Deleted` adds soft-deleted ones)
     ///
     /// # Returns
     /// The tracks
@@ -363,19 +369,11 @@ impl Track {
         release_id: i64,
         artist_id: i64,
         record_label_id: i64,
-        include_hidden: bool,
+        visibility: Visibility,
     ) -> anyhow::Result<Vec<Self>> {
-        let query = if include_hidden {
-            "SELECT t.*
-             FROM tracks t
-             INNER JOIN release_artists ra
-             ON t.release_id = ra.release_id
-             INNER JOIN artists a
-             ON a.id = ra.artist_id
-             WHERE t.release_id = $1 AND a.id = $2 AND a.label_id = $3
-             ORDER BY t.deleted_at DESC, t.track_number ASC"
-        } else {
-            "SELECT t.*
+        let query = match visibility {
+            Visibility::Published => {
+                "SELECT t.*
              FROM tracks t
              INNER JOIN release_artists ra
              ON t.release_id = ra.release_id
@@ -386,6 +384,28 @@ impl Track {
               AND t.published_at < NOW()
               AND t.published_at IS NOT NULL
              ORDER BY t.track_number ASC"
+            }
+            Visibility::Hidden => {
+                "SELECT t.*
+             FROM tracks t
+             INNER JOIN release_artists ra
+             ON t.release_id = ra.release_id
+             INNER JOIN artists a
+             ON a.id = ra.artist_id
+             WHERE t.release_id = $1 AND a.id = $2 AND a.label_id = $3
+              AND t.deleted_at IS NULL
+             ORDER BY t.track_number ASC"
+            }
+            Visibility::Deleted => {
+                "SELECT t.*
+             FROM tracks t
+             INNER JOIN release_artists ra
+             ON t.release_id = ra.release_id
+             INNER JOIN artists a
+             ON a.id = ra.artist_id
+             WHERE t.release_id = $1 AND a.id = $2 AND a.label_id = $3
+             ORDER BY t.deleted_at DESC, t.track_number ASC"
+            }
         };
 
         let tracks = sqlx::query_as::<_, Self>(query)
@@ -1101,9 +1121,10 @@ mod tests {
 
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_no_tracks(pool: PgPool) {
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 1, true)
-            .await
-            .unwrap();
+        let tracks =
+            Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 1, Visibility::Deleted)
+                .await
+                .unwrap();
 
         assert_eq!(tracks.len(), 0);
     }
@@ -1111,9 +1132,10 @@ mod tests {
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_with_tracks(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 1, true)
-            .await
-            .unwrap();
+        let tracks =
+            Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 1, Visibility::Deleted)
+                .await
+                .unwrap();
 
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0].id, track.id);
@@ -1158,7 +1180,7 @@ mod tests {
             release.id,
             artist.id,
             record_label_id,
-            false,
+            Visibility::Published,
         )
         .await
         .unwrap();
@@ -1211,7 +1233,7 @@ mod tests {
             release.id,
             artist.id,
             record_label_id,
-            true,
+            Visibility::Deleted,
         )
         .await
         .unwrap();
@@ -1224,11 +1246,69 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn test_list_by_release_and_artist_and_record_label_wrong_release(pool: PgPool) {
-        create_test_track(&pool, 1, None, None).await.unwrap();
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 2, 1, 1, true)
+    async fn test_list_by_release_and_artist_and_record_label_hidden_excludes_deleted(
+        pool: PgPool,
+    ) {
+        let artist = create_test_artist(&pool, 1, None).await.unwrap();
+        let record_label_id = artist.label_id;
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
             .await
             .unwrap();
+
+        let mut unpublished_track =
+            create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        unpublished_track.published_at = None;
+        unpublished_track.clone().update(&pool).await.unwrap();
+        let mut published_in_future_track =
+            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        published_in_future_track.published_at =
+            Some(chrono::Utc::now() + chrono::Duration::days(1));
+        published_in_future_track
+            .clone()
+            .update(&pool)
+            .await
+            .unwrap();
+        let mut published_track =
+            create_test_track(&pool, 3, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        published_track.published_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+        published_track.clone().update(&pool).await.unwrap();
+        let deleted_track =
+            create_test_track(&pool, 4, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+        deleted_track.clone().delete(&pool).await.unwrap();
+
+        // The staff default (`Hidden`) keeps the three live tracks and
+        // leaves the deleted one out.
+        let tracks = Track::list_by_release_and_artist_and_record_label(
+            &pool,
+            release.id,
+            artist.id,
+            record_label_id,
+            Visibility::Hidden,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(tracks.len(), 3);
+        assert_eq!(tracks[0].id, unpublished_track.id);
+        assert_eq!(tracks[1].id, published_in_future_track.id);
+        assert_eq!(tracks[2].id, published_track.id);
+    }
+
+    #[sqlx::test]
+    async fn test_list_by_release_and_artist_and_record_label_wrong_release(pool: PgPool) {
+        create_test_track(&pool, 1, None, None).await.unwrap();
+        let tracks =
+            Track::list_by_release_and_artist_and_record_label(&pool, 2, 1, 1, Visibility::Deleted)
+                .await
+                .unwrap();
 
         assert_eq!(tracks.len(), 0);
     }
@@ -1236,9 +1316,10 @@ mod tests {
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_wrong_artist(pool: PgPool) {
         create_test_track(&pool, 1, None, None).await.unwrap();
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 2, 1, true)
-            .await
-            .unwrap();
+        let tracks =
+            Track::list_by_release_and_artist_and_record_label(&pool, 1, 2, 1, Visibility::Deleted)
+                .await
+                .unwrap();
 
         assert_eq!(tracks.len(), 0);
     }
@@ -1246,9 +1327,10 @@ mod tests {
     #[sqlx::test]
     async fn test_list_by_release_and_artist_and_record_label_wrong_label(pool: PgPool) {
         create_test_track(&pool, 1, None, None).await.unwrap();
-        let tracks = Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 2, true)
-            .await
-            .unwrap();
+        let tracks =
+            Track::list_by_release_and_artist_and_record_label(&pool, 1, 1, 2, Visibility::Deleted)
+                .await
+                .unwrap();
 
         assert_eq!(tracks.len(), 0);
     }

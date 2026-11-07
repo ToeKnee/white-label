@@ -10,6 +10,8 @@ use sqlx::{FromRow, PgPool, Row};
 use super::record_label::RecordLabel;
 use super::traits::Validate;
 #[cfg(feature = "server")]
+use super::visibility::Visibility;
+#[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
 
 /// The Artist struct is used to represent a record artist in the database.
@@ -242,7 +244,9 @@ impl Artist {
     /// # Arguments
     /// * `pool` - The database connection pool
     /// * `record_label_id` - The ID of the record label
-    /// * `include_hidden` - Whether to include unreleased releases
+    /// * `visibility` - How far down the visibility ladder to go
+    ///   ([`Visibility`]: `Published` is the public face, `Hidden` adds
+    ///   unpublished artists, `Deleted` adds soft-deleted ones)
     ///
     /// # Returns
     /// The artists
@@ -253,19 +257,28 @@ impl Artist {
     pub async fn list_by_record_label(
         pool: &PgPool,
         record_label_id: i64,
-        include_hidden: bool,
+        visibility: Visibility,
     ) -> anyhow::Result<Vec<Self>> {
-        let query = if include_hidden {
-            "SELECT artists.* FROM artists
+        let query = match visibility {
+            Visibility::Published => {
+                "SELECT artists.* FROM artists
+             WHERE artists.label_id = $1
+              AND artists.deleted_at IS NULL
+              AND artists.published_at < NOW()
+              AND artists.published_at IS NOT NULL
+             ORDER BY published_at DESC, name ASC"
+            }
+            Visibility::Hidden => {
+                "SELECT artists.* FROM artists
+             WHERE artists.label_id = $1
+              AND artists.deleted_at IS NULL
+             ORDER BY published_at DESC, name ASC"
+            }
+            Visibility::Deleted => {
+                "SELECT artists.* FROM artists
              WHERE artists.label_id = $1
              ORDER BY deleted_at DESC, published_at DESC, name ASC"
-        } else {
-            "SELECT artists.* FROM artists
-             WHERE artists.label_id = $1
-              AND deleted_at IS NULL
-              AND published_at < NOW()
-              AND published_at IS NOT NULL
-             ORDER BY published_at DESC, name ASC"
+            }
         };
 
         let artists = sqlx::query_as::<_, Self>(query)
@@ -617,7 +630,7 @@ mod tests {
             .await
             .unwrap();
 
-        let artists = Artist::list_by_record_label(&pool, record_label.id, false)
+        let artists = Artist::list_by_record_label(&pool, record_label.id, Visibility::Published)
             .await
             .unwrap();
 
@@ -640,13 +653,35 @@ mod tests {
         artist2.published_at = Some(chrono::Utc::now() + chrono::Duration::days(1)); // Future date to simulate hidden artist
         artist2 = artist2.clone().update(&pool).await.unwrap();
 
-        let artists = Artist::list_by_record_label(&pool, record_label.id, true)
+        let artists = Artist::list_by_record_label(&pool, record_label.id, Visibility::Deleted)
             .await
             .unwrap();
 
         assert_eq!(artists.len(), 2);
         assert!(artists.contains(&artist1));
         assert!(artists.contains(&artist2));
+    }
+
+    #[sqlx::test]
+    async fn test_list_by_record_label_hidden_excludes_deleted(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let deleted_artist = create_test_artist(&pool, 1, Some(record_label.clone()))
+            .await
+            .unwrap();
+        let deleted_artist = deleted_artist.delete(&pool).await.unwrap();
+
+        // The staff default (`Hidden`) leaves deleted artists out…
+        let artists = Artist::list_by_record_label(&pool, record_label.id, Visibility::Hidden)
+            .await
+            .unwrap();
+        assert_eq!(artists, [] as [Artist; 0]);
+
+        // …and the admin "show deleted" view brings them back.
+        let artists = Artist::list_by_record_label(&pool, record_label.id, Visibility::Deleted)
+            .await
+            .unwrap();
+        assert_eq!(artists.len(), 1);
+        assert!(artists.contains(&deleted_artist));
     }
 
     #[sqlx::test]

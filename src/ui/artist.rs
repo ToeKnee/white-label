@@ -52,7 +52,9 @@ fn ArtistsBody() -> Element {
             String::new()
         }
     };
-    let artists = use_page(move || page_data(get_label_artists()))?;
+    // Public listings never reach deleted rows (`false` here is fixed,
+    // the "show deleted" toggle is admin-only chrome).
+    let artists = use_page(move || page_data(get_label_artists(false)))?;
     let artists = match artists() {
         Ok(result) => result.artists,
         Err(error) => {
@@ -162,7 +164,7 @@ fn ArtistBody(slug: String) -> Element {
             LinksResult::default()
         }
     };
-    let releases = use_page(move || page_data(get_releases(releases_slug.clone())))?;
+    let releases = use_page(move || page_data(get_releases(releases_slug.clone(), false)))?;
     let releases = match releases() {
         Ok(result) => result.releases,
         Err(error) => {

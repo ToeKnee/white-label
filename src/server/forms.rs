@@ -554,6 +554,9 @@ async fn create_release(
         &pool,
         current_user.as_ref(),
         args.into_service_form(),
+        // The 303 handler renders no payload, so the toggle plays no part
+        // here; the ladder default is fine.
+        false,
     )
     .await
     {
@@ -594,6 +597,8 @@ async fn update_release(
         &pool,
         current_user.as_ref(),
         args.into_service_form(),
+        // Payload-free 303 handler (see above).
+        false,
     )
     .await
     {
@@ -628,8 +633,13 @@ async fn delete_release(
 
     let slug = args.slug;
     let artist_slug = args.artist_slug;
-    match services::release::delete_release_service(&pool, current_user.as_ref(), slug.clone())
-        .await
+    match services::release::delete_release_service(
+        &pool,
+        current_user.as_ref(),
+        slug.clone(),
+        false,
+    )
+    .await
     {
         Ok(result) => Redirect::to(&format!(
             "/admin/artist/{}/release/{}?updated=1",
@@ -659,8 +669,13 @@ async fn restore_release(
 
     let slug = args.slug;
     let artist_slug = args.artist_slug;
-    match services::release::restore_release_service(&pool, current_user.as_ref(), slug.clone())
-        .await
+    match services::release::restore_release_service(
+        &pool,
+        current_user.as_ref(),
+        slug.clone(),
+        false,
+    )
+    .await
     {
         Ok(result) => Redirect::to(&format!(
             "/admin/artist/{}/release/{}?updated=1",

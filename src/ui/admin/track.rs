@@ -88,10 +88,12 @@ fn TracksBody(artist_slug: String, release_slug: String) -> Element {
     // profile, as the original's release-fetch failure did.
     let tracks_artist_slug = artist_slug.clone();
     let tracks_release_slug = release_slug.clone();
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
     let tracks_release_resource = use_page(move || {
         page_data(get_release(
             tracks_artist_slug.clone(),
             tracks_release_slug.clone(),
+            show_deleted(),
         ))
     })?;
     let tracks = match tracks_release_resource() {
@@ -269,10 +271,12 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
     // release slug steers to the releases list.
     let release_artist_slug = artist_slug.clone();
     let release_slug_for_resource = release_slug.clone();
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
     let release_resource = use_page(move || {
         page_data(get_release(
             release_artist_slug.clone(),
             release_slug_for_resource.clone(),
+            show_deleted(),
         ))
     })?;
     let release = match release_resource() {
@@ -468,10 +472,12 @@ fn EditTrackBody(
 
     let track_release_artist_slug = artist_slug.clone();
     let track_release_slug = release_slug.clone();
+    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
     let release_resource = use_page(move || {
         page_data(get_release(
             track_release_artist_slug.clone(),
             track_release_slug.clone(),
+            show_deleted(),
         ))
     })?;
     let release = match release_resource() {
