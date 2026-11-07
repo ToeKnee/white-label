@@ -326,14 +326,10 @@ works: `dx bundle --platform desktop --package-types deb --bin dioxus-desktop
 --features desktop --no-default-features --release` produces an installable
 `.deb` under `target/dx/dioxus-desktop/bundle/linux/deb/` (proven;
 the statics gap noted in the desktop section still applies). Mobile
-packaging (iOS/Android) is the remaining target, and it carries non-code
-work to schedule: pin the deployed API's cross-origin session semantics for
-native clients (CORS plus deliberate `Secure`/`HttpOnly`/`SameSite`
-choices — today the native clients keep cookies in the reqwest jar inside
-the app process, not in the webview), and the App Store review / Play Data
-Safety declarations. Desktop and mobile render through the system webview
-(wry): the same HTML/CSS everywhere and no native widgets — an accepted
-design choice.
+packaging (iOS/Android) is the remaining target, and its open items are
+tracked in `Ideas.md`.
+Desktop and mobile render through the system webview (wry): the same
+HTML/CSS everywhere and no native widgets — an accepted design choice.
 
 Dependency policy: `Cargo.lock` is committed (this crate ships binaries)
 and CI/release builds pass `--locked` — `dx build` and `dx bundle` accept it
@@ -341,9 +337,7 @@ as `--cargo-args --locked`. A lockfile that is stale or missing should fail
 the build rather than silently re-resolve. Dependency updates mean
 regenerating the lockfile in its own commit and rerunning the gate. Keep
 the `dx` CLI and the `dioxus` crates on the same 0.7.x (0.7.10 at the
-moment); re-evaluate when 0.8 goes stable. CI/CD is deliberately not set up
-for this repo — anything needing signing secrets (mobile builds) is a
-decision to make first.
+moment); re-evaluate when 0.8 goes stable.
 
 ## Testing Your Project
 
