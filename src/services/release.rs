@@ -1,11 +1,25 @@
 //! Services for the releases routes
-use leptos::prelude::ServerFnError;
+use crate::api_types::release::{ReleaseResult, ReleasesResult};
+use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
 use crate::forms::release::{CreateReleaseForm, UpdateReleaseForm};
 use crate::models::{artist::Artist, auth::User, release::Release};
-use crate::routes::release::{ReleaseResult, ReleasesResult};
+
+/// `Release::find_by_slug` wired onto the service error ladder: a missing
+/// row is a 404 with the model's message, a database failure stays a 500.
+#[cfg(feature = "server")]
+async fn find_release_by_slug(pool: &PgPool, slug: &str) -> Result<Release, AppError> {
+    Release::find_by_slug(pool, slug.to_string())
+        .await
+        .map_err(|e| {
+            let err = format!("Error while getting release by slug: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("Could not find release with slug {slug}.")))
+}
 
 /// Get the next scheduled release, optionally filtered by artist slug.
 ///
@@ -18,18 +32,18 @@ use crate::routes::release::{ReleaseResult, ReleasesResult};
 ///
 /// # Errors
 /// If there is an error querying the database, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn get_next_scheduled_release_service(
     pool: &PgPool,
     artist_id: Option<i64>,
     label_id: i64,
-) -> Result<Option<ReleaseResult>, ServerFnError> {
+) -> Result<Option<ReleaseResult>, AppError> {
     let release = match Release::get_next_scheduled_release(pool, artist_id, label_id).await {
         Ok(release) => Ok(release),
         Err(e) => {
             let err = format!("Error while getting next scheduled release: {e:?}");
             tracing::error!("{err}");
-            Err(ServerFnError::new(e))
+            Err(AppError::internal(e))
         }
     };
     match release {
@@ -37,12 +51,12 @@ pub async fn get_next_scheduled_release_service(
             let artists = release.get_artists(pool).await.map_err(|e| {
                 let err = format!("Error while getting artists: {e:?}");
                 tracing::error!("{err}");
-                ServerFnError::new(e)
+                AppError::internal(e)
             })?;
             let tracks = release.get_tracks(pool).await.map_err(|e| {
                 let err = format!("Error while getting tracks: {e:?}");
                 tracing::error!("{err}");
-                ServerFnError::new(e)
+                AppError::internal(e)
             })?;
 
             Ok(Some(ReleaseResult {
@@ -70,18 +84,25 @@ pub async fn get_next_scheduled_release_service(
 /// If the artist cannot be found, return an error
 /// If the user cannot be found, return an error
 /// If the releases cannot be found, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn get_releases_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<ReleasesResult, ServerFnError> {
-    let artist = match Artist::get_by_slug(pool, slug).await {
-        Ok(artist) => artist,
+) -> Result<ReleasesResult, AppError> {
+    let artist = match Artist::find_by_slug(pool, slug.clone()).await {
+        Ok(Some(artist)) => artist,
+        // Missing artist answers 404 with the model's message; database
+        // failures stay 500.
+        Ok(None) => {
+            return Err(AppError::NotFound(format!(
+                "Could not find artist with slug {slug}."
+            )));
+        }
         Err(e) => {
             let err = format!("Error while getting artist: {e:?}");
             tracing::error!("get_releases_service {err}");
-            return Err(ServerFnError::new(e));
+            return Err(AppError::internal(e));
         }
     };
 
@@ -101,7 +122,7 @@ pub async fn get_releases_service(
             Err(e) => {
                 let err = format!("Error while getting releases: {e:?}");
                 tracing::error!("{err}");
-                return Err(ServerFnError::new(e));
+                return Err(AppError::internal(e));
             }
         },
     })
@@ -122,13 +143,13 @@ pub async fn get_releases_service(
 /// If the artist cannot be found, return an error
 /// If the user cannot be found, return an error
 /// If the release cannot be found, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn get_release_service(
     pool: &PgPool,
     user: Option<&User>,
     artist_slug: String,
     release_slug: String,
-) -> Result<ReleaseResult, ServerFnError> {
+) -> Result<ReleaseResult, AppError> {
     let artist = match Artist::get_by_slug(pool, artist_slug).await {
         Ok(artist) => artist,
         Err(e) => {
@@ -152,17 +173,17 @@ pub async fn get_release_service(
     .map_err(|e| {
         let err = format!("Error while getting releases: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     let artists = release.get_artists(pool).await.map_err(|e| {
         let err = format!("Error while getting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     let tracks = release.get_tracks(pool).await.map_err(|e| {
         let err = format!("Error while getting tracks: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(ReleaseResult {
@@ -180,18 +201,18 @@ pub async fn get_release_service(
 /// `form`: `CreateReleaseForm` - The form to create the release
 ///
 /// # Returns
-/// Result<`ReleaseResult`, `ServerFnError`> - The created release
+/// Result<`ReleaseResult`, `AppError`> - The created release
 ///
 /// # Errors
 /// If the name is empty, return an error
 /// If the release cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_release_service(
     pool: &PgPool,
     user: Option<&User>,
     form: CreateReleaseForm,
-) -> Result<ReleaseResult, ServerFnError> {
+) -> Result<ReleaseResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -211,7 +232,7 @@ pub async fn create_release_service(
     .map_err(|e| {
         let err = format!("Error while creating release: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     let artist_ids = form
@@ -222,18 +243,18 @@ pub async fn create_release_service(
     release.set_artists(pool, artist_ids).await.map_err(|e| {
         let err = format!("Error while setting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     let artists = release.get_artists(pool).await.map_err(|e| {
         let err = format!("Error while getting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     let tracks = release.get_tracks(pool).await.map_err(|e| {
         let err = format!("Error while getting tracks: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(ReleaseResult {
@@ -251,28 +272,24 @@ pub async fn create_release_service(
 /// `form`: `CreateReleaseForm` - The form to create the release
 ///
 /// # Returns
-/// Result<`ReleaseResult`, `ServerFnError`> - The created release
+/// Result<`ReleaseResult`, `AppError`> - The created release
 ///
 /// # Errors
 /// If the name is empty, return an error
 /// If the release cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_release_service(
     pool: &PgPool,
     user: Option<&User>,
     form: UpdateReleaseForm,
-) -> Result<ReleaseResult, ServerFnError> {
+) -> Result<ReleaseResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let mut release = Release::get_by_slug(pool, form.slug).await.map_err(|e| {
-        let err = format!("Error while getting release by slug: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let mut release = find_release_by_slug(pool, &form.slug).await?;
 
     release.name = form.name;
     release.description = form.description;
@@ -284,7 +301,7 @@ pub async fn update_release_service(
     release = release.update(pool).await.map_err(|e| {
         let err = format!("Error while updating release: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     let artist_ids = form
@@ -295,17 +312,17 @@ pub async fn update_release_service(
     release.set_artists(pool, artist_ids).await.map_err(|e| {
         let err = format!("Error while setting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     let artists = release.get_artists(pool).await.map_err(|e| {
         let err = format!("Error while getting artists: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     let tracks = release.get_tracks(pool).await.map_err(|e| {
         let err = format!("Error while getting tracks: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(ReleaseResult {
@@ -323,43 +340,39 @@ pub async fn update_release_service(
 /// slug: String - The slug of the release
 ///
 /// # Returns
-/// Result<`ReleaseResult`, `ServerFnError`> - The deleted release
+/// Result<`ReleaseResult`, `AppError`> - The deleted release
 ///
 /// # Errors
 /// If the release cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn delete_release_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<ReleaseResult, ServerFnError> {
+) -> Result<ReleaseResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let release = Release::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting release: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let release = find_release_by_slug(pool, &slug).await?;
 
     Ok(ReleaseResult {
         release: release.delete(pool).await.map_err(|e| {
             let err = format!("Error while deleting release: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
         artists: release.get_artists(pool).await.map_err(|e| {
             let err = format!("Error while getting artists: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
         tracks: release.get_tracks(pool).await.map_err(|e| {
             let err = format!("Error while getting tracks: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -372,32 +385,28 @@ pub async fn delete_release_service(
 /// slug: String - The slug of the release
 ///
 /// # Returns
-/// Result<`ReleaseResult`, `ServerFnError`> - The restored release
+/// Result<`ReleaseResult`, `AppError`> - The restored release
 ///
 /// # Errors
 /// If the release cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn restore_release_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<ReleaseResult, ServerFnError> {
+) -> Result<ReleaseResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let mut release = Release::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting release: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let mut release = find_release_by_slug(pool, &slug).await?;
     release.deleted_at = None;
     release.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring release: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
 
     Ok(ReleaseResult {
@@ -405,12 +414,12 @@ pub async fn restore_release_service(
         artists: release.get_artists(pool).await.map_err(|e| {
             let err = format!("Error while getting artists: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
         tracks: release.get_tracks(pool).await.map_err(|e| {
             let err = format!("Error while getting tracks: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -418,7 +427,7 @@ pub async fn restore_release_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
         create_test_user, create_test_user_with_permissions,
@@ -598,7 +607,7 @@ mod tests {
         assert!(release_result.is_err());
         assert_eq!(
             release_result.unwrap_err().to_string(),
-            "error running server function: Could not find release test-release-1 for artist with id 1 and record label with id 1.".to_string()
+            "Could not find release test-release-1 for artist with id 1 and record label with id 1.".to_string()
         );
     }
 
@@ -624,7 +633,7 @@ mod tests {
         assert!(release_result.is_err());
         assert_eq!(
             release_result.unwrap_err().to_string(),
-            "error running server function: Could not find release test-release-1 for artist with id 1 and record label with id 1.".to_string()
+            "Could not find release test-release-1 for artist with id 1 and record label with id 1.".to_string()
         );
     }
 
@@ -696,7 +705,7 @@ mod tests {
         assert!(release_result.is_err());
         assert_eq!(
             release_result.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -727,7 +736,7 @@ mod tests {
         assert!(release_result.is_err());
         assert_eq!(
             release_result.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -837,8 +846,7 @@ mod tests {
         assert!(delete_result.is_err());
         assert_eq!(
             delete_result.unwrap_err().to_string(),
-            "error running server function: Could not find release with slug not-found."
-                .to_string()
+            "Could not find release with slug not-found.".to_string()
         );
     }
 
@@ -860,7 +868,7 @@ mod tests {
         let delete_result = delete_release_service(&pool, Some(&user), release.slug.clone()).await;
         assert_eq!(
             delete_result.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
 
         let get_result = get_release_service(&pool, Some(&user), artist.slug, release.slug).await;
@@ -895,7 +903,7 @@ mod tests {
         assert!(restored_release.is_err());
         assert_eq!(
             restored_release.unwrap_err().to_string(),
-            "error running server function: Could not find release with slug missing.".to_string()
+            "Could not find release with slug missing.".to_string()
         );
     }
 
@@ -908,7 +916,7 @@ mod tests {
         assert!(restored_release.is_err());
         assert_eq!(
             restored_release.unwrap_err().to_string(),
-            "error running server function: You must be logged in to view this page.".to_string()
+            "You must be logged in to view this page.".to_string()
         );
     }
 
@@ -924,7 +932,7 @@ mod tests {
         assert!(restored_release.is_err());
         assert_eq!(
             restored_release.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 }

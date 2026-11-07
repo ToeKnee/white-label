@@ -1,7 +1,7 @@
 //! This module defines the `User` struct and its associated methods for user management in the system.
 
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use sqlx::PgPool;
 use std::collections::HashSet;
 
@@ -62,7 +62,7 @@ impl Default for User {
 }
 
 impl Validate for User {
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     async fn validate(&self, pool: &PgPool) -> anyhow::Result<()> {
         if self.username.is_empty() {
             return Err(anyhow::anyhow!("Username is required."));
@@ -103,22 +103,21 @@ impl Validate for User {
 }
 
 impl User {
-    /// Check if the user is authenticated.
+    /// Whether this is a real (non-guest) user: the sentinel `id` is -1.
+    #[must_use]
     pub const fn is_authenticated(&self) -> bool {
         self.id != -1
     }
 
-    /// Check if the user is active.
+    /// Whether the user's account is usable — the same sentinel check as
+    /// [`Self::is_authenticated`].
+    #[must_use]
     pub const fn is_active(&self) -> bool {
         self.id != -1
     }
 
-    /// Check if the user is anonymous.
-    pub const fn is_anonymous(&self) -> bool {
-        self.id == -1
-    }
-
     /// Get the avatar URL of the user.
+    #[must_use]
     pub fn avatar_url(&self) -> String {
         self.avatar.clone().map_or_else(
             || "/Logo.svg".to_string(),
@@ -137,7 +136,7 @@ impl User {
     ///
     /// # Errors
     /// If the user cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_username(pool: &PgPool, username: String) -> anyhow::Result<Self> {
         Self::get_from_username(username, pool)
             .await
@@ -155,7 +154,7 @@ impl User {
     ///
     /// # Errors
     /// If the user cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_email(pool: &PgPool, email: String) -> anyhow::Result<Self> {
         Self::get_from_email(email, pool)
             .await
@@ -175,7 +174,7 @@ impl User {
     ///
     /// # Panics
     /// If the user cannot be updated, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn update(mut self, pool: &PgPool) -> anyhow::Result<Self> {
         self.validate(pool).await?;
         tracing::info!("Updating user: {:?}", self);
@@ -198,18 +197,13 @@ impl User {
     }
 }
 
-/// This module contains auth models that are only compiled when the `ssr` feature is enabled.
-#[cfg(feature = "ssr")]
-pub mod ssr {
+/// The database half of the auth model: the queries that read users and their
+/// permission tokens. Server builds only (they need `sqlx`).
+#[cfg(feature = "server")]
+pub mod db {
     pub use super::{User, UserPasshash};
-    pub use async_trait::async_trait;
-    pub use axum_session_auth::Authentication;
-    use axum_session_sqlx::SessionPgPool;
     pub use sqlx::PgPool;
     pub use std::collections::HashSet;
-
-    /// The authentication session type for the user.
-    pub type AuthSession = axum_session_auth::AuthSession<User, i64, SessionPgPool, PgPool>;
 
     impl User {
         /// Get user by ID with passhash
@@ -349,31 +343,6 @@ pub mod ssr {
     pub struct SqlPermissionTokens {
         /// The unique identifier for the permission token.
         pub token: String,
-    }
-
-    #[async_trait]
-    impl Authentication<Self, i64, PgPool> for User {
-        async fn load_user(userid: i64, pool: Option<&PgPool>) -> Result<Self, anyhow::Error> {
-            let Some(pool) = pool else {
-                return Err(anyhow::anyhow!("No pool provided."));
-            };
-
-            Self::get(userid, pool)
-                .await
-                .ok_or_else(|| anyhow::anyhow!("Cannot get user."))
-        }
-
-        fn is_authenticated(&self) -> bool {
-            self.id == -1
-        }
-
-        fn is_active(&self) -> bool {
-            self.id != -1
-        }
-
-        fn is_anonymous(&self) -> bool {
-            self.id == -1
-        }
     }
 
     /// Represents a user in the SQL database.
@@ -588,30 +557,9 @@ mod tests {
         assert!(user.is_active());
     }
 
-    #[test]
-    fn test_user_is_anonymous() {
-        let user = User::default();
-        assert!(user.is_anonymous());
-
-        let user = User {
-            id: 1,
-            username: "test".into(),
-            first_name: None,
-            last_name: None,
-            email: "test@example.com".into(),
-            description: None,
-            avatar: None,
-            permissions: HashSet::new(),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
-        assert!(!user.is_anonymous());
-    }
-
-    #[cfg(feature = "ssr")]
-    mod ssr_tests {
+    #[cfg(feature = "server")]
+    mod db_tests {
         use super::*;
-        use axum_session_auth::Authentication;
         use bcrypt::verify;
         use sqlx::PgPool;
         use std::collections::HashSet;
@@ -708,35 +656,6 @@ mod tests {
             assert_eq!(user.id, test_user.id);
             assert_eq!(user.username, test_user.username);
             assert_eq!(user.permissions, HashSet::new());
-        }
-
-        #[sqlx::test]
-        async fn test_load_user(pool: PgPool) {
-            let test_user = create_test_user(&pool, 1).await.unwrap();
-            let user = User::load_user(1, Some(&pool)).await.unwrap();
-            assert_eq!(user.id, test_user.id);
-            assert_eq!(user.username, test_user.username);
-            assert_eq!(user.permissions, HashSet::new());
-        }
-
-        #[sqlx::test]
-        async fn test_is_authenticated() {
-            let user = User::default();
-            assert!(!user.is_authenticated());
-
-            let user = User {
-                id: 1,
-                username: "test".into(),
-                first_name: None,
-                last_name: None,
-                email: "test@example.com".into(),
-                description: None,
-                avatar: None,
-                permissions: HashSet::new(),
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            };
-            assert!(user.is_authenticated());
         }
     }
 

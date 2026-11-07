@@ -3,8 +3,8 @@
 use sqlx::PgPool;
 
 use crate::models::artist::Artist;
-#[cfg(feature = "ssr")]
-use crate::models::auth::{User, ssr::SqlPermissionTokens, ssr::SqlUser};
+#[cfg(feature = "server")]
+use crate::models::auth::{User, db::SqlPermissionTokens, db::SqlUser};
 use crate::models::page::Page;
 use crate::models::record_label::RecordLabel;
 use crate::models::release::Release;
@@ -26,7 +26,7 @@ use crate::models::track::Track;
 /// # Panics
 /// If the artist cannot be created, panic
 /// If the record label is not found or cannot be created, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_test_artist(
     pool: &PgPool,
     id: usize,
@@ -66,7 +66,7 @@ pub async fn create_test_artist(
 /// # Panics
 /// If the page cannot be created, panic
 /// If the record label is not found or cannot be created, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_test_page(
     pool: &PgPool,
     id: usize,
@@ -105,7 +105,7 @@ pub async fn create_test_page(
 ///
 /// # Panics
 /// If the record label cannot be created, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_test_record_label(
     pool: &PgPool,
     id: usize,
@@ -137,7 +137,7 @@ pub async fn create_test_record_label(
 /// # Panics
 /// If the release cannot be created, panic
 /// If the record label is not found or cannot be created, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_test_release(
     pool: &PgPool,
     id: usize,
@@ -191,7 +191,7 @@ pub async fn create_test_release(
 /// If the track cannot be created, panic
 /// If the release is not found or cannot be created, panic
 /// If the artist is not found or cannot be created, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_test_track(
     pool: &PgPool,
     id: usize,
@@ -257,7 +257,7 @@ pub async fn create_test_track(
 ///
 /// # Panics
 /// If the user cannot be created, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_test_user(pool: &PgPool, id: usize) -> Result<SqlUser, sqlx::Error> {
     let user = sqlx::query_as::<_, SqlUser>(
         "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *",
@@ -287,7 +287,7 @@ pub async fn create_test_user(pool: &PgPool, id: usize) -> Result<SqlUser, sqlx:
 ///
 /// # Panics
 /// If the user cannot be created, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_test_user_with_permissions(
     pool: &PgPool,
     id: usize,

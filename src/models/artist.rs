@@ -3,18 +3,18 @@
 //! The Artist struct is used to represent a record artist in the database.
 
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use sqlx::{FromRow, PgPool, Row};
 
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use super::record_label::RecordLabel;
 use super::traits::Validate;
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
 
 /// The Artist struct is used to represent a record artist in the database.
 #[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "ssr", derive(FromRow))]
+#[cfg_attr(feature = "server", derive(FromRow))]
 pub struct Artist {
     /// The unique identifier of the artist
     pub id: i64,
@@ -45,7 +45,7 @@ pub struct Artist {
 }
 
 impl Validate for Artist {
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     async fn validate(&self, pool: &PgPool) -> anyhow::Result<()> {
         if self.name.is_empty() {
             return Err(anyhow::anyhow!("Name is required."));
@@ -84,6 +84,7 @@ impl Validate for Artist {
 impl Artist {
     /// Get the primary image URL
     /// If the primary image is None, return the default image
+    #[must_use]
     pub fn primary_image_url(&self) -> String {
         self.primary_image.clone().map_or_else(
             || "/Logo.svg".to_string(),
@@ -106,7 +107,7 @@ impl Artist {
     /// # Errors
     /// If the artist cannot be created, return an error
     /// If the record label is not found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn create(
         pool: &PgPool,
         name: String,
@@ -158,22 +159,34 @@ impl Artist {
     ///
     /// # Errors
     /// If the artist cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
+        Self::find_by_id(pool, id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Could not find artist with id {}.", id))
+    }
+
+    /// Look up an artist by id, `Ok(None)` when no row matches — lets
+    /// callers tell a missing artist (404) from a database failure (500).
+    ///
+    /// # Errors
+    /// If the database query fails, return an error
+    #[cfg(feature = "server")]
+    pub async fn find_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Option<Self>> {
         let row = sqlx::query("SELECT * FROM artists WHERE id = $1")
             .bind(id)
-            .fetch_one(pool)
-            .await;
-
-        let row = match row {
-            Ok(row) => row,
-            Err(e) => {
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
                 tracing::error!("{e}");
-                return Err(anyhow::anyhow!("Could not find artist with id {}.", id));
-            }
+                anyhow::anyhow!("Could not find artist with id {}.", id)
+            })?;
+
+        let Some(row) = row else {
+            return Ok(None);
         };
 
-        Ok(Self {
+        Ok(Some(Self {
             id: row.get("id"),
             name: row.get("name"),
             slug: row.get("slug"),
@@ -185,7 +198,7 @@ impl Artist {
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             deleted_at: row.get("deleted_at"),
-        })
+        }))
     }
 
     /// Get artist by slug
@@ -199,20 +212,28 @@ impl Artist {
     ///
     /// # Errors
     /// If the artist cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
-        let artist = sqlx::query_as::<_, Self>("SELECT * FROM artists WHERE slug = $1")
-            .bind(slug.clone())
-            .fetch_one(pool)
-            .await;
+        Self::find_by_slug(pool, slug.clone())
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Could not find artist with slug {}.", slug))
+    }
 
-        match artist {
-            Ok(row) => Ok(row),
-            Err(e) => {
+    /// Look up an artist by slug, `Ok(None)` when no row matches — lets
+    /// callers tell a missing artist (404) from a database failure (500).
+    ///
+    /// # Errors
+    /// If the database query fails, return an error
+    #[cfg(feature = "server")]
+    pub async fn find_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM artists WHERE slug = $1")
+            .bind(&slug)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
                 tracing::error!("{e}");
-                Err(anyhow::anyhow!("Could not find artist with slug {}.", slug))
-            }
-        }
+                anyhow::anyhow!("Could not find artist with slug {}.", slug)
+            })
     }
 
     /// List artist by record label
@@ -228,7 +249,7 @@ impl Artist {
     ///
     /// # Errors
     /// If there is an error getting the artists, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn list_by_record_label(
         pool: &PgPool,
         record_label_id: i64,
@@ -277,7 +298,7 @@ impl Artist {
     ///
     /// # Panics
     /// If the artist cannot be updated, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn update(mut self, pool: &PgPool) -> anyhow::Result<Self> {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
@@ -316,7 +337,7 @@ impl Artist {
     ///
     /// # Errors
     /// If the artist cannot be deleted, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<Self> {
         let artist = sqlx::query_as::<_, Self>(
             "UPDATE artists SET deleted_at = $1 WHERE id = $2 RETURNING *",
@@ -342,7 +363,7 @@ impl Artist {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{create_test_artist, create_test_record_label};
 
     #[test]

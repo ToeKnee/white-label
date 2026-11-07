@@ -1,14 +1,58 @@
 //! User service module
 
-#[cfg(feature = "ssr")]
+use crate::error::AppError;
+#[cfg(feature = "server")]
 use bcrypt::{DEFAULT_COST, hash, verify};
-use leptos::prelude::ServerFnError;
 use sqlx::PgPool;
 
 use crate::forms::user::{ChangePasswordForm, RegisterUserForm, UpdateUserForm};
 use crate::models::auth::{User, UserPasshash};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use crate::models::traits::Validate;
+
+/// Check a username/password pair and return the matching user.
+///
+/// Shared by the wire `POST /api/login` handler and the web login form
+/// (`crate::server::forms`) so the two login paths cannot drift apart.
+/// The errors are the same messages both entry points show users today.
+///
+/// # Arguments
+/// pool: `PgPool` - The database connection pool
+/// username: The submitted username
+/// password: The submitted password
+///
+/// # Returns
+/// Result<`User`, `AppError`> - The authenticated user
+///
+/// # Errors
+/// If a field is empty, return `BadRequest`
+/// If the user does not exist, return `Unauthorized`
+/// If the password does not match the stored hash, return `Unauthorized`
+/// If bcrypt itself fails, return `Internal`
+#[cfg(feature = "server")]
+pub async fn login_user(
+    pool: &PgPool,
+    username: String,
+    password: String,
+) -> Result<User, AppError> {
+    if username.is_empty() || password.is_empty() {
+        return Err(AppError::BadRequest(
+            "Username and password are required.".into(),
+        ));
+    }
+
+    let Some((user, UserPasshash(expected_passhash))) =
+        User::get_from_username_with_passhash(username, pool).await
+    else {
+        return Err(AppError::Unauthorized("User does not exist.".into()));
+    };
+
+    if !verify(&password, &expected_passhash).map_err(AppError::internal)? {
+        return Err(AppError::Unauthorized("Password does not match.".into()));
+    }
+
+    Ok(user)
+}
 
 /// Register User
 ///
@@ -19,7 +63,7 @@ use crate::models::traits::Validate;
 /// form: `RegisterUserForm` - The form to register the user
 ///
 /// # Returns
-/// Result<`User`, `ServerFnError`> - The registered user
+/// Result<`User`, `AppError`> - The registered user
 ///
 /// # Errors
 /// If the username is empty, return an error
@@ -31,21 +75,19 @@ use crate::models::traits::Validate;
 ///
 /// # Panics
 /// If the password cannot be hashed, panic
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn register_user_service(
     pool: &PgPool,
     form: RegisterUserForm,
-) -> Result<User, ServerFnError> {
+) -> Result<User, AppError> {
     if form.username.clone().is_empty() || form.password.is_empty() {
-        return Err(ServerFnError::ServerError(
-            "Username and password are required.".to_string(),
+        return Err(AppError::BadRequest(
+            "Username and password are required.".into(),
         ));
     }
 
     if form.password != form.password_confirmation {
-        return Err(ServerFnError::ServerError(
-            "Passwords did not match.".to_string(),
-        ));
+        return Err(AppError::BadRequest("Passwords did not match.".into()));
     }
 
     let user = User {
@@ -55,16 +97,14 @@ pub async fn register_user_service(
     };
     let result = user.validate(pool).await;
     if let Err(error) = result {
-        return Err(ServerFnError::ServerError(error.to_string()));
+        return Err(AppError::BadRequest(error.to_string()));
     }
 
     let password_hashed = match hash(form.password, DEFAULT_COST) {
         Ok(hash) => hash,
         Err(e) => {
             tracing::error!("{:?}", e);
-            return Err(ServerFnError::ServerError(
-                "Error hassing password.".to_string(),
-            ));
+            return Err(AppError::internal("Error hassing password.".to_string()));
         }
     };
 
@@ -73,11 +113,12 @@ pub async fn register_user_service(
         .bind(user.email)
         .bind(password_hashed)
         .execute(pool)
-        .await?;
+        .await
+        .map_err(AppError::internal)?;
 
     User::get_from_username(user.username, pool)
         .await
-        .ok_or_else(|| ServerFnError::new("User does not exist."))
+        .ok_or_else(|| AppError::internal("User does not exist."))
 }
 
 /// Update an user
@@ -88,7 +129,7 @@ pub async fn register_user_service(
 /// `user_form`: `UpdateUserForm` - The form to update the user
 ///
 /// # Returns
-/// Result<`UserResult`, `ServerFnError`> - The updated user
+/// Result<`UserResult`, `AppError`> - The updated user
 ///
 /// # Errors
 /// If the username is empty, return an error
@@ -96,24 +137,24 @@ pub async fn register_user_service(
 /// If the password is supplied but don't match, return an error
 /// If the user cannot be updated, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_user_service(
     pool: &PgPool,
     user: Option<&User>,
     user_form: UpdateUserForm,
-) -> Result<User, ServerFnError> {
+) -> Result<User, AppError> {
     if match user {
         Some(user) => user.username != user_form.original_username,
         None => false,
     } {
-        return Err(ServerFnError::new(
-            "User does not have the required permissions.",
+        return Err(AppError::Forbidden(
+            "User does not have the required permissions.".into(),
         ));
     }
 
     let Some(mut this_user) = User::get_from_username(user_form.original_username, pool).await
     else {
-        return Err(ServerFnError::new("Error while getting user."));
+        return Err(AppError::internal("Error while getting user."));
     };
     this_user.username = user_form.username;
     this_user.first_name = user_form.first_name;
@@ -124,7 +165,7 @@ pub async fn update_user_service(
     this_user.update(pool).await.map_err(|e| {
         let err = format!("Error while updating user: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })
 }
 
@@ -135,7 +176,7 @@ pub async fn update_user_service(
 /// form: `ChangePasswordForm` - The form to change the password
 ///
 /// # Returns
-/// Result<(), `ServerFnError`> - Ok if the password was changed
+/// Result<(), `AppError`> - Ok if the password was changed
 ///
 /// # Errors
 /// If the new password does not match the confirmation, return an error
@@ -144,45 +185,41 @@ pub async fn update_user_service(
 /// If the password cannot be updated, return an error
 /// If the user is not active, return an error
 /// If the user does not exist, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn change_password_service(
     pool: &PgPool,
     user: Option<&User>,
     form: ChangePasswordForm,
-) -> Result<User, ServerFnError> {
+) -> Result<User, AppError> {
     let user = match user {
         Some(user) => {
             if !user.is_active() {
-                return Err(ServerFnError::new("User is not active."));
+                return Err(AppError::Forbidden("User is not active.".into()));
             }
             user
         }
         None => {
-            return Err(ServerFnError::new(
-                "User does not have the required permissions.",
+            return Err(AppError::Unauthorized(
+                "User does not have the required permissions.".into(),
             ));
         }
     };
 
     if form.new_password != form.new_password_confirmation {
-        return Err(ServerFnError::ServerError(
-            "Passwords did not match.".to_string(),
-        ));
+        return Err(AppError::BadRequest("Passwords did not match.".into()));
     }
 
     let (user, UserPasshash(expected_passhash)) =
         User::get_from_username_with_passhash(user.username.clone(), pool)
             .await
-            .ok_or_else(|| ServerFnError::new("User does not exist."))?;
+            .ok_or_else(|| AppError::Unauthorized("User does not exist.".into()))?;
 
-    if verify(form.password, &expected_passhash)? {
+    if verify(form.password, &expected_passhash).map_err(AppError::internal)? {
         let password_hashed = match hash(form.new_password, DEFAULT_COST) {
             Ok(hash) => hash,
             Err(e) => {
                 tracing::error!("{:?}", e);
-                return Err(ServerFnError::ServerError(
-                    "Error hassing password.".to_string(),
-                ));
+                return Err(AppError::internal("Error hassing password.".to_string()));
             }
         };
 
@@ -190,24 +227,67 @@ pub async fn change_password_service(
             .bind(password_hashed)
             .bind(user.id)
             .execute(pool)
-            .await?;
+            .await
+            .map_err(AppError::internal)?;
 
         Ok(user)
     } else {
-        Err(ServerFnError::ServerError(
-            "Password does not match.".to_string(),
-        ))
+        Err(AppError::Unauthorized("Password does not match.".into()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     mod ssr_tests {
         use crate::models::{auth::UserPasshash, test_helpers::create_test_user};
 
         use super::*;
+
+        #[sqlx::test]
+        async fn test_login_user(pool: PgPool) {
+            let created = create_test_user(&pool, 1).await.unwrap();
+            // The fixture hashes the word "password".
+            let user = login_user(&pool, "test-1".into(), "password".into())
+                .await
+                .unwrap();
+            assert_eq!(user.id, created.id);
+            assert_eq!(user.username, "test-1");
+        }
+
+        #[sqlx::test]
+        async fn test_login_user_wrong_password(pool: PgPool) {
+            create_test_user(&pool, 1).await.unwrap();
+            let result = login_user(&pool, "test-1".into(), "nope".into()).await;
+            assert_eq!(
+                result.unwrap_err(),
+                AppError::Unauthorized("Password does not match.".into())
+            );
+        }
+
+        #[sqlx::test]
+        async fn test_login_user_unknown_username(pool: PgPool) {
+            let result = login_user(&pool, "nobody".into(), "password".into()).await;
+            assert_eq!(
+                result.unwrap_err(),
+                AppError::Unauthorized("User does not exist.".into())
+            );
+        }
+
+        #[sqlx::test]
+        async fn test_login_user_empty_fields(pool: PgPool) {
+            for (username, password) in [
+                (String::new(), "password".to_string()),
+                ("test-1".to_string(), String::new()),
+            ] {
+                let result = login_user(&pool, username, password).await;
+                assert_eq!(
+                    result.unwrap_err(),
+                    AppError::BadRequest("Username and password are required.".into())
+                );
+            }
+        }
 
         #[sqlx::test]
         async fn test_register_user_service(pool: PgPool) {
@@ -234,7 +314,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "error running server function: Username and password are required."
+                "Username and password are required."
             );
         }
 
@@ -250,7 +330,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "error running server function: Username and password are required."
+                "Username and password are required."
             );
         }
 
@@ -264,10 +344,7 @@ mod tests {
             };
             let result = register_user_service(&pool, form.clone()).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: Passwords did not match."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "Passwords did not match.");
         }
 
         #[sqlx::test]
@@ -280,10 +357,7 @@ mod tests {
             };
             let result = register_user_service(&pool, form.clone()).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: Email must be valid."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "Email must be valid.");
         }
 
         #[sqlx::test]
@@ -325,10 +399,7 @@ mod tests {
 
             let result = update_user_service(&pool, None, user_form).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: Error while getting user."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "Error while getting user.");
         }
 
         #[sqlx::test]
@@ -347,7 +418,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "error running server function: User does not have the required permissions."
+                "User does not have the required permissions."
             );
         }
 
@@ -366,10 +437,7 @@ mod tests {
 
             let result = update_user_service(&pool, Some(&user), user_form).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: Error while getting user."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "Error while getting user.");
         }
 
         #[sqlx::test]
@@ -386,10 +454,7 @@ mod tests {
 
             let result = update_user_service(&pool, Some(&user), user_form).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: Email must be valid."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "Email must be valid.");
         }
 
         #[sqlx::test]
@@ -406,7 +471,7 @@ mod tests {
             let (_, UserPasshash(expected_passhash)) =
                 User::get_from_username_with_passhash(user.username.clone(), &pool)
                     .await
-                    .ok_or_else(|| ServerFnError::new("User does not exist."))
+                    .ok_or_else(|| AppError::internal("User does not exist."))
                     .unwrap();
             assert!(verify(form.new_password, &expected_passhash).unwrap());
         }
@@ -422,10 +487,7 @@ mod tests {
 
             let result = change_password_service(&pool, Some(&user), form.clone()).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: User is not active."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "User is not active.");
         }
 
         #[sqlx::test]
@@ -440,7 +502,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "error running server function: User does not have the required permissions."
+                "User does not have the required permissions."
             );
         }
 
@@ -455,10 +517,7 @@ mod tests {
 
             let result = change_password_service(&pool, Some(&user), form.clone()).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: Passwords did not match."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "Passwords did not match.");
         }
 
         #[sqlx::test]
@@ -473,10 +532,7 @@ mod tests {
 
             let result = change_password_service(&pool, Some(&user), form.clone()).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: User does not exist."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "User does not exist.");
         }
 
         #[sqlx::test]
@@ -490,10 +546,7 @@ mod tests {
 
             let result = change_password_service(&pool, Some(&user), form.clone()).await;
             assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                "error running server function: Password does not match."
-            );
+            assert_eq!(result.unwrap_err().to_string(), "Password does not match.");
         }
     }
 }

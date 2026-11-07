@@ -3,18 +3,18 @@
 //! The Label struct is used to represent a record label in the database.
 
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use sqlx::{FromRow, PgPool, Row};
 
 use super::traits::Validate;
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use super::{artist::Artist, page::Page};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
 
 /// The Label struct is used to represent a record label in the database.
 #[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "ssr", derive(FromRow))]
+#[cfg_attr(feature = "server", derive(FromRow))]
 pub struct RecordLabel {
     /// The unique identifier of the label
     pub id: i64,
@@ -33,7 +33,7 @@ pub struct RecordLabel {
 }
 
 impl Validate for RecordLabel {
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     async fn validate(&self, pool: &PgPool) -> anyhow::Result<()> {
         if self.name.is_empty() {
             return Err(anyhow::anyhow!("Name is required."));
@@ -71,7 +71,7 @@ impl RecordLabel {
     ///
     /// # Errors
     /// If the record label cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn first(pool: &PgPool) -> anyhow::Result<Self> {
         let row = sqlx::query("SELECT * FROM labels ORDER BY id ASC LIMIT 1")
             .fetch_one(pool)
@@ -107,7 +107,7 @@ impl RecordLabel {
     ///
     /// # Errors
     /// If the record label cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
         let row = sqlx::query("SELECT * FROM labels WHERE id = $1")
             .bind(id)
@@ -147,7 +147,7 @@ impl RecordLabel {
     ///
     /// # Errors
     /// If the record label cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
         let row = sqlx::query("SELECT * FROM labels WHERE slug = $1")
             .bind(&slug)
@@ -186,7 +186,7 @@ impl RecordLabel {
     ///
     /// # Errors
     /// If the label cannot be updated, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn update(mut self, pool: &PgPool) -> anyhow::Result<Self> {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
@@ -229,7 +229,7 @@ impl RecordLabel {
     ///
     /// # Errors
     /// If the artists cannot be retrieved, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn artists(self, pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Artist>> {
         let query = if include_hidden {
             "SELECT *
@@ -271,7 +271,7 @@ impl RecordLabel {
     ///
     /// # Errors
     /// If the pages cannot be retrieved, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn pages(self, pool: &PgPool, include_hidden: bool) -> anyhow::Result<Vec<Page>> {
         let query = if include_hidden {
             "SELECT *
@@ -307,7 +307,7 @@ impl RecordLabel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_page, create_test_record_label,
     };
@@ -429,7 +429,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_first_with_no_rows_in_db(pool: PgPool) {
         let record_label = RecordLabel::first(&pool).await;
@@ -440,7 +440,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_first(pool: PgPool) {
         let test_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(record_label.isrc_base, test_label.isrc_base);
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_id_no_label(pool: PgPool) {
         let record_label = RecordLabel::get_by_id(&pool, 1).await;
@@ -463,7 +463,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_id(pool: PgPool) {
         let test_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -475,7 +475,7 @@ mod tests {
         assert_eq!(record_label.isrc_base, test_label.isrc_base);
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug_no_label(pool: PgPool) {
         let record_label = RecordLabel::get_by_slug(&pool, "missing".to_string()).await;
@@ -486,7 +486,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug(pool: PgPool) {
         let test_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -500,7 +500,7 @@ mod tests {
         assert_eq!(record_label.isrc_base, test_label.isrc_base);
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update_label(pool: PgPool) {
         let mut record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -518,7 +518,7 @@ mod tests {
         assert_eq!(updated_label.isrc_base, "UK XYZ".to_string());
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update_label_change_id(pool: PgPool) {
         let mut record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -532,7 +532,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_artists_hide_artists(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(artists, vec![published_artist]);
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_artists_include_hidden_artists(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -594,7 +594,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_pages_hide_pages(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -621,7 +621,7 @@ mod tests {
         assert_eq!(pages, vec![published_page]);
     }
 
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_pages_include_hidden_pages(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();

@@ -1,11 +1,11 @@
 //! Services for the artist routes
-use leptos::prelude::ServerFnError;
+use crate::api_types::artist::ArtistResult;
+use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
 use crate::forms::artist::{CreateArtistForm, UpdateArtistForm};
 use crate::models::{artist::Artist, auth::User};
-use crate::routes::artist::ArtistResult;
 
 /// Get an artist by slug
 ///
@@ -14,21 +14,27 @@ use crate::routes::artist::ArtistResult;
 /// slug: String - The slug of the artist
 ///
 /// # Returns
-/// Result<`ArtistResult`, `ServerFnError`> - The artist
+/// Result<`ArtistResult`, `AppError`> - The artist
 ///
 /// # Errors
 /// If the artist cannot be found, return an error
-pub async fn get_artist_service(
-    pool: &PgPool,
-    slug: String,
-) -> Result<ArtistResult, ServerFnError> {
+pub async fn get_artist_service(pool: &PgPool, slug: String) -> Result<ArtistResult, AppError> {
     Ok(ArtistResult {
-        artist: Artist::get_by_slug(pool, slug).await.map_err(|e| {
+        artist: find_artist_by_slug(pool, &slug).await?,
+    })
+}
+
+/// `Artist::find_by_slug` wired onto the service error ladder: a missing
+/// row is a 404 with the model's message, a database failure stays a 500.
+async fn find_artist_by_slug(pool: &PgPool, slug: &str) -> Result<Artist, AppError> {
+    Artist::find_by_slug(pool, slug.to_string())
+        .await
+        .map_err(|e| {
             let err = format!("Error while getting artist: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
-        })?,
-    })
+            AppError::internal(e)
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("Could not find artist with slug {slug}.")))
 }
 
 /// Create a new artist
@@ -39,18 +45,18 @@ pub async fn get_artist_service(
 /// `artist_form`: `CreateArtistForm` - The form to create the artist
 ///
 /// # Returns
-/// Result<`ArtistResult`, `ServerFnError`> - The created artist
+/// Result<`ArtistResult`, `AppError`> - The created artist
 ///
 /// # Errors
 /// If the name is empty, return an error
 /// If the artist cannot be created, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn create_artist_service(
     pool: &PgPool,
     user: Option<&User>,
     artist_form: CreateArtistForm,
-) -> Result<ArtistResult, ServerFnError> {
+) -> Result<ArtistResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -69,7 +75,7 @@ pub async fn create_artist_service(
         .map_err(|e| {
             let err = format!("Error while creating artist: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -82,30 +88,24 @@ pub async fn create_artist_service(
 /// `artist_form`: `UpdateArtistForm` - The form to update the artist
 ///
 /// # Returns
-/// Result<`ArtistResult`, `ServerFnError`> - The updated artist
+/// Result<`ArtistResult`, `AppError`> - The updated artist
 ///
 /// # Errors
 /// If the name is empty, return an error
 /// If the artist cannot be updated, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn update_artist_service(
     pool: &PgPool,
     user: Option<&User>,
     artist_form: UpdateArtistForm,
-) -> Result<ArtistResult, ServerFnError> {
+) -> Result<ArtistResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let mut artist = Artist::get_by_slug(pool, artist_form.slug)
-        .await
-        .map_err(|e| {
-            let err = format!("Error while getting artist: {e:?}");
-            tracing::error!("{err}");
-            ServerFnError::new(e)
-        })?;
+    let mut artist = find_artist_by_slug(pool, &artist_form.slug).await?;
     artist.name = artist_form.name;
     artist.description = artist_form.description;
     artist.website = artist_form.website;
@@ -115,7 +115,7 @@ pub async fn update_artist_service(
         artist: artist.update(pool).await.map_err(|e| {
             let err = format!("Error while updating artist: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -128,33 +128,29 @@ pub async fn update_artist_service(
 /// slug: String - The slug of the artist
 ///
 /// # Returns
-/// Result<`ArtistResult`, `ServerFnError`> - The deleted artist
+/// Result<`ArtistResult`, `AppError`> - The deleted artist
 ///
 /// # Errors
 /// If the artist cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn delete_artist_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<ArtistResult, ServerFnError> {
+) -> Result<ArtistResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let artist = Artist::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting artist: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let artist = find_artist_by_slug(pool, &slug).await?;
 
     Ok(ArtistResult {
         artist: artist.delete(pool).await.map_err(|e| {
             let err = format!("Error while deleting artist: {e:?}");
             tracing::error!("{err}");
-            ServerFnError::new(e)
+            AppError::internal(e)
         })?,
     })
 }
@@ -167,32 +163,28 @@ pub async fn delete_artist_service(
 /// slug: String - The slug of the artist
 ///
 /// # Returns
-/// Result<`ArtistResult`, `ServerFnError`> - The restored artist
+/// Result<`ArtistResult`, `AppError`> - The restored artist
 ///
 /// # Errors
 /// If the artist cannot be found, return an error
 /// If the user does not have the required permissions, return an error
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 pub async fn restore_artist_service(
     pool: &PgPool,
     user: Option<&User>,
     slug: String,
-) -> Result<ArtistResult, ServerFnError> {
+) -> Result<ArtistResult, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let mut artist = Artist::get_by_slug(pool, slug).await.map_err(|e| {
-        let err = format!("Error while getting artist: {e:?}");
-        tracing::error!("{err}");
-        ServerFnError::new(e)
-    })?;
+    let mut artist = find_artist_by_slug(pool, &slug).await?;
     artist.deleted_at = None;
     artist.clone().update(pool).await.map_err(|e| {
         let err = format!("Error while restoring artist: {e:?}");
         tracing::error!("{err}");
-        ServerFnError::new(e)
+        AppError::internal(e)
     })?;
     tracing::info!("Artist restored: {}", artist.slug);
     Ok(ArtistResult { artist })
@@ -201,7 +193,7 @@ pub async fn restore_artist_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_user_with_permissions,
     };
@@ -221,7 +213,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "error running server function: Could not find artist with slug missing.".to_string()
+            "Could not find artist with slug missing.".to_string()
         );
     }
 
@@ -271,7 +263,7 @@ mod tests {
         assert!(artist.is_err());
         assert_eq!(
             artist.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -296,7 +288,7 @@ mod tests {
         assert!(artist.is_err());
         assert_eq!(
             artist.unwrap_err().to_string(),
-            "error running server function: Name is required.".to_string()
+            "Name is required.".to_string()
         );
     }
 
@@ -321,7 +313,7 @@ mod tests {
         assert!(artist.is_err());
         assert_eq!(
             artist.unwrap_err().to_string(),
-            "error running server function: Name must be less than 255 characters.".to_string()
+            "Name must be less than 255 characters.".to_string()
         );
     }
 
@@ -345,7 +337,7 @@ mod tests {
         assert!(artist.is_err());
         assert_eq!(
             artist.unwrap_err().to_string(),
-            "error running server function: Record Label with id 0 does not exist.".to_string()
+            "Record Label with id 0 does not exist.".to_string()
         );
     }
 
@@ -398,7 +390,7 @@ mod tests {
         assert!(updated_artist.is_err());
         assert_eq!(
             updated_artist.unwrap_err().to_string(),
-            "error running server function: Name is required.".to_string()
+            "Name is required.".to_string()
         );
     }
 
@@ -423,7 +415,7 @@ mod tests {
         assert!(updated_artist.is_err());
         assert_eq!(
             updated_artist.unwrap_err().to_string(),
-            "error running server function: Name must be less than 255 characters.".to_string()
+            "Name must be less than 255 characters.".to_string()
         );
     }
 
@@ -446,7 +438,7 @@ mod tests {
         assert!(updated_artist.is_err());
         assert_eq!(
             updated_artist.unwrap_err().to_string(),
-            "error running server function: Could not find artist with slug missing.".to_string()
+            "Could not find artist with slug missing.".to_string()
         );
     }
 
@@ -466,7 +458,7 @@ mod tests {
         assert!(updated_artist.is_err());
         assert_eq!(
             updated_artist.unwrap_err().to_string(),
-            "error running server function: You must be logged in to view this page.".to_string()
+            "You must be logged in to view this page.".to_string()
         );
     }
 
@@ -488,7 +480,7 @@ mod tests {
         assert!(updated_artist.is_err());
         assert_eq!(
             updated_artist.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -517,7 +509,7 @@ mod tests {
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),
-            "error running server function: Could not find artist with slug missing.".to_string()
+            "Could not find artist with slug missing.".to_string()
         );
     }
 
@@ -529,7 +521,7 @@ mod tests {
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),
-            "error running server function: You must be logged in to view this page.".to_string()
+            "You must be logged in to view this page.".to_string()
         );
     }
 
@@ -543,7 +535,7 @@ mod tests {
         assert!(deleted_artist.is_err());
         assert_eq!(
             deleted_artist.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 
@@ -575,7 +567,7 @@ mod tests {
         assert!(restored_artist.is_err());
         assert_eq!(
             restored_artist.unwrap_err().to_string(),
-            "error running server function: Could not find artist with slug missing.".to_string()
+            "Could not find artist with slug missing.".to_string()
         );
     }
 
@@ -588,7 +580,7 @@ mod tests {
         assert!(restored_artist.is_err());
         assert_eq!(
             restored_artist.unwrap_err().to_string(),
-            "error running server function: You must be logged in to view this page.".to_string()
+            "You must be logged in to view this page.".to_string()
         );
     }
 
@@ -603,7 +595,7 @@ mod tests {
         assert!(restored_artist.is_err());
         assert_eq!(
             restored_artist.unwrap_err().to_string(),
-            "error running server function: You do not have permission.".to_string()
+            "You do not have permission.".to_string()
         );
     }
 }

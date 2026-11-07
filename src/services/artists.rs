@@ -1,5 +1,5 @@
 //! Services that act on multiple artists at a time
-use leptos::prelude::ServerFnError;
+use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
@@ -14,7 +14,7 @@ use crate::models::{artist::Artist, auth::User};
 /// `artist_id`: `i64` - The artist id
 ///
 /// # Returns
-/// Result<`ArtistResult`, `ServerFnError`> - The artist
+/// Result<`ArtistResult`, `AppError`> - The artist
 ///
 /// # Errors
 /// If the artist cannot be found, return an error
@@ -22,18 +22,23 @@ pub async fn get_releases_for_artist_service(
     pool: &PgPool,
     user: Option<&User>,
     artist_id: i64,
-) -> Result<Vec<Release>, ServerFnError> {
+) -> Result<Vec<Release>, AppError> {
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
     let include_hidden = user.is_some_and(|user| user.permissions.contains("label_owner"));
 
-    let artist = Artist::get_by_id(pool, artist_id).await.map_err(|x| {
+    let artist = Artist::find_by_id(pool, artist_id).await.map_err(|x| {
         let err = format!("Error while getting artist {artist_id}: {x:?}");
         tracing::error!("{err}");
-        ServerFnError::new("Could not retrieve artist, try again later")
+        AppError::internal("Could not retrieve artist, try again later")
     })?;
+    let Some(artist) = artist else {
+        return Err(AppError::NotFound(
+            "Could not retrieve artist, try again later".into(),
+        ));
+    };
 
     Release::list_by_artist_and_record_label(pool, artist.id, artist.label_id, include_hidden)
         .await
@@ -43,14 +48,14 @@ pub async fn get_releases_for_artist_service(
                 artist.name
             );
             tracing::error!("{err}");
-            ServerFnError::new("Could not retrieve releases, try again later")
+            AppError::internal("Could not retrieve releases, try again later")
         })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release,
         create_test_user_with_permissions,

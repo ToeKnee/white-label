@@ -1,5 +1,6 @@
 //! Module for routes handling music services and social links associated with artists.
-use leptos::prelude::ServerFnError;
+use crate::api_types::links::LinksResult;
+use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
@@ -10,7 +11,6 @@ use crate::models::{
     music_service::{MusicService, Platform},
     social_media::{SocialMedia, SocialMediaService},
 };
-use crate::routes::links::LinksResult;
 
 /// Get all music services for a specific artist.
 ///
@@ -21,14 +21,21 @@ use crate::routes::links::LinksResult;
 /// * A `MusicServicesResult` containing a vector of music services associated with the specified artist.
 ///
 /// # Errors
-/// Will return a `ServerFnError` if the artist cannot be found, or if there is an issue with the database connection.
+/// Will return a `AppError` if the artist cannot be found, or if there is an issue with the database connection.
 pub async fn get_links_service(
     pool: &PgPool,
     artist_slug: String,
-) -> Result<LinksResult, ServerFnError> {
-    let artist = match Artist::get_by_slug(pool, artist_slug).await {
-        Ok(artist) => artist,
-        Err(e) => return Err(ServerFnError::new(format!("Artist not found: {e}"))),
+) -> Result<LinksResult, AppError> {
+    let artist = match Artist::find_by_slug(pool, artist_slug.clone()).await {
+        Ok(Some(artist)) => artist,
+        // A missing artist keeps the old "Artist not found: …" text but
+        // now answers 404; database failures stay 500.
+        Ok(None) => {
+            return Err(AppError::NotFound(format!(
+                "Artist not found: Could not find artist with slug {artist_slug}."
+            )));
+        }
+        Err(e) => return Err(AppError::internal(format!("Artist not found: {e}"))),
     };
 
     let music_services = MusicService::list_by_artist(pool, artist.id);
@@ -39,7 +46,7 @@ pub async fn get_links_service(
             music_services: services,
             social_media_services,
         }),
-        (Err(e), _) | (_, Err(e)) => Err(ServerFnError::new(format!("Error fetching links: {e}"))),
+        (Err(e), _) | (_, Err(e)) => Err(AppError::internal(format!("Error fetching links: {e}"))),
     }
 }
 
@@ -54,44 +61,50 @@ pub async fn get_links_service(
 /// * A `LinksResult` containing the updated music services and social media links.
 ///
 /// # Errors
-/// Will return a `ServerFnError` if the artist cannot be found, or if there
+/// Will return a `AppError` if the artist cannot be found, or if there
 /// is an issue with the database connection.
 pub async fn update_links_service(
     pool: &PgPool,
     user: Option<&User>,
     form: LinksForm,
-) -> Result<LinksResult, ServerFnError> {
+) -> Result<LinksResult, AppError> {
     tracing::warn!("DO LOADS OF TESTING!");
     match user_with_permissions(user, vec!["admin", "label_owner"]) {
         Ok(_) => (),
         Err(e) => return Err(e),
     }
 
-    let artist = match Artist::get_by_slug(pool, form.artist_slug.clone()).await {
-        Ok(artist) => artist,
-        Err(e) => return Err(ServerFnError::new(format!("Artist not found: {e}"))),
+    let artist = match Artist::find_by_slug(pool, form.artist_slug.clone()).await {
+        Ok(Some(artist)) => artist,
+        Ok(None) => {
+            return Err(AppError::NotFound(format!(
+                "Artist not found: Could not find artist with slug {}.",
+                form.artist_slug
+            )));
+        }
+        Err(e) => return Err(AppError::internal(format!("Artist not found: {e}"))),
     };
 
     tracing::info!("Updating links for artist: {}", artist.slug);
 
     handle_music_services(pool, form.clone(), artist.clone())
         .await
-        .map_err(|e| ServerFnError::new(format!("Error handling music services: {e}")))?;
+        .map_err(|e| AppError::internal(format!("Error handling music services: {e}")))?;
 
     handle_social_media_services(pool, form, artist.clone())
         .await
-        .map_err(|e| ServerFnError::new(format!("Error handling social media services: {e}")))?;
+        .map_err(|e| AppError::internal(format!("Error handling social media services: {e}")))?;
 
     Ok(LinksResult {
         music_services: MusicService::list_by_artist(pool, artist.id)
             .await
             .map_err(|e| {
-                ServerFnError::new(format!("Error fetching updated music services: {e}"))
+                AppError::internal(format!("Error fetching updated music services: {e}"))
             })?,
         social_media_services: SocialMediaService::list_by_artist(pool, artist.id)
             .await
             .map_err(|e| {
-                ServerFnError::new(format!("Error fetching updated social media services: {e}"))
+                AppError::internal(format!("Error fetching updated social media services: {e}"))
             })?,
     })
 }
@@ -100,12 +113,12 @@ async fn handle_music_services(
     pool: &PgPool,
     form: LinksForm,
     artist: Artist,
-) -> Result<(), ServerFnError> {
+) -> Result<(), AppError> {
     // Get existing music services and social media links
     let existing_music_services = match MusicService::list_by_artist(pool, artist.id).await {
         Ok(services) => services.clone(),
         Err(e) => {
-            return Err(ServerFnError::new(format!(
+            return Err(AppError::internal(format!(
                 "Error fetching music services: {e}"
             )));
         }
@@ -117,7 +130,7 @@ async fn handle_music_services(
 
     create_music_services(pool, music_services_to_create, form.clone(), artist.clone())
         .await
-        .map_err(|e| ServerFnError::new(format!("Error creating music services: {e}")))?;
+        .map_err(|e| AppError::internal(format!("Error creating music services: {e}")))?;
 
     update_music_services(
         pool,
@@ -127,7 +140,7 @@ async fn handle_music_services(
         artist.clone(),
     )
     .await
-    .map_err(|e| ServerFnError::new(format!("Error updating music services: {e}")))?;
+    .map_err(|e| AppError::internal(format!("Error updating music services: {e}")))?;
 
     delete_music_services(
         pool,
@@ -136,7 +149,7 @@ async fn handle_music_services(
         artist.clone(),
     )
     .await
-    .map_err(|e| ServerFnError::new(format!("Error deleting music services: {e}")))?;
+    .map_err(|e| AppError::internal(format!("Error deleting music services: {e}")))?;
 
     Ok(())
 }
@@ -195,7 +208,7 @@ async fn create_music_services(
     music_services: Vec<&Platform>,
     form: LinksForm,
     artist: Artist,
-) -> Result<(), ServerFnError> {
+) -> Result<(), AppError> {
     for platform in music_services {
         MusicService::create(
             pool,
@@ -204,7 +217,7 @@ async fn create_music_services(
             form.clone().from_platform(platform),
         )
         .await
-        .map_err(|e| ServerFnError::new(format!("Error creating music service: {e}")))?;
+        .map_err(|e| AppError::internal(format!("Error creating music service: {e}")))?;
     }
     Ok(())
 }
@@ -215,7 +228,7 @@ async fn update_music_services(
     mut existing_music_services: Vec<MusicService>,
     form: LinksForm,
     artist: Artist,
-) -> Result<(), ServerFnError> {
+) -> Result<(), AppError> {
     for platform in music_services {
         if let Some(service) = existing_music_services
             .iter_mut()
@@ -237,7 +250,7 @@ async fn update_music_services(
                 Ok(artist) => artist,
                 Err(e) => {
                     tracing::error!("{e}");
-                    return Err(ServerFnError::new(format!(
+                    return Err(AppError::internal(format!(
                         "Could not update music_services with url {}, artist_id {}, platform {}.",
                         url, artist.id, platform,
                     )));
@@ -253,7 +266,7 @@ async fn delete_music_services(
     music_services: Vec<&Platform>,
     mut existing_music_services: Vec<MusicService>,
     artist: Artist,
-) -> Result<(), ServerFnError> {
+) -> Result<(), AppError> {
     for platform in music_services {
         if let Some(index) = existing_music_services
             .iter()
@@ -265,7 +278,7 @@ async fn delete_music_services(
                 .bind(platform)
                 .execute(pool)
                 .await
-                .map_err(|e| ServerFnError::new(format!("Error deleting music service: {e}")))?;
+                .map_err(|e| AppError::internal(format!("Error deleting music service: {e}")))?;
         }
     }
     Ok(())
@@ -275,12 +288,12 @@ async fn handle_social_media_services(
     pool: &PgPool,
     form: LinksForm,
     artist: Artist,
-) -> Result<(), ServerFnError> {
+) -> Result<(), AppError> {
     let existing_social_media_services =
         match SocialMediaService::list_by_artist(pool, artist.id).await {
             Ok(services) => services,
             Err(e) => {
-                return Err(ServerFnError::new(format!(
+                return Err(AppError::internal(format!(
                     "Error fetching social media services: {e}"
                 )));
             }
@@ -295,7 +308,7 @@ async fn handle_social_media_services(
 
     create_social_media_services(pool, social_media_to_create, form.clone(), artist.clone())
         .await
-        .map_err(|e| ServerFnError::new(format!("Error creating social media services: {e}")))?;
+        .map_err(|e| AppError::internal(format!("Error creating social media services: {e}")))?;
 
     update_social_media_services(
         pool,
@@ -305,7 +318,7 @@ async fn handle_social_media_services(
         artist.clone(),
     )
     .await
-    .map_err(|e| ServerFnError::new(format!("Error updating social media services: {e}")))?;
+    .map_err(|e| AppError::internal(format!("Error updating social media services: {e}")))?;
 
     delete_social_media_services(
         pool,
@@ -314,7 +327,7 @@ async fn handle_social_media_services(
         artist.clone(),
     )
     .await
-    .map_err(|e| ServerFnError::new(format!("Error deleting social media services: {e}")))?;
+    .map_err(|e| AppError::internal(format!("Error deleting social media services: {e}")))?;
     Ok(())
 }
 
@@ -363,7 +376,7 @@ async fn create_social_media_services(
     social_media_services: Vec<SocialMedia>,
     form: LinksForm,
     artist: Artist,
-) -> Result<(), ServerFnError> {
+) -> Result<(), AppError> {
     for platform in social_media_services {
         SocialMediaService::create(
             pool,
@@ -372,7 +385,7 @@ async fn create_social_media_services(
             form.clone().from_social_media(&platform),
         )
         .await
-        .map_err(|e| ServerFnError::new(format!("Error creating social media service: {e}")))?;
+        .map_err(|e| AppError::internal(format!("Error creating social media service: {e}")))?;
     }
     Ok(())
 }
@@ -383,7 +396,7 @@ async fn update_social_media_services(
     mut existing_social_media_services: Vec<SocialMediaService>,
     form: LinksForm,
     artist: Artist,
-) -> Result<(), ServerFnError> {
+) -> Result<(), AppError> {
     for platform in social_media_services {
         if let Some(service) = existing_social_media_services
             .iter_mut()
@@ -404,7 +417,7 @@ async fn update_social_media_services(
                 Ok(_) => (),
                 Err(e) => {
                     tracing::error!("{e}");
-                    return Err(ServerFnError::new(format!(
+                    return Err(AppError::internal(format!(
                         "Could not update social media service with url {}, artist_id {}, platform {}.",
                         url, artist.id, platform,
                     )));
@@ -420,7 +433,7 @@ async fn delete_social_media_services(
     social_media_services: Vec<SocialMedia>,
     mut existing_social_media_services: Vec<SocialMediaService>,
     artist: Artist,
-) -> Result<(), ServerFnError> {
+) -> Result<(), AppError> {
     for platform in social_media_services {
         if let Some(index) = existing_social_media_services
             .iter()
@@ -434,7 +447,7 @@ async fn delete_social_media_services(
                 .await
                 .map_err(|e| {
                     tracing::error!("{e}");
-                    ServerFnError::new(format!("Error deleting social media service: {e}"))
+                    AppError::internal(format!("Error deleting social media service: {e}"))
                 })?;
         }
     }
@@ -444,7 +457,7 @@ async fn delete_social_media_services(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::{
         music_service::Platform,
         social_media::SocialMedia,
@@ -526,7 +539,7 @@ mod tests {
         if let Err(e) = result {
             assert_eq!(
                 e.to_string(),
-                "error running server function: Artist not found: Could not find artist with slug nonexistent-artist."
+                "Artist not found: Could not find artist with slug nonexistent-artist."
             );
         }
     }
@@ -546,10 +559,7 @@ mod tests {
         let result = update_links_service(&pool, Some(&user), form).await;
         assert!(result.is_err());
         if let Err(e) = result {
-            assert_eq!(
-                e.to_string(),
-                "error running server function: You do not have permission."
-            );
+            assert_eq!(e.to_string(), "You do not have permission.");
         }
     }
 

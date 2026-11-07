@@ -1,0 +1,51 @@
+# Dioxus CLI config (migration in progress — see MIGRATION.md).
+# `dx` builds the web, desktop and (later) mobile targets; the axum server in
+# `src/server` is a separate bin and is run directly.
+
+[application]
+name = "white-label"
+
+[web.app]
+title = "White Label"
+
+[web.watcher]
+watch_path = ["src", "public", "style"]
+
+# Packaging metadata, read by `dx bundle` and by the mobile packagers (Phase 7).
+# The Linux `.deb` bundle has been run (phase 8); the gate still only runs
+# `dx build`. The identifier is here because `dx bundle` otherwise fills the
+# app with its own defaults, and because it becomes the app's permanent store
+# identity.
+[bundle]
+# Reverse-domain id — provisional. It is the durable identity on Android/iOS
+# and cannot change after the first store release, so settle it in Phase 7.
+identifier = "net.ynottony.whitelabel"
+publisher = "Anthony Batchelor"
+# Parsed as dx's `AppCategory`; a value outside its list silently leaves
+# `Categories=` empty in the Linux `.desktop` file (`Office` was such a value —
+# first-bundle proof). `Business` is the accepted spelling that maps to the
+# freedesktop `Office;` category.
+category = "Business"
+short_description = "White Label: releases, artists, tracks and pages for a record label"
+long_description = """
+White Label is a record-label back office: a catalog of releases, artists and
+tracks, plus the pages that publish them. The desktop and mobile clients talk
+to a self-hosted White Label API over HTTPS."""
+copyright = "Copyright (c) 2026 Anthony Batchelor"
+# The window icon is set in code (see `src/bin/dioxus_desktop.rs`) because the
+# CLI only bakes its title/icons into release builds. These are the icons the
+# Linux `.desktop` entry and hicolor theme install. `dx` takes png, svg and ico
+# here; Windows (.ico) and macOS (.icns) bundle icons still have to be
+# generated for those targets.
+icon = ["public/Logo.png", "public/Logo.svg"]
+# No `[bundle] resources`: `dx` copies each entry flat into
+# `usr/lib/<product name>/` (file name only, no subdirectories, and a
+# directory entry fails the bundle), which cannot carry `public/`'s tree —
+# the window asks for `/assets/images/…`. `dx` does recurse into the
+# `asset_dir` (`assets/` by default), so the options when real packaging
+# matters are to move the statics there, register them with `asset!()`, or
+# serve them from the API origin. Until then the desktop launcher copies
+# `public/` in (see `end2end/run-dioxus-desktop.sh`). The first `.deb` also
+# showed the launcher names come from the bin, not `[application] name`
+# (`Package: dioxus-desktop`, `Name=DioxusDesktop`), and its empty
+# `usr/lib/DioxusDesktop` is the `asset_dir` riding along with nothing in it.

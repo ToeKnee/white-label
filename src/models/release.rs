@@ -3,20 +3,20 @@
 //! The Release struct is used to represent a record release in the database.
 
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use sqlx::{FromRow, PgPool};
 
 use super::traits::Validate;
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use super::{
     artist::Artist, record_label::RecordLabel, track::Track, track_with_artists::TrackWithArtists,
 };
-#[cfg(feature = "ssr")]
+#[cfg(feature = "server")]
 use crate::utils::slugify::slugify;
 
 /// The Release struct is used to represent a record release in the database.
 #[derive(Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq, Hash)]
-#[cfg_attr(feature = "ssr", derive(FromRow))]
+#[cfg_attr(feature = "server", derive(FromRow))]
 pub struct Release {
     /// The unique identifier of the release
     pub id: i64,
@@ -61,7 +61,7 @@ pub struct Release {
 }
 
 impl Validate for Release {
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     async fn validate(&self, pool: &PgPool) -> anyhow::Result<()> {
         if self.name.is_empty() {
             return Err(anyhow::anyhow!("Name is required."));
@@ -129,6 +129,7 @@ impl Validate for Release {
 impl Release {
     /// Get the primary image URL
     /// If the primary image is None, return the default image
+    #[must_use]
     pub fn primary_image_url(&self) -> String {
         self.primary_image.clone().map_or_else(
             || "/Logo.svg".to_string(),
@@ -153,7 +154,7 @@ impl Release {
     /// If the release cannot be created, return an error
     /// If the record label is not found, return an error
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn create(
         pool: &PgPool,
         name: String,
@@ -211,7 +212,7 @@ impl Release {
     ///
     /// # Errors
     /// If the release cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_id(pool: &PgPool, id: i64) -> anyhow::Result<Self> {
         let release = sqlx::query_as::<_, Self>("SELECT * FROM releases WHERE id = $1")
             .bind(id)
@@ -238,23 +239,28 @@ impl Release {
     ///
     /// # Errors
     /// If the release cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
-        let release = sqlx::query_as::<_, Self>("SELECT * FROM releases WHERE slug = $1")
-            .bind(slug.clone())
-            .fetch_one(pool)
-            .await;
+        Self::find_by_slug(pool, slug.clone())
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Could not find release with slug {}.", slug))
+    }
 
-        match release {
-            Ok(release) => Ok(release),
-            Err(e) => {
+    /// Look up a release by slug, `Ok(None)` when no row matches — lets
+    /// callers tell a missing release (404) from a database failure (500).
+    ///
+    /// # Errors
+    /// If the database query fails, return an error
+    #[cfg(feature = "server")]
+    pub async fn find_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM releases WHERE slug = $1")
+            .bind(&slug)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
                 tracing::error!("{e}");
-                Err(anyhow::anyhow!(
-                    "Could not find release with slug {}.",
-                    slug
-                ))
-            }
-        }
+                anyhow::anyhow!("Could not find release with slug {}.", slug)
+            })
     }
 
     /// Get specific release by artist and record label and slug
@@ -271,7 +277,7 @@ impl Release {
     ///
     /// # Errors
     /// If there is an error getting the releases, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_by_artist_and_record_label_and_slug(
         pool: &PgPool,
         artist_id: i64,
@@ -330,7 +336,7 @@ impl Release {
     ///
     /// # Errors
     /// If there is an error getting the next release, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_next_scheduled_release(
         pool: &PgPool,
         artist_id: Option<i64>,
@@ -371,7 +377,7 @@ impl Release {
     ///
     /// # Errors
     /// If there is an error getting the releases, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn list_by_artist_and_record_label(
         pool: &PgPool,
         artist_id: i64,
@@ -427,7 +433,7 @@ impl Release {
     ///
     /// # Panics
     /// If the release cannot be updated, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn update(mut self, pool: &PgPool) -> anyhow::Result<Self> {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
@@ -472,7 +478,7 @@ impl Release {
     ///
     /// # Errors
     /// If the release cannot be deleted, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn delete(&self, pool: &PgPool) -> anyhow::Result<Self> {
         let release = sqlx::query_as::<_, Self>(
             "UPDATE releases SET deleted_at = $1 WHERE id = $2 RETURNING *",
@@ -505,7 +511,7 @@ impl Release {
     /// If the release cannot be updated, return an error
     /// # Panics
     /// If the release cannot be updated, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn set_artists(&self, pool: &PgPool, artist_ids: Vec<i64>) -> anyhow::Result<Self> {
         if artist_ids.is_empty() {
             return Err(anyhow::anyhow!("Artist IDs cannot be empty."));
@@ -555,7 +561,7 @@ impl Release {
     /// If the release cannot be found, return an error
     /// # Panics
     /// If the release cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_artists(&self, pool: &PgPool) -> anyhow::Result<Vec<Artist>> {
         let artists = sqlx::query_as::<_, Artist>(
             "SELECT artists.* FROM artists
@@ -581,7 +587,7 @@ impl Release {
     /// If the release cannot be found, return an error
     /// # Panics
     /// If the release cannot be found, return an error
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     pub async fn get_tracks(&self, pool: &PgPool) -> anyhow::Result<Vec<TrackWithArtists>> {
         let tracks = sqlx::query_as::<_, Track>(
             "SELECT tracks.* FROM tracks
@@ -610,7 +616,7 @@ impl Release {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "ssr")]
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
     };
