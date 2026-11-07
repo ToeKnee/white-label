@@ -1,11 +1,9 @@
 //! Services for the tracks routes
-use crate::api_types::track::{TrackResult, TracksResult};
+use crate::api_types::track::TrackResult;
 use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
-#[cfg(feature = "server")]
-use super::visibility_for;
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
 use crate::models::{artist::Artist, auth::User, release::Release, track::Track};
 
@@ -47,54 +45,6 @@ async fn find_track_by_slug(pool: &PgPool, slug: &str) -> Result<Track, AppError
             AppError::internal(e)
         })?
         .ok_or_else(|| AppError::NotFound(format!("Could not find track with slug {slug}.")))
-}
-
-/// Get an artists tracks
-///
-/// # Arguments
-/// * `pool` - The database connection pool
-/// * `user` - The current user
-/// * `artist_slug` - The slug of the artist
-/// * `release_slug` - The slug of the release
-/// * `include_deleted` - The admin "show deleted" toggle
-///
-/// # Returns
-/// The tracks for the artist
-///
-/// # Errors
-/// * If the artist cannot be found, return an error
-/// * If the release cannot be found, return an error
-/// * If the user cannot be found, return an error
-/// * If the tracks cannot be found, return an error
-#[cfg(feature = "server")]
-pub async fn get_tracks_service(
-    pool: &PgPool,
-    user: Option<&User>,
-    artist_slug: String,
-    release_slug: String,
-    include_deleted: bool,
-) -> Result<TracksResult, AppError> {
-    let artist = lookup_artist(pool, artist_slug).await?;
-    let release = lookup_release(pool, release_slug).await?;
-
-    Ok(TracksResult {
-        tracks: match Track::list_by_release_and_artist_and_record_label(
-            pool,
-            release.id,
-            artist.id,
-            artist.label_id,
-            visibility_for(user, include_deleted),
-        )
-        .await
-        {
-            Ok(tracks) => tracks,
-            Err(e) => {
-                let err = format!("Error while getting tracks: {e:?}");
-                tracing::error!("{err}");
-                return Err(AppError::internal(e));
-            }
-        },
-    })
 }
 
 /// Get a specific artists track
@@ -367,114 +317,8 @@ mod tests {
     #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
-        create_test_user, create_test_user_with_permissions,
+        create_test_user_with_permissions,
     };
-
-    #[sqlx::test]
-    async fn test_get_tracks_service_admin_user(pool: PgPool) {
-        let permissions = vec!["admin", "label_owner"];
-        let user: User = create_test_user_with_permissions(&pool, 1, permissions)
-            .await
-            .unwrap();
-
-        let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
-            .await
-            .unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone()))
-            .await
-            .unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
-            .await
-            .unwrap();
-        let mut unpublished_track =
-            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
-                .await
-                .unwrap();
-        unpublished_track.published_at = None;
-        unpublished_track.clone().update(&pool).await.unwrap();
-
-        let tracks = get_tracks_service(
-            &pool,
-            Some(&user),
-            artist.slug.clone(),
-            release.slug.clone(),
-            false,
-        )
-        .await
-        .unwrap();
-        assert_eq!(tracks.tracks.len(), 2);
-        assert_eq!(tracks.tracks[0].id, track.id);
-        assert_eq!(tracks.tracks[1].id, unpublished_track.id);
-    }
-
-    #[sqlx::test]
-    async fn test_get_tracks_service_no_user(pool: PgPool) {
-        let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
-            .await
-            .unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone()))
-            .await
-            .unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
-            .await
-            .unwrap();
-        let mut unpublished_track =
-            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
-                .await
-                .unwrap();
-        unpublished_track.published_at = None;
-        unpublished_track.clone().update(&pool).await.unwrap();
-
-        let tracks = get_tracks_service(
-            &pool,
-            None,
-            artist.slug.clone(),
-            release.slug.clone(),
-            false,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(tracks.tracks.len(), 1);
-        assert_eq!(tracks.tracks[0].id, track.id);
-    }
-
-    #[sqlx::test]
-    async fn test_get_tracks_service_anonymous_user(pool: PgPool) {
-        let (user, _) = create_test_user(&pool, 1).await.unwrap().into_user(None);
-
-        let record_label = create_test_record_label(&pool, 1).await.unwrap();
-        let artist = create_test_artist(&pool, 1, Some(record_label.clone()))
-            .await
-            .unwrap();
-        let release = create_test_release(&pool, 1, Some(artist.clone()))
-            .await
-            .unwrap();
-        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
-            .await
-            .unwrap();
-        let mut unpublished_track =
-            create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
-                .await
-                .unwrap();
-        unpublished_track.published_at = None;
-        unpublished_track.clone().update(&pool).await.unwrap();
-
-        let tracks = get_tracks_service(
-            &pool,
-            Some(&user),
-            artist.slug.clone(),
-            release.slug.clone(),
-            false,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(tracks.tracks.len(), 1);
-        assert_eq!(tracks.tracks[0].id, track.id);
-    }
 
     #[sqlx::test]
     async fn test_get_track_service(pool: PgPool) {

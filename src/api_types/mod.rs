@@ -20,7 +20,6 @@
 //! ```
 
 pub mod artist;
-pub mod artists;
 pub mod auth;
 pub mod edit;
 pub mod links;

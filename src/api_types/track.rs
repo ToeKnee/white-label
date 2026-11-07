@@ -2,13 +2,6 @@
 
 use crate::models::{artist::Artist, track::Track};
 
-/// Contains multiple Tracks.
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
-pub struct TracksResult {
-    /// A vector of tracks.
-    pub tracks: Vec<Track>,
-}
-
 /// The result of fetching a single track along with its associated artists and releases.
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
 pub struct TrackResult {

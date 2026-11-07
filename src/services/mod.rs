@@ -24,7 +24,6 @@ pub fn visibility_for(current_user: Option<&User>, include_deleted: bool) -> Vis
 }
 
 pub mod artist;
-pub mod artists;
 pub mod authentication_helpers;
 pub mod files;
 pub mod links;
