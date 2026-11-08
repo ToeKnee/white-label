@@ -42,7 +42,7 @@ use crate::config::upload::UploadConfiguration;
 use crate::config::upload::UploadDetails;
 use crate::ui::assets::served_file_url;
 use crate::ui::utils::{InlineError, Success};
-use crate::utils::files::{accept_extensions, file_extension, image_mime_for_extension};
+use crate::utils::files::{accept_extensions, claimed_upload_mime};
 
 #[cfg(feature = "server")]
 use crate::services::authentication_helpers::user_with_permissions;
@@ -53,7 +53,9 @@ use crate::services::files::upload::{UploadedFile, finalise_upload};
 #[cfg(feature = "server")]
 use crate::ui::data::to_http_error;
 #[cfg(feature = "server")]
-use crate::utils::files::{SIGNATURE_BYTES, first_bytes, image_mime_in_bytes, valid_file_name};
+use crate::utils::files::{
+    SIGNATURE_BYTES, audio_mime_in_bytes, first_bytes, image_mime_in_bytes, valid_file_name,
+};
 #[cfg(feature = "server")]
 use dioxus::fullstack::Streaming;
 #[cfg(feature = "server")]
@@ -62,20 +64,20 @@ use futures::StreamExt as _;
 use std::io::Write as _;
 
 /// Uploads the request body as one file for `file_type` and attaches it to
-/// `slug` (an artist or release slug; `Avatar` takes the uploader's own
+/// `slug` (an artist, release or track slug; `Avatar` takes the uploader's own
 /// username).
 ///
 /// Success answers the name the file was stored under.
 ///
 /// The bytes stream to `<root>/tmp` with [`stream_to_tmp`], their first bytes
-/// have to match one of the configuration's image types
+/// have to match one of the configuration's image or audio types
 /// ([`check_upload_signature`]), and only then does the shared
 /// `services::files::upload` tail move them into the config's directory and
 /// update the row — the same tail the no-JS form handler in
 /// `server::upload_form` uses, so storage and
 /// attachment cannot drift.
 ///
-/// What the client *claims* the file is (see [`claimed_upload_type`]) is only a
+/// What the client *claims* the file is (see [`claimed_upload_mime`]) is only a
 /// fast rejection before the body arrives; the bytes and the declared byte count
 /// decide what is kept.
 ///
@@ -83,9 +85,9 @@ use std::io::Write as _;
 /// 400 for an unknown configuration, a rejected filename or a body that is not
 /// the length the client declared, 401 with no session, 403 when the
 /// configuration needs permissions the session lacks, 415 for a claimed type the
-/// configuration disallows or bytes that are not one of its image types, 413 once
-/// the stream passes the size limit, 500 when the uploads root is missing or the
-/// write fails.
+/// configuration disallows or bytes that are not one of its image or audio
+/// types, 413 once the stream passes the size limit, 500 when the uploads root
+/// is missing or the write fails.
 #[post("/api/upload?file_type&slug&filename",
     db: crate::server::current_user::Db,
     user: crate::server::current_user::CurrentUser,
@@ -114,7 +116,7 @@ pub async fn upload_file(
     let header_type = file_stream.content_type().unwrap_or_default().to_string();
     // Read before the body is handed over to the writer.
     let declared_size = file_stream.size();
-    let claimed_type = claimed_upload_type(&header_type, &filename, &details.mime_types);
+    let claimed_type = claimed_upload_mime(&header_type, &filename, &details.mime_types);
     if !details
         .mime_types
         .iter()
@@ -206,27 +208,6 @@ pub async fn upload_file(
     })
 }
 
-/// The type an upload claims to be.
-///
-/// A browser puts the file's own type in `Content-Type`. A dioxus window puts
-/// one dioxus invented from a table of *web asset* types that holds no images at
-/// all (a `.png` comes back as `text/html; charset=utf-8`), so a header that is
-/// not one of the `accepted` types falls back to the type the file's extension
-/// stands for, and failing that to the header itself, so a rejection names what
-/// the client actually sent.
-///
-/// This only decides whether a body is worth streaming at all;
-/// [`check_upload_signature`] decides what the file is.
-#[cfg(feature = "server")]
-fn claimed_upload_type<'a>(content_type: &'a str, file_name: &str, accepted: &[String]) -> &'a str {
-    if accepted.iter().any(|allowed| allowed == content_type) {
-        return content_type;
-    }
-    file_extension(file_name)
-        .and_then(image_mime_for_extension)
-        .unwrap_or(content_type)
-}
-
 /// Streams the request body to `tmp_path`, counting each chunk into the progress
 /// registry and refusing to pass `size_limit`; answers how many bytes arrived.
 ///
@@ -284,8 +265,8 @@ async fn stream_to_tmp(
 /// the bytes are an accepted type.
 ///
 /// # Errors
-/// 415 when the bytes are not a recognised image, or are one the configuration
-/// does not allow; 500 when the temp file cannot be read back.
+/// 415 when the bytes are not a recognised image or audio file, or are one the
+/// configuration does not allow; 500 when the temp file cannot be read back.
 #[cfg(feature = "server")]
 fn check_upload_signature(
     tmp_path: &str,
@@ -300,23 +281,24 @@ fn check_upload_signature(
             "Upload write failed.",
         )
     })?;
-    match image_mime_in_bytes(&signature) {
+    let actual_type = image_mime_in_bytes(&signature).or_else(|| audio_mime_in_bytes(&signature));
+    match actual_type {
         Some(actual) if actual == claimed => {}
-        Some(actual) if allowed_image_type(actual, details) => {
+        Some(actual) if allowed_type(actual, details) => {
             tracing::warn!("upload {original_file_name} was claimed as {claimed} but is {actual}");
         }
         Some(actual) => {
             tracing::warn!(
                 "upload {original_file_name} is {actual}, which its configuration does not allow"
             );
-            return HttpError::unsupported_media_type("That image type is not allowed here.");
+            return HttpError::unsupported_media_type("That file type is not allowed here.");
         }
         None => {
             tracing::warn!(
-                "upload {original_file_name} (claimed as {claimed}) is not a recognised image"
+                "upload {original_file_name} (claimed as {claimed}) is not a recognised image or audio file"
             );
             return HttpError::unsupported_media_type(
-                "The file is not one of the accepted image types.",
+                "The file is not one of the accepted file types.",
             );
         }
     }
@@ -325,7 +307,7 @@ fn check_upload_signature(
 
 /// Whether `mime_type` is one of the types the configuration accepts.
 #[cfg(feature = "server")]
-fn allowed_image_type(mime_type: &str, details: &UploadDetails) -> bool {
+fn allowed_type(mime_type: &str, details: &UploadDetails) -> bool {
     details
         .mime_types
         .iter()
@@ -377,13 +359,17 @@ pub fn FileUploadWithProgress(
     /// Which slot to upload to: chooses the directory, mime types, size limit
     /// and required permissions (see [`UploadConfiguration::get_details`]).
     config: UploadConfiguration,
-    /// The item the file belongs to: an artist or release slug, or the
+    /// The item the file belongs to: an artist, release or track slug, or the
     /// uploader's own username for [`UploadConfiguration::Avatar`].
     slug: String,
     /// The artist slug, needed only by the javascript-off form when uploading
-    /// for a release: its editor lives under the artist.
+    /// for a release or a track: their editors live under the artist.
     #[props(optional)]
     artist_slug: Option<String>,
+    /// The release slug, needed only by the javascript-off form when uploading
+    /// for a track: its editor lives under the release.
+    #[props(optional)]
+    release_slug: Option<String>,
     /// This page's `?uploaded=1` code, set by a javascript-off upload.
     #[props(optional)]
     uploaded: Option<String>,
@@ -407,6 +393,7 @@ pub fn FileUploadWithProgress(
     // is moved into the action's future below, so keep a copy.
     let form_slug = slug.clone();
     let form_artist_slug = artist_slug;
+    let form_release_slug = release_slug;
     // `max`/`value` are written as plain attributes: dioxus types them as
     // `f64` on `<progress>`, and byte counts read better as strings.
     let mut uploading = use_signal(|| None::<String>);
@@ -488,6 +475,13 @@ pub fn FileUploadWithProgress(
                     value: artist,
                 }
             }
+            if let Some(release) = form_release_slug {
+                input {
+                    r#type: "hidden",
+                    name: "release_slug",
+                    value: release,
+                }
+            }
             div {
                 class: "grid gap-6",
                 div {
@@ -517,7 +511,7 @@ pub fn FileUploadWithProgress(
         // reactive path never sets those, so the two cannot both alert.
         if no_reactive_outcome {
             if uploaded.is_some() {
-                Success { message: "Image uploaded.", show: true }
+                Success { message: upload_success_message(config), show: true }
             }
             if let Some(message) = upload_message(bad_upload.as_deref()) {
                 InlineError { message }
@@ -560,11 +554,20 @@ fn upload_message(code: Option<&str>) -> Option<&'static str> {
         "bad_form" => Some("The upload form was incomplete."),
         "missing_file" => Some("Choose a file to upload."),
         "bad_mime" => Some("Invalid mime type."),
-        "bad_image" => Some("The file is not one of the accepted image types."),
+        "bad_image" => Some("The file is not one of the accepted file types."),
         "bad_file_name" => Some("Invalid file name."),
         "too_large" => Some("File too large."),
         "server" => Some("Upload failed."),
         _ => None,
+    }
+}
+
+/// The success copy for a javascript-off upload, which names what the slot
+/// takes (`bad_upload` codes and the failure table above are shared).
+const fn upload_success_message(config: UploadConfiguration) -> &'static str {
+    match config {
+        UploadConfiguration::TrackAudio => "Audio uploaded.",
+        _ => "Image uploaded.",
     }
 }
 
@@ -589,7 +592,7 @@ struct UploadOutcome {
 }
 
 /// The public URL an upload is served from, matching the models'
-/// `primary_image_url` (`/uploads/<config directory>/<stored name>`).
+/// `primary_image_url`/`audio_url` (`/uploads/<config directory>/<stored name>`).
 ///
 /// Absolute against the API origin in a desktop window, where the page's own
 /// origin has no uploads at all (see [`crate::ui::assets`]).
@@ -633,8 +636,15 @@ async fn upload_attempt(
             "{filename} is larger than the {size_limit_mb} MB limit."
         ))));
     }
-    let mime_type = client_declared_mime(&file);
-    if !details.mime_types.contains(&mime_type) {
+    // The type the client's own answer stands for, which is what the server
+    // would work out from the same request (see `claimed_upload_mime`).
+    let declared_type = file.content_type().unwrap_or_default();
+    let mime_type = claimed_upload_mime(&declared_type, &filename, &details.mime_types);
+    if !details
+        .mime_types
+        .iter()
+        .any(|allowed| allowed == mime_type)
+    {
         return Ok(upload_outcome(HttpError::unsupported_media_type(format!(
             "{filename} is not a supported file type."
         ))));
@@ -648,31 +658,6 @@ async fn upload_attempt(
         sent_bytes.set(Some(size_bytes));
     }
     Ok(outcome)
-}
-
-/// The type the picker says the file is, for the server's `declared_mime`.
-///
-/// A browser answers with the file's own type. A dioxus window hands back a
-/// path, and dioxus invents a type for it from a table of *web asset* types that
-/// holds no images at all (a `.png` comes back as `text/html; charset=utf-8`),
-/// so anything that is not an image is re-derived from the file's extension.
-/// The server checks the bytes themselves, so a wrong guess here only ever
-/// costs the user a rejection.
-fn client_declared_mime(file: &FileData) -> String {
-    declared_mime_from(&file.content_type().unwrap_or_default(), &file.name())
-}
-
-/// [`client_declared_mime`] with its two inputs in hand, so the quirk it works
-/// around can be tested without a platform file object.
-fn declared_mime_from(from_platform: &str, file_name: &str) -> String {
-    if from_platform.starts_with("image/") {
-        return from_platform.to_string();
-    }
-    // With no extension to go on, the request's own type is all there is.
-    file_extension(file_name)
-        .and_then(image_mime_for_extension)
-        .unwrap_or(from_platform)
-        .to_string()
 }
 
 /// Copies one upload's running byte totals into `sent_bytes` until that stream
@@ -764,8 +749,10 @@ mod tests {
     use crate::models::auth::User;
     use crate::models::release::Release;
     use crate::models::test_helpers::{
-        create_test_artist, create_test_release, create_test_user_with_permissions,
+        create_test_artist, create_test_release, create_test_track,
+        create_test_user_with_permissions,
     };
+    use crate::models::track::Track;
     use crate::server::test_support::{api_server, api_server_with_uploads, login_request};
     use crate::services::files::progress::{FILES, add_chunk};
 
@@ -774,6 +761,9 @@ mod tests {
     /// contents can keep the body short.
     const PNG_BODY: &[u8] = b"\x89PNG\r\n\x1a\npng body";
     const JPEG_BODY: &[u8] = b"\xff\xd8\xff\xe0jpeg body";
+    /// A `RIFF`/`WAVE` header followed by filler, same trick as the two above:
+    /// the signature is what the upload checks.
+    const WAV_BODY: &[u8] = b"RIFF,\0\0\0WAVEfake wave body";
 
     /// One upload in the dioxus protocol, as a browser sends it: the file bytes
     /// are the entire body, the type arrives in `Content-Type`, the length is
@@ -830,7 +820,7 @@ mod tests {
     /// A temp uploads root with the directories `setup` normally creates.
     fn upload_dirs() -> (tempfile::TempDir, std::path::PathBuf) {
         let root = tempfile::tempdir().expect("upload dir");
-        for subdirectory in ["tmp", "avatars", "artists", "releases"] {
+        for subdirectory in ["tmp", "avatars", "artists", "releases", "tracks"] {
             std::fs::create_dir_all(root.path().join(subdirectory))
                 .expect("subdirectory should exist");
         }
@@ -1016,6 +1006,110 @@ mod tests {
                 .is_none(),
             "attaching an image must not derive a slug from the release's name"
         );
+    }
+
+    /// A track's audio travels the same streaming path, lands in the tracks
+    /// directory and points at the track's own column. The slug is hand-set for
+    /// the same reason as the two tests above: `Track::update` re-derives it
+    /// from the name, and an upload must not.
+    #[sqlx::test]
+    async fn track_audio_upload_is_stored_and_attached(pool: PgPool) {
+        let track = create_test_track(&pool, 10, None, None)
+            .await
+            .expect("test track");
+        sqlx::query("UPDATE tracks SET slug = $1 WHERE id = $2")
+            .bind("castles-v2")
+            .bind(track.id)
+            .execute(&pool)
+            .await
+            .expect("hand-set track slug");
+        create_test_user_with_permissions(&pool, 10, vec!["admin", "label_owner"])
+            .await
+            .expect("admin user");
+
+        let (_root, upload_root) = upload_dirs();
+        let server = api_server_with_uploads(&pool, upload_root.clone()).await;
+        login_request(&server, "test-10").await.assert_status_ok();
+
+        let response = post_file(
+            &server,
+            "TrackAudio",
+            "castles-v2",
+            "castles.wav",
+            "audio/wav",
+            WAV_BODY,
+        )
+        .await;
+
+        response.assert_status_ok();
+        let stored_name: String = response.json();
+        assert!(
+            stored_name.ends_with("-castles-v2.wav"),
+            "audio is named after the track it belongs to: {stored_name}"
+        );
+        let tracks = upload_root.join("tracks");
+        assert_eq!(
+            stored_names(&tracks),
+            vec![stored_name.clone()],
+            "the file lands in the tracks directory"
+        );
+        assert_eq!(
+            std::fs::read(tracks.join(&stored_name)).expect("stored bytes"),
+            WAV_BODY
+        );
+
+        let after_upload = Track::get_by_slug(&pool, "castles-v2".to_string())
+            .await
+            .expect("the track is still reachable by its own slug");
+        assert_eq!(after_upload.id, track.id);
+        assert_eq!(
+            after_upload.audio.as_deref(),
+            Some(stored_name.as_str()),
+            "the upload attaches the audio"
+        );
+        assert_eq!(
+            after_upload.audio_url().as_deref(),
+            Some(format!("/uploads/tracks/{stored_name}").as_str()),
+            "and the model can turn it into a playable URL"
+        );
+    }
+
+    /// The audio slot takes audio, not a picture: the bytes decide, and a png
+    /// posted to it is rejected and undone.
+    #[sqlx::test]
+    async fn track_audio_upload_rejects_an_image(pool: PgPool) {
+        create_test_track(&pool, 11, None, None)
+            .await
+            .expect("test track");
+        create_test_user_with_permissions(&pool, 11, vec!["admin", "label_owner"])
+            .await
+            .expect("admin user");
+
+        let (_root, upload_root) = upload_dirs();
+        let server = api_server_with_uploads(&pool, upload_root.clone()).await;
+        login_request(&server, "test-11").await.assert_status_ok();
+
+        let response = post_file(
+            &server,
+            "TrackAudio",
+            "test-track-11",
+            "sleeve.png",
+            "image/png",
+            PNG_BODY,
+        )
+        .await;
+
+        response.assert_status(axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE);
+        assert_eq!(
+            stored_names(&upload_root.join("tracks")),
+            Vec::<String>::new(),
+            "a rejected audio upload stores nothing"
+        );
+        let track = Track::find_by_slug(&pool, "test-track-11".to_string())
+            .await
+            .expect("the stored track")
+            .expect("the track row");
+        assert_eq!(track.audio, None, "and the row is left alone");
     }
 
     #[sqlx::test]
@@ -1291,62 +1385,6 @@ mod tests {
         publisher.await.expect("publisher task");
     }
 
-    /// The window build asks dioxus for a file's type, and dioxus answers from
-    /// a table of web asset types that has no images in it, so a `.png` comes
-    /// back claiming to be html. The extension has to win.
-    #[test]
-    fn the_window_builds_invented_type_gives_way_to_the_extension() {
-        assert_eq!(
-            declared_mime_from("text/html; charset=utf-8", "portrait.png"),
-            "image/png"
-        );
-        assert_eq!(
-            declared_mime_from("application/octet-stream", "portrait.JPG"),
-            "image/jpeg"
-        );
-        // A browser's own answer is already right, and stays untouched.
-        assert_eq!(declared_mime_from("image/webp", "cover.webp"), "image/webp");
-        // Nothing to work with: the request's own type is all there is.
-        assert_eq!(
-            declared_mime_from("application/octet-stream", "no-extension"),
-            "application/octet-stream"
-        );
-        assert_eq!(
-            declared_mime_from("text/html; charset=utf-8", "notes.txt"),
-            "text/html; charset=utf-8"
-        );
-    }
-
-    /// The window build sends a `Content-Type` dioxus invented from a table of
-    /// web asset types, so a header that is not one of the accepted types has to
-    /// fall back to the file's extension.
-    #[test]
-    fn a_claim_the_window_invented_falls_back_to_the_extension() {
-        let accepted = UploadConfiguration::Avatar.get_details().mime_types;
-        // A browser's own type is already one of them, so it stands.
-        assert_eq!(
-            claimed_upload_type("image/gif", "animation.gif", &accepted),
-            "image/gif"
-        );
-        assert_eq!(
-            claimed_upload_type("text/html; charset=utf-8", "cover.PNG", &accepted),
-            "image/png"
-        );
-        assert_eq!(
-            claimed_upload_type("application/octet-stream", "cover.webp", &accepted),
-            "image/webp"
-        );
-        // Nothing to fall back to: the claim itself is what gets rejected.
-        assert_eq!(
-            claimed_upload_type("text/plain", "notes.txt", &accepted),
-            "text/plain"
-        );
-        assert_eq!(
-            claimed_upload_type("text/html; charset=utf-8", "no-extension", &accepted),
-            "text/html; charset=utf-8"
-        );
-    }
-
     #[test]
     fn the_signature_check_decides_what_is_stored() {
         let details = UploadConfiguration::Avatar.get_details();
@@ -1407,6 +1445,63 @@ mod tests {
         );
     }
 
+    /// The audio slot reads its own signatures. A claim the slot does allow
+    /// (`audio/mpeg`, worked out from the name) cannot carry a picture: the
+    /// bytes decide, and they are refused here rather than at the claim check.
+    #[test]
+    fn the_audio_slot_reads_audio_signatures() {
+        let audio = UploadConfiguration::TrackAudio.get_details();
+        let real_wav = tempfile::NamedTempFile::new().expect("temp file");
+        std::fs::write(real_wav.path(), WAV_BODY).expect("write");
+        check_upload_signature(
+            &real_wav.path().to_string_lossy(),
+            "castles.wav",
+            "audio/wav",
+            &audio,
+        )
+        .expect("a wav is accepted");
+
+        // Renamed, but still a real wav: stored, with a note in the log.
+        check_upload_signature(
+            &real_wav.path().to_string_lossy(),
+            "castles.mp3",
+            "audio/mpeg",
+            &audio,
+        )
+        .expect("the bytes decide, and they are a wav");
+
+        // A `.mp3` name carries a claim the slot allows, so it gets as far as
+        // the signature check, which is where the picture is refused.
+        let real_png = tempfile::NamedTempFile::new().expect("temp file");
+        std::fs::write(real_png.path(), PNG_BODY).expect("write");
+        let rejected = check_upload_signature(
+            &real_png.path().to_string_lossy(),
+            "castles.mp3",
+            "audio/mpeg",
+            &audio,
+        )
+        .expect_err("a picture is not audio");
+        assert_eq!(
+            rejected.status,
+            axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE
+        );
+
+        // The mirror case, which the image slots see: audio bytes behind an
+        // image name are recognised, just not allowed by that configuration.
+        let image_slot = UploadConfiguration::Artist.get_details();
+        let refused = check_upload_signature(
+            &real_wav.path().to_string_lossy(),
+            "cover.png",
+            "image/png",
+            &image_slot,
+        )
+        .expect_err("an audio file is not an allowed image type");
+        assert_eq!(
+            refused.status,
+            axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE
+        );
+    }
+
     #[test]
     fn upload_outcome_messages() {
         assert_eq!(
@@ -1450,6 +1545,22 @@ mod tests {
         assert_eq!(
             stored_file_url(UploadConfiguration::Avatar, "123-test-1.png"),
             "/uploads/avatars/123-test-1.png"
+        );
+        assert_eq!(
+            stored_file_url(UploadConfiguration::TrackAudio, "123-castles.flac"),
+            "/uploads/tracks/123-castles.flac"
+        );
+    }
+
+    #[test]
+    fn a_javascript_off_upload_names_what_the_slot_takes() {
+        assert_eq!(
+            upload_success_message(UploadConfiguration::TrackAudio),
+            "Audio uploaded."
+        );
+        assert_eq!(
+            upload_success_message(UploadConfiguration::Artist),
+            "Image uploaded."
         );
     }
 
@@ -1516,6 +1627,32 @@ mod tests {
         );
     }
 
+    /// A track's uploader names the three slugs its editor is addressed by,
+    /// since the javascript-off handler has to build that page's URL to come
+    /// back to, and the accept list is the audio one.
+    #[test]
+    fn the_track_audio_uploader_carries_its_editors_slugs() {
+        let html = dioxus::ssr::render_element(rsx! {
+            FileUploadWithProgress {
+                config: UploadConfiguration::TrackAudio,
+                slug: "test-track-1".to_string(),
+                artist_slug: Some("test-artist-1".to_string()),
+                release_slug: Some("test-release-1".to_string()),
+            }
+        });
+        for expected in [
+            r#"name="file_type" value="TrackAudio""#,
+            r#"value="test-track-1""#,
+            r#"name="artist_slug""#,
+            r#"value="test-artist-1""#,
+            r#"name="release_slug""#,
+            r#"value="test-release-1""#,
+            r#"accept=".mp3,.MP3,.wav,.WAV,.flac,.FLAC,.ogg,.OGG""#,
+        ] {
+            assert!(html.contains(expected), "expected {expected} in: {html}");
+        }
+    }
+
     #[test]
     fn upload_messages_cover_the_known_codes() {
         assert_eq!(
@@ -1529,7 +1666,7 @@ mod tests {
         assert_eq!(upload_message(Some("bad_mime")), Some("Invalid mime type."));
         assert_eq!(
             upload_message(Some("bad_image")),
-            Some("The file is not one of the accepted image types.")
+            Some("The file is not one of the accepted file types.")
         );
         assert_eq!(upload_message(Some("too_large")), Some("File too large."));
         assert_eq!(upload_message(Some("server")), Some("Upload failed."));

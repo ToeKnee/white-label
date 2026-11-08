@@ -147,6 +147,39 @@ if [ -n "${DATABASE_URL:-}" ]; then
             (SELECT id FROM releases WHERE slug LIKE 'e2e-reactive-%');
         DELETE FROM releases WHERE slug LIKE 'e2e-reactive-%';" \
         || echo "WARNING: could not prune the e2e-reactive releases (is psql installed?)"
+    # An audio fixture: a published release and track under `e2e-tabs`, which
+    # the audio upload specs post to (the track editor's audio uploader is
+    # addressed by artist, release and track slugs). Kept undeleted on purpose:
+    # every run uploads another file to it. The track conflicts on its ISRC
+    # rather than its name (`tracks` has no unique name index, and a UI rename
+    # keeps the ISRC while re-slugifying), so a rerun repairs the slug back.
+    psql "$DATABASE_URL" -c "INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at)
+        SELECT 'E2E Audio Release', 'e2e-audio-release', 'Gate fixture release for the audio uploader',
+               a.label_id, 'E2E-AUDIO-1', a.id, now()
+        FROM artists a WHERE a.slug = 'e2e-tabs'
+        ON CONFLICT (name) DO UPDATE SET
+            slug = EXCLUDED.slug,
+            label_id = EXCLUDED.label_id,
+            catalogue_number = EXCLUDED.catalogue_number,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(releases.published_at, EXCLUDED.published_at),
+            deleted_at = NULL;
+        INSERT INTO tracks (name, slug, description, lyrics, isrc_code, bpm, primary_artist_id, release_id, track_number, published_at)
+        SELECT 'E2E Audio Track', 'e2e-audio-track', 'Gate fixture track for the audio uploader',
+               '', 'E2EAUD12345', 120, r.primary_artist_id, r.id, 1, now()
+        FROM releases r WHERE r.slug = 'e2e-audio-release'
+        ON CONFLICT (isrc_code) DO UPDATE SET
+            name = EXCLUDED.name,
+            slug = EXCLUDED.slug,
+            release_id = EXCLUDED.release_id,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(tracks.published_at, EXCLUDED.published_at),
+            deleted_at = NULL;
+        INSERT INTO release_artists (artist_id, release_id)
+        SELECT a.id, r.id FROM artists a, releases r
+            WHERE a.slug = 'e2e-tabs' AND r.slug = 'e2e-audio-release'
+        ON CONFLICT (artist_id, release_id) DO NOTHING;" \
+        || echo "WARNING: could not seed the audio fixture (is psql installed?)"
     # A housekeeping fixture: one page soft-deleted *past* the 90 day purge
     # window, kept aged on every run. The Housekeeping preview tests expect
     # to see `E2E Purge Page` in the listing; no test clicks the confirm
@@ -170,7 +203,7 @@ echo "== seed the uploads directories (idempotent) =="
 # so the gate makes sure the avatar upload in `dioxus_client.spec.ts` has
 # somewhere to write.
 if [ -n "${UPLOAD_PATH:-}" ]; then
-    mkdir -p "$UPLOAD_PATH/tmp" "$UPLOAD_PATH/avatars" "$UPLOAD_PATH/artists" "$UPLOAD_PATH/releases"
+    mkdir -p "$UPLOAD_PATH/tmp" "$UPLOAD_PATH/avatars" "$UPLOAD_PATH/artists" "$UPLOAD_PATH/releases" "$UPLOAD_PATH/tracks"
     echo "uploads root ready: $UPLOAD_PATH"
 else
     echo "WARNING: UPLOAD_PATH not set; the profile upload client test will fail"
@@ -227,6 +260,13 @@ if [ "$admin_ok" -eq 1 ]; then
     pin "$OUT/artist_images.html" 'E2E Tabs Artist Images'
     pin "$OUT/artist_images.html" 'name="file_to_upload"'
     pin "$OUT/artist_images.html" 'accept=".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP"'
+    # The track editor carries the audio uploader: its own accept list, and the
+    # release slug the javascript-off form needs to come back to this page.
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/track_editor.html" -w "track editor status=%{http_code}\n" \
+      "$base/admin/artist/e2e-tabs/release/e2e-audio-release/track/e2e-audio-track"
+    pin "$OUT/track_editor.html" 'E2E Audio Track - E2E Audio Release - E2E Tabs Artist'
+    pin "$OUT/track_editor.html" 'name="file_type" value="TrackAudio"'
+    pin "$OUT/track_editor.html" 'accept=".mp3,.MP3,.wav,.WAV,.flac,.FLAC,.ogg,.OGG"'
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.

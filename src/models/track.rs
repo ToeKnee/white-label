@@ -36,6 +36,9 @@ pub struct Track {
     pub release_id: i64,
     /// The primary image of the track
     pub primary_image: Option<String>,
+    /// The track's own audio file, stored under `<uploads root>/tracks`
+    /// (see [`UploadConfiguration::TrackAudio`](crate::config::upload::UploadConfiguration::TrackAudio))
+    pub audio: Option<String>,
     /// The ISRC code of the track
     /// This is a unique identifier for the track (changes for different versions/masters etc.)
     pub isrc_code: Option<String>,
@@ -165,6 +168,24 @@ impl Track {
         )
     }
 
+    /// The URL the track's audio is served from, or `None` when it has none.
+    ///
+    /// Unlike [`primary_image_url`](Self::primary_image_url) there is no
+    /// placeholder here: a track without audio simply gets no player.
+    ///
+    /// # Example
+    /// ```
+    /// use white_label::models::track::Track;
+    /// let track = Track { audio: Some("1700000000-castles.flac".to_string()), ..Track::default() };
+    /// assert_eq!(track.audio_url().as_deref(), Some("/uploads/tracks/1700000000-castles.flac"));
+    /// ```
+    #[must_use]
+    pub fn audio_url(&self) -> Option<String> {
+        self.audio
+            .as_ref()
+            .map(|file| format!("/uploads/tracks/{file}"))
+    }
+
     /// Create a new track
     ///
     /// # Arguments
@@ -205,6 +226,7 @@ impl Track {
             primary_artist_id,
             release_id,
             primary_image: None,
+            audio: None,
             isrc_code,
             bpm,
             track_number,
@@ -365,7 +387,7 @@ impl Track {
         self.validate(pool).await?;
 
         let track = match sqlx::query_as::<_, Self>(
-            "UPDATE tracks SET name = $1, slug = $2, description = $3, lyrics = $4, primary_artist_id = $5, release_id = $6, primary_image = $7, isrc_code = $8, bpm = $9, track_number = $10, published_at = $11, updated_at = $12, deleted_at = $13 WHERE id = $14 RETURNING *",
+            "UPDATE tracks SET name = $1, slug = $2, description = $3, lyrics = $4, primary_artist_id = $5, release_id = $6, primary_image = $7, audio = $8, isrc_code = $9, bpm = $10, track_number = $11, published_at = $12, updated_at = $13, deleted_at = $14 WHERE id = $15 RETURNING *",
         )
         .bind(self.name)
         .bind(self.slug)
@@ -374,6 +396,7 @@ impl Track {
         .bind(self.primary_artist_id)
         .bind(self.release_id)
         .bind(self.primary_image)
+        .bind(self.audio)
         .bind(self.isrc_code)
         .bind(self.bpm)
         .bind(self.track_number)
@@ -533,6 +556,7 @@ mod tests {
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
+            audio: None,
             isrc_code: Some("UKUXX2020123".to_string()),
             bpm: Some(120),
             track_number: 1,
@@ -562,6 +586,7 @@ mod tests {
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
+            audio: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             track_number: 1,
@@ -596,6 +621,7 @@ mod tests {
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
+            audio: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             track_number: 1,
@@ -630,6 +656,7 @@ mod tests {
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
+            audio: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             track_number: 1,
@@ -676,6 +703,7 @@ mod tests {
             primary_artist_id: 10,
             release_id: release.id,
             primary_image: None,
+            audio: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             track_number: 1,
@@ -706,6 +734,7 @@ mod tests {
             primary_artist_id: artist.id,
             release_id: 1,
             primary_image: None,
+            audio: None,
             isrc_code: Some("UKXXX2020123".to_string()),
             bpm: Some(120),
             track_number: 1,
@@ -740,6 +769,7 @@ mod tests {
             primary_artist_id: artist.id,
             release_id: release.id,
             primary_image: None,
+            audio: None,
             isrc_code: Some(isrc_code),
             bpm: Some(123),
             track_number: 1,
@@ -1206,5 +1236,51 @@ mod tests {
         track.primary_image = Some("custom-image.jpg".to_string());
         let url = track.primary_image_url();
         assert_eq!(url, "/uploads/tracks/custom-image.jpg");
+    }
+
+    #[sqlx::test]
+    async fn test_audio_url_is_absent_without_a_file(pool: PgPool) {
+        let track = create_test_track(&pool, 1, None, None).await.unwrap();
+        assert_eq!(track.audio, None, "a fresh track has no audio");
+        assert_eq!(track.audio_url(), None, "and so no player URL");
+    }
+
+    #[test]
+    fn test_audio_url_points_at_the_tracks_directory() {
+        let track = Track {
+            audio: Some("1700000000-castles.flac".to_string()),
+            ..Track::default()
+        };
+        assert_eq!(
+            track.audio_url().as_deref(),
+            Some("/uploads/tracks/1700000000-castles.flac")
+        );
+    }
+
+    /// A whole-row save (what `update_track_service` does after loading the
+    /// track) must carry the stored audio file along with it, or editing a
+    /// track's name would silently strand the upload.
+    #[sqlx::test]
+    async fn test_update_keeps_a_stored_audio_file(pool: PgPool) {
+        let track = create_test_track(&pool, 1, None, None).await.unwrap();
+        sqlx::query("UPDATE tracks SET audio = $1 WHERE id = $2")
+            .bind("1700000000-castles.flac")
+            .bind(track.id)
+            .execute(&pool)
+            .await
+            .expect("the audio column to be set");
+
+        let mut loaded = Track::get_by_slug(&pool, track.slug.clone())
+            .await
+            .expect("the stored track");
+        loaded.name = "Renamed Track".to_string();
+        let saved = loaded.update(&pool).await.expect("the save");
+
+        assert_eq!(saved.name, "Renamed Track");
+        assert_eq!(
+            saved.audio.as_deref(),
+            Some("1700000000-castles.flac"),
+            "a save must not drop the audio file"
+        );
     }
 }

@@ -26,6 +26,12 @@
 //!   `get_track` fetch serves the track editor.
 //! - Track images show in the list (`primary_image_url`) but the editors
 //!   offer no way to upload one.
+//! - A track's **audio** is uploaded through the shared widget
+//!   (`UploadConfiguration::TrackAudio`, see `crate::ui::upload`) and previewed
+//!   here with an `<audio>` element; the public release page
+//!   (`crate::ui::release`) plays the same file. The upload's javascript-off
+//!   path needs the artist and release slugs as well as the track's, because
+//!   its editor is addressed by all three.
 //! - A reactive rename leaves the *URL* on the old slug (the javascript-off
 //!   path 303s to the new one). Saving again, deleting and restoring all
 //!   follow the new slug, but reloading the old URL gets the tracks list.
@@ -35,14 +41,16 @@ use dioxus::router::RouterContext;
 
 use crate::api_types::edit::EditOutcome;
 use crate::api_types::track::TrackResult;
+use crate::config::upload::UploadConfiguration;
 use crate::forms::track::{TrackCreateFields, TrackSlugFields, TrackUpdateFields};
 use crate::models::track::Track;
-use crate::ui::assets::display_image_url;
+use crate::ui::assets::{display_image_url, served_file_url};
 use crate::ui::data::{get_artist, get_release, get_track};
 use crate::ui::page_data;
 use crate::ui::reactive::{
     posted_fields, posted_fields_with_ids, refused_code, saved_row, transport_message,
 };
+use crate::ui::upload::{FileUploadWithProgress, stored_file_url};
 use crate::ui::use_page;
 use crate::ui::use_user;
 use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
@@ -189,6 +197,8 @@ fn TrackRow(track: Track, artist_slug: String, release_slug: String) -> Element 
         track_slug: track.slug.clone(),
         updated: None,
         bad: None,
+        uploaded: None,
+        bad_upload: None,
     };
 
     rsx! {
@@ -323,6 +333,8 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
             track_slug: result.track.slug,
             updated: None,
             bad: None,
+            uploaded: None,
+            bad_upload: None,
         });
     });
     let create_message = refused_code(create.value())
@@ -417,7 +429,8 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
 }
 
 /// Edit a track; `updated` and `bad` carry the handler codes from
-/// update/delete/restore redirects.
+/// update/delete/restore redirects, `uploaded` and `bad_upload` those from a
+/// javascript-off audio upload.
 #[component]
 pub fn EditTrack(
     /// The artist slug from the URL.
@@ -430,6 +443,10 @@ pub fn EditTrack(
     updated: Option<String>,
     /// Error code from a failed save/delete/restore.
     bad: Option<String>,
+    /// Set when an audio file has just been uploaded without javascript.
+    uploaded: Option<String>,
+    /// Error code from a failed javascript-off audio upload.
+    bad_upload: Option<String>,
 ) -> Element {
     rsx! {
         SuspenseBoundary {
@@ -440,6 +457,8 @@ pub fn EditTrack(
                 track_slug,
                 updated,
                 bad,
+                uploaded,
+                bad_upload,
             }
         }
     }
@@ -452,6 +471,8 @@ fn EditTrackBody(
     track_slug: String,
     updated: Option<String>,
     bad: Option<String>,
+    uploaded: Option<String>,
+    bad_upload: Option<String>,
 ) -> Element {
     let session = use_user()?;
     let user = session().ok().flatten();
@@ -560,6 +581,15 @@ fn EditTrackBody(
     let release_name = release.name;
     let artist_name = artist.name;
 
+    // Set once an audio upload lands, so the player below shows the new file
+    // without a reload. Reading the signal in the body (rather than in the rsx
+    // block) is what re-renders this body when an upload finishes.
+    let mut uploaded_audio = use_signal(|| None::<String>);
+    let stored_audio_url = track.audio_url().map(|url| served_file_url(&url));
+    let shown_audio = uploaded_audio().map_or(stored_audio_url, |stored| {
+        Some(stored_file_url(UploadConfiguration::TrackAudio, &stored))
+    });
+
     rsx! {
         document::Title { "{name_for_header} - {release_name} - {artist_name}" }
         h1 { "{name_for_header} - {release_name} - {artist_name}" }
@@ -663,6 +693,29 @@ fn EditTrackBody(
                     }
                 }
             }
+        }
+        // The audio uploader sits after the field form: it brings its own
+        // `<form>` and forms may not nest (module docs).
+        div { class: "divider", "Audio" }
+        FileUploadWithProgress {
+            config: UploadConfiguration::TrackAudio,
+            slug: current_slug.clone(),
+            // The javascript-off handler has to name the page to come back to,
+            // and this editor is addressed by artist, release and track.
+            artist_slug: Some(artist_slug.clone()),
+            release_slug: Some(release_slug.clone()),
+            uploaded,
+            bad_upload,
+            on_uploaded: move |stored_name: String| uploaded_audio.set(Some(stored_name)),
+        }
+        if let Some(source) = shown_audio {
+            audio {
+                class: "w-full",
+                controls: true,
+                src: source,
+            }
+        } else {
+            p { class: "text-sm opacity-60", "No audio file yet." }
         }
         // Sibling forms for the buttons above (a `<form>` may not nest);
         // they carry the artist and release slugs the redirects need.

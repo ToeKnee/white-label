@@ -52,6 +52,28 @@ const loginAs = async (page: import("@playwright/test").Page, username: string) 
 const PNG_1X1_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
+/**
+ * The smallest real WAV: a 44-byte `RIFF`/`WAVE` header and no samples. The
+ * audio upload test posts this, so both the browser's declared type and the
+ * server's signature check see a real wave container.
+ */
+const WAV_BYTES = (() => {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16); // the `fmt ` chunk's size
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(1, 22); // mono
+  header.writeUInt32LE(8000, 24); // 8kHz
+  header.writeUInt32LE(16000, 28); // byte rate
+  header.writeUInt16LE(2, 32); // block align
+  header.writeUInt16LE(16, 34); // 16-bit
+  header.write("data", 36);
+  header.writeUInt32LE(0, 40);
+  return header;
+})();
+
 /** A progress bar sighting: what the DOM carried at the time it was seen. */
 type Sighting = { max: string | null; value: string | null };
 
@@ -441,6 +463,43 @@ test("the artist images tab uploads and shows the new image", async ({ page }) =
   });
   await expect(shown).toHaveAttribute("src", /\/uploads\/artists\/\d+-e2e-tabs\.png$/);
   expect(await shown.getAttribute("src"), "the shown image should change").not.toBe(before);
+  expect(documentLoads, "an upload is a fetch, not a form post").toBe(loadsBeforeUpload);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
+test("the track editor uploads audio and plays it without a reload", async ({ page }) => {
+  // The audio slot asks for `admin` + `label_owner`, like the image slots, and
+  // its editor is addressed by artist, release and track (the gate seeds
+  // `e2e-audio-release`/`e2e-audio-track` under `e2e-tabs`).
+  requireAdmin();
+
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await loginAs(page, "e2e-admin");
+
+  await page.goto(`${base}/admin/artist/e2e-tabs/release/e2e-audio-release/track/e2e-audio-track`);
+  await expect(h1(page)).toHaveText("E2E Audio Track - E2E Audio Release - E2E Tabs Artist");
+  await clientIsLive(page);
+
+  const picked = { name: "e2e-audio.wav", mimeType: "audio/wav", buffer: WAV_BYTES };
+  const loadsBeforeUpload = documentLoads;
+  await page.setInputFiles('input[name="file_to_upload"]', picked);
+  await page.getByRole("button", { name: "Upload" }).click();
+
+  // The alert names the stored file (`<timestamp>-<track slug>.wav`: audio is
+  // named after the track, like an artist image after the artist) and the
+  // player appears on the same live document. `crate::ui::upload`'s wire tests
+  // cover the storage itself.
+  await expect(page.locator(".alert-success")).toContainText(/Uploaded .+-e2e-audio-track\.wav/, { timeout: 30000 });
+  await expect(page.locator('audio[src^="/uploads/tracks/"]')).toHaveCount(1, {
+    timeout: 15000,
+  });
   expect(documentLoads, "an upload is a fetch, not a form post").toBe(loadsBeforeUpload);
 
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);

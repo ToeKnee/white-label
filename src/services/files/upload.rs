@@ -12,6 +12,7 @@ use crate::config::upload::UploadConfiguration;
 use crate::models::artist::Artist;
 use crate::models::auth::User;
 use crate::models::release::Release;
+use crate::models::track::Track;
 use crate::services::files::progress::FILES;
 
 /// One completed upload: where it landed in `tmp/` and its two names.
@@ -25,15 +26,15 @@ pub struct UploadedFile {
 }
 
 /// Move the finished temp file into the config's directory, drop its
-/// progress entry and attach it to the artist/avatar/release row.
+/// progress entry and attach it to the artist/avatar/release/track row.
 ///
 /// A database-attach error is deliberately swallowed here: the bytes are
 /// already stored, so a failed attach only leaves the row pointing at the
 /// old file.
 ///
 /// `upload_root` is the uploads root as a path string (`UploadRoot::root`),
-/// and `slug` is the item the upload names: an artist or release slug, or
-/// the username for an avatar.
+/// and `slug` is the item the upload names: an artist, release or track slug,
+/// or the username for an avatar.
 ///
 /// Returns the stored file name.
 ///
@@ -69,6 +70,7 @@ pub async fn finalise_upload(
         UploadConfiguration::Artist => store_artist_primary_image(pool, file_name, slug).await,
         UploadConfiguration::Avatar => store_avatar(pool, file_name, slug, uploader).await,
         UploadConfiguration::Release => store_release_primary_image(pool, file_name, slug).await,
+        UploadConfiguration::TrackAudio => store_track_audio(pool, file_name, slug).await,
     };
     if let Err(error) = attach {
         tracing::error!("uploaded file not attached to {upload_config}: {error}");
@@ -147,10 +149,29 @@ async fn store_release_primary_image(
         .map_err(|error| error.to_string())
 }
 
+/// Point a track's `audio` column at the uploaded file, writing one column.
+///
+/// The same guard as [`store_artist_primary_image`]: a whole-model save would
+/// re-derive `slug` from `name` and silently rename the track.
+async fn store_track_audio(pool: &PgPool, file_name: &str, slug: &str) -> Result<(), String> {
+    let track = Track::find_by_slug(pool, slug.to_string())
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("no track with slug {slug}"))?;
+
+    sqlx::query("UPDATE tracks SET audio = $1, updated_at = NOW() WHERE id = $2")
+        .bind(file_name)
+        .bind(track.id)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::test_helpers::create_test_user;
+    use crate::models::test_helpers::{create_test_track, create_test_user};
 
     // The contract behind the shared-user race that made the Playwright
     // profile spec flaky: the upload flow must never carry session-time row
@@ -199,5 +220,48 @@ mod tests {
             .await
             .expect("the stored user");
         assert_eq!(stored.avatar, None);
+    }
+
+    /// A hand-edited track slug must survive an audio upload for the same
+    /// reason an artist's survives an image upload: the tail writes the audio
+    /// column and nothing else.
+    #[sqlx::test]
+    async fn store_track_audio_keeps_the_columns_a_track_save_owns(pool: PgPool) {
+        let track = create_test_track(&pool, 1, None, None)
+            .await
+            .expect("test track");
+        // A slug the track's own name would never produce.
+        sqlx::query("UPDATE tracks SET slug = $1 WHERE id = $2")
+            .bind("hand-edited-slug")
+            .bind(track.id)
+            .execute(&pool)
+            .await
+            .expect("the slug to be edited");
+
+        store_track_audio(&pool, "1700000000-song.flac", "hand-edited-slug")
+            .await
+            .expect("the audio to attach");
+
+        let stored = Track::find_by_slug(&pool, "hand-edited-slug".to_string())
+            .await
+            .expect("the stored track")
+            .expect("the slug still addresses a track");
+        assert_eq!(stored.id, track.id, "the row was not renamed away");
+        assert_eq!(
+            stored.audio.as_deref(),
+            Some("1700000000-song.flac"),
+            "the audio column points at the upload"
+        );
+    }
+
+    #[sqlx::test]
+    async fn store_track_audio_reports_a_missing_track(pool: PgPool) {
+        let error = store_track_audio(&pool, "1700000000-song.flac", "no-such-track")
+            .await
+            .expect_err("nothing to attach to");
+        assert!(
+            error.contains("no-such-track"),
+            "the message names the slug that was not found: {error}"
+        );
     }
 }

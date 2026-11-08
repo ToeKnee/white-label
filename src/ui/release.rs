@@ -1,6 +1,7 @@
 //! The public release page.
 //!
-//! Album details plus the track list, each track showing its featured artists.
+//! Album details plus the track list, each track showing its featured artists
+//! and, when it has an audio file, the browser's own player.
 //!
 //! Unlike the other public pages, a failed fetch here *redirects*: an
 //! unknown artist falls back to the artists index, an unknown release to
@@ -13,7 +14,7 @@ use dioxus::prelude::*;
 
 use crate::models::track_with_artists::TrackWithArtists;
 use crate::ui::Route;
-use crate::ui::assets::display_image_url;
+use crate::ui::assets::{display_image_url, served_file_url};
 use crate::ui::data::{get_artist, get_release};
 use crate::ui::markdown_html;
 use crate::ui::page_data;
@@ -124,7 +125,8 @@ fn TrackList(
     }
 }
 
-/// One track row: thumbnail, name, featured artists, shortened blurb.
+/// One track row: thumbnail, name, featured artists, shortened blurb, and a
+/// player when the track has an audio file.
 #[component]
 fn Track(
     /// The track to display
@@ -132,6 +134,7 @@ fn Track(
 ) -> Element {
     let featured = featured_artist_names(&track);
     let blurb = shorten_string(track.track.description.clone());
+    let player_source = audio_source(&track);
     rsx! {
         li { class: "list-row",
             div {
@@ -151,9 +154,26 @@ fn Track(
                     }
                 }
                 p { class: "text-xs list-col-wrap", "{blurb}" }
+                // The browser's own player. Uploaded audio lives under
+                // `/uploads`, which the server serves to anyone, so a guest
+                // hears the same track a signed-in visitor does.
+                if let Some(source) = player_source {
+                    audio {
+                        class: "w-full not-prose",
+                        controls: true,
+                        src: source,
+                    }
+                }
             }
         }
     }
+}
+
+/// The player's source for a track that has audio, or `None` when it has none
+/// (and so gets no player). Absolute against the API origin in a desktop
+/// window, where the page's own origin has no uploads (see [`crate::ui::assets`]).
+fn audio_source(track: &TrackWithArtists) -> Option<String> {
+    track.track.audio_url().map(|url| served_file_url(&url))
 }
 
 /// Names of artists who contributed to the track, excluding the primary
@@ -172,7 +192,7 @@ fn featured_artist_names(track: &TrackWithArtists) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::featured_artist_names;
+    use super::{audio_source, featured_artist_names};
     use crate::models::artist::Artist;
     use crate::models::track::Track;
     use crate::models::track_with_artists::TrackWithArtists;
@@ -212,5 +232,21 @@ mod tests {
     fn featured_names_empty_without_artists() {
         let track = track_with_artists(1, &[]);
         assert_eq!(featured_artist_names(&track), "");
+    }
+
+    #[test]
+    fn a_track_with_audio_gets_a_player_source() {
+        let mut pair = track_with_artists(1, &[1]);
+        pair.track.audio = Some("1700000000-castles.flac".to_string());
+        assert_eq!(
+            audio_source(&pair).as_deref(),
+            Some("/uploads/tracks/1700000000-castles.flac")
+        );
+    }
+
+    #[test]
+    fn a_track_without_audio_gets_no_player() {
+        let pair = track_with_artists(1, &[1]);
+        assert_eq!(audio_source(&pair), None, "no file, no player");
     }
 }

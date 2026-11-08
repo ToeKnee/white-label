@@ -371,6 +371,38 @@ mod tests {
         );
     }
 
+    /// A guest hears what a track has been given: the public release page puts
+    /// the browser's player on a row with an audio file, and leaves a row
+    /// without one alone.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn a_track_with_audio_gets_a_public_player(pool: PgPool) {
+        seed_public_site(&pool).await;
+        let server = test_server(pool.clone(), None).await;
+        let release_url = "/artists/test-artist-1/test-release-1";
+
+        let before = server.get(release_url).await;
+        assert_shell(&before, &[CHROME[0], "Test Track 1"]);
+        assert!(
+            !before.text().contains("<audio"),
+            "a track with no file gets no player"
+        );
+
+        sqlx::query("UPDATE tracks SET audio = $1 WHERE slug = $2")
+            .bind("1700000000-castles.flac")
+            .bind("test-track-1")
+            .execute(&pool)
+            .await
+            .expect("stored audio");
+        assert_shell(
+            &server.get(release_url).await,
+            &["<audio", "src=\"/uploads/tracks/1700000000-castles.flac\""],
+        );
+    }
+
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
@@ -3116,6 +3148,79 @@ mod tests {
         assert!(
             update < images,
             "the uploader should follow the field form:\n{body}"
+        );
+    }
+
+    /// The track editor carries the audio uploader (the same widget the image
+    /// slots use, on the `TrackAudio` configuration) and a player for a stored
+    /// file. Its javascript-off form has to name the page to come back to, and
+    /// this editor is addressed by artist, release and track.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn track_editor_renders_the_audio_uploader(pool: PgPool) {
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .expect("release fixture");
+        create_test_track(&pool, 1, Some(release), Some(artist))
+            .await
+            .expect("track fixture");
+        let server = api_server(pool.clone()).await;
+        login_as(&server, 1).await;
+
+        let track_url = "/admin/artist/test-artist-1/release/test-release-1/track/test-track-1";
+        let page = server.get(track_url).await;
+        assert_shell(
+            &page,
+            &[
+                "Test Track 1 - Test Release 1 - Test Artist 1",
+                "name=\"file_to_upload\"",
+                "name=\"file_type\" value=\"TrackAudio\"",
+                // The audio slot's accept list, as extension tokens.
+                "accept=\".mp3,.MP3,.wav,.WAV,.flac,.FLAC,.ogg,.OGG\"",
+                // Nothing stored yet, so no player.
+                "No audio file yet.",
+            ],
+        );
+
+        // As in the release editor, the uploader form is a sibling of the field
+        // form: it follows the Update button rather than nesting inside it.
+        let body = page.text();
+        let update = body
+            .find(">Update</button>")
+            .expect("the field form's Update button");
+        let audio = body
+            .find("name=\"file_type\" value=\"TrackAudio\"")
+            .expect("the audio uploader");
+        assert!(
+            update < audio,
+            "the uploader should follow the field form:\n{body}"
+        );
+
+        // With a stored file the same page plays it.
+        sqlx::query("UPDATE tracks SET audio = $1 WHERE slug = $2")
+            .bind("1700000000-test-track-1.flac")
+            .bind("test-track-1")
+            .execute(&pool)
+            .await
+            .expect("stored audio");
+        assert_shell(
+            &server.get(track_url).await,
+            &[
+                "<audio",
+                "src=\"/uploads/tracks/1700000000-test-track-1.flac\"",
+            ],
         );
     }
 

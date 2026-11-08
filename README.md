@@ -123,8 +123,10 @@ builds this version cannot launch.)
 
 `src/ui/upload.rs` holds the picker widget and its two dioxus endpoints. It is
 rendered on the profile page (`/profile`, the signed-in user's avatar), the
-admin artist **Images** tab (`/admin/artist/<slug>/images`) and the release
-editor (`EditRelease`):
+admin artist **Images** tab (`/admin/artist/<slug>/images`), the release editor
+(`EditRelease`) and the track editor (`EditTrack`, which uploads the track's own
+audio and plays it back with an `<audio controls>` element — the same file the
+public release page plays):
 
 - `POST /api/upload?file_type=Avatar&slug=…&filename=…` — the request body is
   the file itself (dioxus sends a `FileStream` argument as the raw body, with
@@ -137,14 +139,21 @@ editor (`EditRelease`):
 
 What a file _is_ is settled by its first bytes, not by what the client said. A
 browser derives a file's mime from its name, and the window's `Content-Type` is
-invented by dioxus from a table of _web asset_ types that holds no images at all
-(a `.png` arrives as `text/html; charset=utf-8`), so a header that is not one of
-the accepted types falls back to the file's extension. Both upload paths then
-read back the first bytes of the temp file and demand one of the configuration's
-image signatures (`utils::files::image_mime_in_bytes`), and the streaming path
-also insists that the byte count the client declared in `X-Content-Size` matches
-what arrived, so a body that stops short is removed rather than stored and
-attached.
+invented by dioxus from a table of _web asset_ types that holds no images and no
+audio at all (a `.png` arrives as `text/html; charset=utf-8`), so a claim the
+configuration does not accept falls back to the file's extension
+(`utils::files::claimed_upload_mime`) — which also covers a browser's own legacy
+spellings (`audio/x-flac` for a `.flac`, say). Both upload paths then read back
+the first bytes of the temp file and demand one of the configuration's image or
+audio signatures (`utils::files::image_mime_in_bytes` and
+`utils::files::audio_mime_in_bytes`), and the streaming path also insists that
+the byte count the client declared in `X-Content-Size` matches what arrived, so
+a body that stops short is removed rather than stored and attached.
+
+The track audio slot (`file_type=TrackAudio`) takes `audio/mpeg`, `audio/wav`,
+`audio/flac` and `audio/ogg` — the four every target browser plays natively.
+`.m4a`/`.aac` are left out on purpose: their `ftyp` box carries a brand field
+rather than a fixed signature, and Safari is the only browser that needs them.
 
 The progress request is a task of its own on the client, never a step the upload
 waits for: Firefox does not resolve a stream response before its first byte, so
@@ -155,27 +164,31 @@ is aborted by the browser, and dioxus turns an aborted request into a panic of
 the whole client. An entry in the progress registry belongs to the upload that
 `add_chunk` started, so a watcher never creates one.
 
-The widget's `accept` list is extension tokens (`.jpg,.jpeg,.png,.gif,.webp`)
-rather than the config's mime types: a browser takes either, but the window's
-file dialog reads only extensions and would otherwise offer every file on disk.
+The widget's `accept` list is extension tokens (`.jpg,.jpeg,.png,.gif,.webp`, or
+`.mp3,.wav,.flac,.ogg` for the audio slot) rather than the config's mime types: a
+browser takes either, but the window's file dialog reads only extensions and
+would otherwise offer every file on disk.
 
 Two things a deployment has to know:
 
-- The uploads root (`UPLOAD_PATH`) needs its `tmp/`, `avatars/`, `artists/`
-  and `releases/` directories. The dioxus server only reads `UPLOAD_PATH`
-  and never creates them, so deployments must `mkdir -p` them
+- The uploads root (`UPLOAD_PATH`) needs its `tmp/`, `avatars/`, `artists/`,
+  `releases/` and `tracks/` directories. The dioxus server only reads
+  `UPLOAD_PATH` and never creates them, so deployments must `mkdir -p` them
   (`run-dioxus-gate.sh` does).
 - Nothing in the transport caps a streamed body, so the per-configuration
-  limit (10 MB avatars, 100 MB artist/release images) is enforced while
-  streaming (413, partial file removed). A reverse proxy still needs its own
-  body limit raised to match — nginx's `client_max_body_size` defaults to
-  1 MB, which would reject these uploads before the app ever sees them.
+  limit (10 MB avatars, 100 MB artist/release images, 250 MB track audio) is
+  enforced while streaming (413, partial file removed). A reverse proxy still
+  needs its own body limit raised to match — nginx's `client_max_body_size`
+  defaults to 1 MB, which would reject these uploads before the app ever sees
+  them.
 
 Uploads have two paths, and both work in the browser modes. The reactive one
 streams the file through the `/api/upload` server fn (with the progress bar) and
 needs the client build above. The widget's markup is also a real
 `multipart/form-data` form — `method="post"`, `enctype`, and hidden
-`file_type`/`slug`/`artist_slug` fields ahead of the file part — so with
+`file_type`/`slug` fields ahead of the file part (`artist_slug` for a release or
+track, `release_slug` also for a track, since those editors are addressed by
+more than one slug) — so with
 javascript off, or on the SSR-only server (which serves no wasm bundle), the
 click is a browser form post to `/forms/upload` (`server::upload_form`), which
 stores the file, attaches it to the row and 303s back with `?uploaded=1` or
@@ -186,7 +199,8 @@ browser's own network UI is the feedback.
 
 Attaching the file is deliberately narrow. The shared tail
 (`services::files::upload`) writes **one column** — `primary_image` for an
-artist or release, `avatar` for a user — because `Artist::update`,
+artist, release or track, `avatar` for a user, `audio` for a track — because
+`Artist::update`,
 `Release::update`, `Page::update`, `Track::update` and `RecordLabel::update`
 all start by re-deriving `slug` from `name`, so saving the whole model to
 attach a picture silently renames any row whose slug does not match its name
@@ -293,7 +307,7 @@ form handlers and server fns) and the whole `src/ui` suite build under the
 default `server` feature, so one command covers everything:
 
 ```bash
-cargo test            # 478 lib tests + doc tests, src/server/ and src/ui/ included
+cargo test            # 503 lib tests + doc tests, src/server/ and src/ui/ included
 cargo test -- server::   # just the router/form-handler tests
 cargo test -- ui::       # just the route-table + UI component tests
 ```
@@ -385,6 +399,7 @@ DATABASE_URL=postgres://user:pass@localhost/whitelabel
 UPLOAD_PATH=/var/lib/white-label/uploads
 ```
 
-`UPLOAD_PATH` needs its `tmp/`, `avatars/`, `artists/` and `releases/`
-directories, and any reverse proxy in front needs a body limit that matches
-the upload sizes (see the uploads note above). Then run the server binary.
+`UPLOAD_PATH` needs its `tmp/`, `avatars/`, `artists/`, `releases/` and
+`tracks/` directories, and any reverse proxy in front needs a body limit that
+matches the upload sizes (see the uploads note above). Then run the server
+binary.

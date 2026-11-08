@@ -25,6 +25,28 @@ const base = process.env.DIOXUS_URL ?? "http://127.0.0.1:8127";
 const PNG_1X1_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
+/**
+ * The smallest real WAV: a 44-byte `RIFF`/`WAVE` header and no samples. The
+ * audio upload tests post this, so the handler's signature check sees a real
+ * wave container rather than a renamed text file.
+ */
+const emptyWav = () => {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16); // the `fmt ` chunk's size
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(1, 22); // mono
+  header.writeUInt32LE(8000, 24); // 8kHz
+  header.writeUInt32LE(16000, 28); // byte rate
+  header.writeUInt16LE(2, 32); // block align
+  header.writeUInt16LE(16, 34); // 16-bit
+  header.write("data", 36);
+  header.writeUInt32LE(0, 40);
+  return header;
+};
+
 /** The navbar brand link, which shows the record label's name. */
 const brandLink = (page: import("@playwright/test").Page) => page.locator(".navbar-start a");
 
@@ -254,6 +276,37 @@ test("an upload works without javascript, as a multipart form post", async ({ pa
   // stored file (the handler attached it to the row before redirecting).
   await expect(page.getByRole("tab", { name: "Images" })).toHaveClass(/tab-active/);
   await expect(page.locator('img[src^="/uploads/artists/"]')).toHaveCount(1);
+});
+
+test("a track's audio uploads without javascript and gets a player", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // The gate seeds `e2e-audio-release`/`e2e-audio-track` under `e2e-tabs`, and
+  // the track editor carries the audio uploader. With no wasm bundle on this
+  // server, Upload is exactly what a javascript-off browser does: a multipart
+  // POST to /forms/upload, which attaches the file and 303s back here.
+  await page.goto(`${base}/admin/artist/e2e-tabs/release/e2e-audio-release/track/e2e-audio-track`);
+  await expect(h1(page)).toHaveText("E2E Audio Track - E2E Audio Release - E2E Tabs Artist");
+  // The audio slot's own accept list, which the config drives.
+  await expect(page.locator('input[name="file_to_upload"]')).toHaveAttribute(
+    "accept",
+    ".mp3,.MP3,.wav,.WAV,.flac,.FLAC,.ogg,.OGG",
+  );
+
+  await page.setInputFiles('input[name="file_to_upload"]', {
+    name: "e2e-audio.wav",
+    mimeType: "audio/wav",
+    buffer: emptyWav(),
+  });
+  await page.getByRole("button", { name: "Upload" }).click();
+
+  await expect(page).toHaveURL(/\/track\/e2e-audio-track\?uploaded=1$/);
+  // The slot names what it takes, unlike the image tabs.
+  await expect(page.getByText("Audio uploaded.")).toBeVisible();
+  // The handler attached the file before redirecting, so the page now serves a
+  // player pointing at it.
+  await expect(page.locator('audio[src^="/uploads/tracks/"]')).toHaveCount(1);
 });
 
 test("an upload with nothing chosen comes back with an error code", async ({ page }) => {

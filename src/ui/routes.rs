@@ -237,8 +237,9 @@ pub enum Route {
         bad: Option<String>,
     },
     /// Edit a track. `updated`/`bad` carry the track form's codes (posts to
-    /// `/admin/forms/track/*`; see `crate::server::forms`).
-    #[route("/release/:release_slug/track/:track_slug?:updated&:bad")]
+    /// `/admin/forms/track/*`; see `crate::server::forms`), `uploaded`/
+    /// `bad_upload` the audio upload form's (`/forms/upload`).
+    #[route("/release/:release_slug/track/:track_slug?:updated&:bad&:uploaded&:bad_upload")]
     EditTrack {
         /// The artist slug.
         artist_slug: String,
@@ -250,6 +251,10 @@ pub enum Route {
         updated: Option<String>,
         /// Error code from a failed save/delete/restore.
         bad: Option<String>,
+        /// Set when audio has just been uploaded without javascript.
+        uploaded: Option<String>,
+        /// Error code from a failed javascript-off upload.
+        bad_upload: Option<String>,
     },
     #[end_layout]
     #[end_nest]
@@ -515,6 +520,21 @@ mod tests {
                 bad_upload: None,
             }
         );
+        assert_eq!(parse("/admin/page"), Route::CreatePage { bad: None });
+        assert_eq!(
+            parse("/admin/page/terms-of-use"),
+            Route::EditPage {
+                slug: "terms-of-use".into(),
+                updated: None,
+                bad: None,
+            }
+        );
+    }
+
+    /// The routes under a release (its track list, its track editors) parse
+    /// with the artist and release slugs the nest carries.
+    #[test]
+    fn nested_release_routes_parse() {
         assert_eq!(
             parse("/admin/artist/jimi/release/axis/tracks"),
             Route::Tracks {
@@ -538,15 +558,8 @@ mod tests {
                 track_slug: "castles".into(),
                 updated: None,
                 bad: None,
-            }
-        );
-        assert_eq!(parse("/admin/page"), Route::CreatePage { bad: None });
-        assert_eq!(
-            parse("/admin/page/terms-of-use"),
-            Route::EditPage {
-                slug: "terms-of-use".into(),
-                updated: None,
-                bad: None,
+                uploaded: None,
+                bad_upload: None,
             }
         );
     }
@@ -665,6 +678,33 @@ mod tests {
                 track_slug: "castles".into(),
                 updated: Some("1".into()),
                 bad: None,
+                uploaded: None,
+                bad_upload: None,
+            }
+        );
+        // The audio upload's codes ride the same route.
+        assert_eq!(
+            parse("/admin/artist/jimi/release/axis/track/castles?uploaded=1"),
+            Route::EditTrack {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                track_slug: "castles".into(),
+                updated: None,
+                bad: None,
+                uploaded: Some("1".into()),
+                bad_upload: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/release/axis/track/castles?bad_upload=bad_mime"),
+            Route::EditTrack {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                track_slug: "castles".into(),
+                updated: None,
+                bad: None,
+                uploaded: None,
+                bad_upload: Some("bad_mime".into()),
             }
         );
         assert_eq!(
@@ -773,6 +813,8 @@ mod tests {
                 track_slug: "castles".into(),
                 updated: Some("1".into()),
                 bad: None,
+                uploaded: None,
+                bad_upload: None,
             },
             Route::EditTrack {
                 artist_slug: "jimi".into(),
@@ -780,6 +822,17 @@ mod tests {
                 track_slug: "castles".into(),
                 updated: None,
                 bad: None,
+                uploaded: None,
+                bad_upload: None,
+            },
+            Route::EditTrack {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                track_slug: "castles".into(),
+                updated: None,
+                bad: None,
+                uploaded: Some("1".into()),
+                bad_upload: None,
             },
             Route::EditArtistLinks {
                 artist_slug: "jimi".into(),

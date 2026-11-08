@@ -576,6 +576,53 @@ mod tests {
         assert_eq!(updated_track.artists, vec![artist]);
     }
 
+    /// An uploaded audio file has to survive the next save of the track it
+    /// belongs to: the service loads the whole row and writes every column
+    /// back, so the audio column rides along with the edit.
+    #[sqlx::test]
+    async fn update_track_service_keeps_the_stored_audio(pool: PgPool) {
+        let user = create_test_user_with_permissions(&pool, 2, vec!["admin", "label_owner"])
+            .await
+            .unwrap();
+        let artist = create_test_artist(&pool, 2, None).await.unwrap();
+        let release = create_test_release(&pool, 2, Some(artist.clone()))
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 2, Some(release), Some(artist.clone()))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE tracks SET audio = $1 WHERE id = $2")
+            .bind("1700000000-castles.flac")
+            .bind(track.id)
+            .execute(&pool)
+            .await
+            .expect("the audio column to be set");
+
+        let form = UpdateTrackForm {
+            name: "Renamed Track".to_string(),
+            slug: track.slug.clone(),
+            description: track.description.clone(),
+            lyrics: track.lyrics.clone(),
+            primary_artist_id: artist.id,
+            release_id: track.release_id,
+            isrc_code: track.isrc_code.clone(),
+            bpm: track.bpm,
+            track_number: track.track_number,
+            published_at: track.published_at,
+            artist_ids: artist.id.to_string(),
+        };
+        let saved = update_track_service(&pool, Some(&user), form)
+            .await
+            .expect("the save");
+
+        assert_eq!(saved.track.name, "Renamed Track");
+        assert_eq!(
+            saved.track.audio.as_deref(),
+            Some("1700000000-castles.flac"),
+            "editing a track must not strand its audio file"
+        );
+    }
+
     #[sqlx::test]
     pub fn delete_track(pool: sqlx::PgPool) {
         let permissions = vec!["admin", "label_owner"];
