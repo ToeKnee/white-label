@@ -153,7 +153,7 @@ fn AdminMenuBody() -> Element {
                     "Show deleted"
                 }
             }
-            li { Link { to: Route::Dashboard {}, "Dashboard" } }
+            li { Link { to: Route::Dashboard { ready: None, purged: None, skipped: None, bad: None }, "Dashboard" } }
             li {
                 Link { to: Route::EditLabel { updated: None, bad: None },
                     "{menu.record_label.name}"
@@ -336,7 +336,15 @@ mod tests {
     #[test]
     fn menu_routes_address_the_pages_the_service_names() {
         let cases = [
-            (Route::Dashboard {}, "/admin"),
+            (
+                Route::Dashboard {
+                    ready: None,
+                    purged: None,
+                    skipped: None,
+                    bad: None,
+                },
+                "/admin?",
+            ),
             (
                 Route::EditLabel {
                     updated: None,

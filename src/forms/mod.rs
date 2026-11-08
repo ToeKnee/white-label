@@ -27,6 +27,19 @@ pub struct SlugFields {
     pub slug: String,
 }
 
+/// The two-step confirmation carried by the housekeeping purge form.
+///
+/// The first submit leaves `confirm` empty (a preview that changes
+/// nothing); the confirm button's form sends `confirm=1`, which is the
+/// only value that actually purges. Reactive clients send the same flag
+/// as a boolean through the `/api/purge_deleted` twin.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct PurgeFields {
+    /// `"1"` purges; anything else previews.
+    pub confirm: String,
+}
+
 /// Resolve a `DateField` submission.
 ///
 /// A submitted `datetime-local` value wins (interpreted as UTC — the browser's

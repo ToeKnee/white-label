@@ -108,9 +108,20 @@ pub enum Route {
     },
     /// Admin section: menu + permission gate live in the layout.
     #[layout(AdminRoot)]
-    /// Admin dashboard.
-    #[route("/admin")]
-    Dashboard {},
+    /// Admin dashboard. `ready`, `purged`, `skipped` and `bad` carry the
+    /// housekeeping purge form's fixed codes from its redirect (posts to
+    /// `/admin/forms/purge`; see `crate::services::purge`).
+    #[route("/admin?:ready&:purged&:skipped&:bad")]
+    Dashboard {
+        /// Row count from a purge preview ("this many would go").
+        ready: Option<String>,
+        /// Row count from a purge that ran.
+        purged: Option<String>,
+        /// Past-window artists a ran purge left in place.
+        skipped: Option<String>,
+        /// Error code from a refused purge.
+        bad: Option<String>,
+    },
     /// Edit the record label's details. `updated` and `bad` carry fixed
     /// codes from the label form's redirect (posts to
     /// `/admin/forms/label`; see `crate::server::forms`).
@@ -439,7 +450,15 @@ mod tests {
 
     #[test]
     fn admin_routes_parse() {
-        assert_eq!(parse("/admin"), Route::Dashboard {});
+        assert_eq!(
+            parse("/admin"),
+            Route::Dashboard {
+                ready: None,
+                purged: None,
+                skipped: None,
+                bad: None
+            }
+        );
         assert_eq!(
             parse("/admin/label"),
             Route::EditLabel {
@@ -662,7 +681,15 @@ mod tests {
     /// path, so both serve the same page.
     #[test]
     fn trailing_slashes_are_tolerated() {
-        assert_eq!(parse("/admin/"), Route::Dashboard {});
+        assert_eq!(
+            parse("/admin/"),
+            Route::Dashboard {
+                ready: None,
+                purged: None,
+                skipped: None,
+                bad: None
+            }
+        );
         assert_eq!(parse("/artists/"), Route::ArtistsPage {});
         assert_eq!(
             parse("/artists/jimi/"),

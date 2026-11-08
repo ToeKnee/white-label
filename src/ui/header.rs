@@ -144,7 +144,7 @@ fn SignedInMenu(user: User) -> Element {
                             if is_admin {
                                 li {
                                     Link {
-                                        to: Route::Dashboard {},
+                                        to: Route::Dashboard { ready: None, purged: None, skipped: None, bad: None },
                                         class: "btn btn-ghost",
                                         "Admin"
                                     }

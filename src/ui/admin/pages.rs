@@ -83,7 +83,12 @@ fn CreatePageBody(
     let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
-        redirect(Route::Dashboard {});
+        redirect(Route::Dashboard {
+            ready: None,
+            purged: None,
+            skipped: None,
+            bad: None,
+        });
         return rsx! { Loading {} };
     }
 
@@ -191,7 +196,12 @@ fn EditPageBody(slug: String, updated: Option<String>, bad: Option<String>) -> E
     let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
-        redirect(Route::Dashboard {});
+        redirect(Route::Dashboard {
+            ready: None,
+            purged: None,
+            skipped: None,
+            bad: None,
+        });
         return rsx! { Loading {} };
     }
 

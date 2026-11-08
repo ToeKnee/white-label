@@ -79,7 +79,12 @@ fn TracksBody(artist_slug: String, release_slug: String) -> Element {
     let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
-        redirect(Route::Dashboard {});
+        redirect(Route::Dashboard {
+            ready: None,
+            purged: None,
+            skipped: None,
+            bad: None,
+        });
         return rsx! { Loading {} };
     }
 
@@ -247,7 +252,12 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
     let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
-        redirect(Route::Dashboard {});
+        redirect(Route::Dashboard {
+            ready: None,
+            purged: None,
+            skipped: None,
+            bad: None,
+        });
         return rsx! { Loading {} };
     }
 
@@ -446,7 +456,12 @@ fn EditTrackBody(
     let session = use_user()?;
     let user = session().ok().flatten();
     if !permission_allows(user.as_ref(), "label_owner") {
-        redirect(Route::Dashboard {});
+        redirect(Route::Dashboard {
+            ready: None,
+            purged: None,
+            skipped: None,
+            bad: None,
+        });
         return rsx! { Loading {} };
     }
 

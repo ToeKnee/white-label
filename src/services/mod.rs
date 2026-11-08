@@ -29,6 +29,7 @@ pub mod files;
 pub mod links;
 pub mod menu;
 pub mod page;
+pub mod purge;
 pub mod record_label;
 pub mod release;
 pub mod track;

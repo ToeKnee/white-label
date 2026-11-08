@@ -1297,7 +1297,7 @@ mod tests {
             "--value:",
             // The side menu: label, artist submenu and page link.
             "w-56 menu bg-base-200 rounded-box",
-            "href=\"/admin\"",
+            "href=\"/admin?\"",
             "href=\"/admin/artist/test-artist-1/?\"",
             "All Releases",
             "Test Release 1",
@@ -1367,6 +1367,7 @@ mod tests {
             "/admin/forms/track/delete",
             "/admin/forms/track/restore",
             "/admin/forms/links",
+            "/admin/forms/purge",
         ];
         for path in paths {
             let response = post_form(&server, path, &[]).await;
@@ -2871,6 +2872,63 @@ mod tests {
             }))
             .await;
         assert_eq!(unauthorized.status_code(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn purge_form_previews_then_purges_with_query_counts(pool: PgPool) {
+        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+            .await
+            .expect("admin user");
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        // One page past the window: the cleanest purge subject (no
+        // cascades or skips to reason about).
+        let page = create_test_page(&pool, 1, Some(label)).await.expect("page");
+        let mut aged = page.delete(&pool).await.expect("soft-delete");
+        aged.deleted_at = Some(chrono::Utc::now() - chrono::Duration::days(91));
+        aged.update(&pool)
+            .await
+            .expect("age the page past the window");
+
+        let server = api_server(pool.clone()).await;
+        login_as(&server, 1).await;
+
+        // A preview leaves everything where it is and carries the count.
+        let preview = post_form(&server, "/admin/forms/purge", &[("confirm", "")]).await;
+        assert_eq!(preview.status_code(), StatusCode::SEE_OTHER);
+        assert_eq!(location(&preview), "/admin?ready=1");
+
+        // A `label_owner` is refused: full admins only, and the refusal
+        // carries the card's fixed code rather than the service message.
+        create_test_user_with_permissions(&pool, 2, vec!["label_owner"])
+            .await
+            .expect("label_owner user");
+        login_as(&server, 2).await;
+        let refused = post_form(&server, "/admin/forms/purge", &[("confirm", "1")]).await;
+        assert_eq!(refused.status_code(), StatusCode::SEE_OTHER);
+        assert_eq!(location(&refused), "/admin?bad=forbidden");
+
+        // The admin confirms: the ran purge carries its counts, and the
+        // reloaded dashboard shows the done notice and the card itself.
+        login_as(&server, 1).await;
+        let done = post_form(&server, "/admin/forms/purge", &[("confirm", "1")]).await;
+        assert_eq!(done.status_code(), StatusCode::SEE_OTHER);
+        assert_eq!(location(&done), "/admin?purged=1&skipped=0");
+
+        let body = server.get("/admin?purged=1&skipped=0").await.text();
+        for marker in [
+            "Housekeeping",
+            "Permanently deleted 1 items.",
+            "/admin/forms/purge",
+        ] {
+            assert!(
+                body.contains(marker),
+                "missing marker {marker} in the dashboard html"
+            );
+        }
     }
 
     #[expect(

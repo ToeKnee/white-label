@@ -39,6 +39,7 @@ use axum::routing::post;
 use tower_sessions::Session;
 
 use crate::error::AppError;
+use crate::forms::PurgeFields;
 use crate::forms::SlugFields;
 use crate::forms::artist::{ArtistCreateFields, ArtistUpdateFields};
 use crate::forms::auth::{
@@ -92,6 +93,8 @@ pub fn form_routes() -> Router {
         .route("/admin/forms/track/delete", post(delete_track))
         .route("/admin/forms/track/restore", post(restore_track))
         .route("/admin/forms/links", post(submit_links))
+        // Housekeeping: the two-step purge (preview, then `confirm=1`).
+        .route("/admin/forms/purge", post(purge_deleted))
         // The upload widget's javascript-off form. Not under
         // `/admin/forms` because the avatar upload lives on `/profile`.
         .route(
@@ -955,6 +958,46 @@ const fn links_code(error: &AppError) -> &'static str {
     match error {
         AppError::Unauthorized(_) | AppError::Forbidden(_) => "forbidden",
         AppError::NotFound(_) => "no_artist",
+        _ => "server",
+    }
+}
+
+/// Preview (`confirm` empty) or run (`confirm=1`) the housekeeping purge,
+/// answering through the dashboard's query codes: `?ready=<count>` after a
+/// preview (the service rolls its own deletes back), `?purged=<count>&
+/// skipped=<count>` after a real purge, `?bad=<code>` on refusal. The
+/// dashboard card (`crate::ui::admin::dashboard::PurgeCard`) maps the codes
+/// to text; only re-parsed counts travel, never submitted strings.
+async fn purge_deleted(
+    Db(pool): Db,
+    CurrentUser(current_user): CurrentUser,
+    Form(args): Form<PurgeFields>,
+) -> impl IntoResponse {
+    if current_user.is_none() {
+        return Redirect::to("/login");
+    }
+
+    let confirm = args.confirm == "1";
+    match services::purge::purge_deleted_service(&pool, current_user.as_ref(), confirm).await {
+        Ok(result) if confirm => Redirect::to(&format!(
+            "/admin?purged={}&skipped={}",
+            result.total(),
+            result.skipped_artists
+        )),
+        Ok(result) => Redirect::to(&format!("/admin?ready={}", result.total())),
+        Err(error) => {
+            tracing::warn!("purge form rejected: {error}");
+            Redirect::to(&format!("/admin?bad={}", purge_code(&error)))
+        }
+    }
+}
+
+/// A purge has no user-input failure modes: the session either lacks the
+/// `admin` permission or the transaction could not run. The reactive twin
+/// in `crate::ui::admin::dashboard` answers with the same codes.
+pub const fn purge_code(error: &AppError) -> &'static str {
+    match error {
+        AppError::Unauthorized(_) | AppError::Forbidden(_) => "forbidden",
         _ => "server",
     }
 }

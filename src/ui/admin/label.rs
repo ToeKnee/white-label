@@ -71,7 +71,12 @@ fn EditLabelBody(
     // Non-owners (and guests) get the steer to the dashboard; the
     // handler enforces the real permission check.
     if !permission_allows(user.as_ref(), "label_owner") {
-        redirect(Route::Dashboard {});
+        redirect(Route::Dashboard {
+            ready: None,
+            purged: None,
+            skipped: None,
+            bad: None,
+        });
         return rsx! { Loading {} };
     }
 

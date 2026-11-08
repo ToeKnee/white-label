@@ -273,10 +273,12 @@ test("the admin dashboard renders cards and the side menu", async ({ page }) => 
   requireAdmin();
   await loginAs(page, "e2e-admin");
 
-  // The navbar exposes the Admin link only for `admin` sessions.
+  // The navbar exposes the `admin` link only for `admin` sessions.
   await page.locator(".navbar summary").click();
   await page.getByRole("link", { name: "Admin" }).click();
-  await expect(page).toHaveURL(/\/admin\/?$/);
+  // The dashboard route carries optional query params, so its canonical
+  // href (and thus the navbar link) ends in a bare `?`.
+  await expect(page).toHaveURL(/\/admin\/?\??$/);
   await expect(page).toHaveTitle("Admin Dashboard");
 
   // Side menu (served with URLs built by the admin_menu service) and the
@@ -287,6 +289,8 @@ test("the admin dashboard renders cards and the side menu", async ({ page }) => 
   await expect(page.getByRole("heading", { level: 2, name: "Artists" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Pages" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Social Tips!" })).toBeVisible();
+  // The housekeeping card sits at the bottom of every dashboard.
+  await expect(page.getByRole("heading", { level: 2, name: "Housekeeping" })).toBeVisible();
   // The label card names the label (label_owner session).
   await expect(page.getByText(label).first()).toBeVisible();
 });

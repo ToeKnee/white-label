@@ -11,10 +11,17 @@
 //!   `set_interval` tick yet; the values land when the client builds come).
 //! - Social tips rotate daily — the index comes from the date, so SSR and
 //!   client renders agree on which tip shows.
+//!
+//! The Housekeeping card at the bottom runs the purge of rows past their
+//! 90-day soft-delete window; see [`crate::services::purge`] for the rules
+//! and `PurgeCard` below for how each path (form posts, reactive twin)
+//! reports itself.
 
 use chrono::{DateTime, Datelike, Utc};
 use dioxus::prelude::*;
 
+use crate::api_types::edit::EditOutcome;
+use crate::api_types::purge::{PURGE_AFTER_DAYS, PurgeResult};
 use crate::models::artist::Artist;
 use crate::models::page::Page;
 use crate::models::record_label::RecordLabel;
@@ -22,16 +29,33 @@ use crate::models::release::Release;
 use crate::ui::Route;
 use crate::ui::data::{get_label_artists, get_label_pages, get_next_scheduled_release};
 use crate::ui::page_data;
+use crate::ui::reactive::{refused_code, saved_row, transport_message};
 use crate::ui::use_label;
 use crate::ui::use_page;
 use crate::ui::use_user;
-use crate::ui::utils::{Loading, StatusBadge};
+use crate::ui::utils::{InlineError, Loading, StatusBadge, Success};
 use crate::utils::shorten_string::shorten_string;
 use dioxus::router::Link;
 
-/// The dashboard: the full card row.
+// Server-only: the twin's body runs in the server half of the `#[post]`
+// macro, next to the same service the javascript-off handler calls.
+#[cfg(feature = "server")]
+use crate::server::forms::purge_code;
+#[cfg(feature = "server")]
+use crate::services;
+
+/// The dashboard: the full card row, plus the housekeeping card below it.
 #[component]
-pub fn Dashboard() -> Element {
+pub fn Dashboard(
+    /// Rows a purge preview found, as a numeric string (form redirect).
+    ready: Option<String>,
+    /// Rows a purge removed, as a numeric string (form redirect).
+    purged: Option<String>,
+    /// Past-window artists a ran purge left in place (form redirect).
+    skipped: Option<String>,
+    /// Fixed code from a refused purge (form redirect).
+    bad: Option<String>,
+) -> Element {
     rsx! {
         document::Title { "Admin Dashboard" }
         div { class: "flex flex-row flex-wrap gap-6 justify-between",
@@ -42,6 +66,7 @@ pub fn Dashboard() -> Element {
             UpcomingRelease {}
             MailingListCard {}
         }
+        PurgeCard { ready, purged, skipped, bad }
     }
 }
 
@@ -482,6 +507,210 @@ fn MailingListCard() -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Housekeeping: the two-step purge of rows past their soft-delete window
+/// ([`PURGE_AFTER_DAYS`] days; rules in [`crate::services::purge`]).
+///
+/// With javascript off both steps are plain posts to `/admin/forms/purge`:
+/// the preview form (empty `confirm`) 303s back to `/admin?ready=<count>`,
+/// which re-renders with the confirm form (it sends `confirm=1`) visible,
+/// and its redirect carries `/admin?purged=<count>&skipped=<count>`. A
+/// client build drives the same two steps through the `/api/purge_deleted`
+/// twin (a webview window cannot follow a 303, so the no-JS query codes
+/// never reach one).
+#[component]
+fn PurgeCard(
+    /// Rows a preview found, as a numeric string (form redirect).
+    ready: Option<String>,
+    /// Rows a purge removed, as a numeric string (form redirect).
+    purged: Option<String>,
+    /// Past-window artists a ran purge left in place (form redirect).
+    skipped: Option<String>,
+    /// Fixed code from a refused purge (form redirect).
+    bad: Option<String>,
+) -> Element {
+    let mut purge = use_action(move |confirm: bool| async move { purge_deleted(confirm).await });
+    // Which step the last reactive call was: both answer `Saved(PurgeResult)`,
+    // so the card has to know whether to render the answer as a preview or
+    // as the done notice.
+    let mut executed = use_signal(|| false);
+
+    // Numbers that arrived in query strings are re-parsed here, so nothing
+    // unvalidated is ever echoed back into the page.
+    let ready_count = ready.as_deref().and_then(|code| code.parse::<u64>().ok());
+    let purged_count = purged.as_deref().and_then(|code| code.parse::<u64>().ok());
+    let skipped_count = skipped
+        .as_deref()
+        .and_then(|code| code.parse::<u64>().ok())
+        .unwrap_or(0);
+
+    // The two paths (twin answer, query codes) fold into three slots: a
+    // refusal, a done notice, and a preview — the preview is what makes the
+    // confirm button appear.
+    let problem = refused_code(purge.value())
+        .as_deref()
+        .map(purge_message)
+        .or_else(|| bad.as_deref().map(purge_message))
+        .map(str::to_string)
+        .or_else(|| transport_message(purge.value()));
+    let saved = saved_row(purge.value());
+    let done = saved.clone().map_or_else(
+        || {
+            purged_count.map(|count| {
+                format!(
+                    "Permanently deleted {count} items.{}",
+                    skip_note(skipped_count)
+                )
+            })
+        },
+        |result| {
+            executed().then(|| {
+                format!(
+                    "Permanently deleted {} tracks, {} releases, {} artists and {} pages.{}",
+                    result.tracks,
+                    result.releases,
+                    result.artists,
+                    result.pages,
+                    skip_note(result.skipped_artists),
+                )
+            })
+        },
+    );
+    let preview_count = saved.as_ref().map_or_else(
+        || {
+            if done.is_some() { None } else { ready_count }
+        },
+        |result| (!executed()).then(|| result.total()),
+    );
+
+    rsx! {
+        div { class: "mt-6 not-prose card bg-base-100 shadow-xl",
+            div { class: "card-body",
+                h2 { class: "card-title", "Housekeeping" }
+                p {
+                    "Items deleted more than {PURGE_AFTER_DAYS} days ago can be removed for \
+                     good. This cannot be undone."
+                }
+                if let Some(message) = problem {
+                    InlineError { message }
+                }
+                if let Some(message) = done {
+                    Success { message, show: true }
+                }
+                if let Some(count) = preview_count {
+                    if count == 0 {
+                        p { "Nothing has passed the {PURGE_AFTER_DAYS} day window yet." }
+                    } else {
+                        p {
+                            "{count} items are past the window and ready to go for good. \
+                             Deleted artists that a remaining row still names as its primary \
+                             artist will be left in place."
+                        }
+                    }
+                }
+                div { class: "card-actions flex-wrap",
+                    form {
+                        id: "purge-preview",
+                        method: "post",
+                        action: "/admin/forms/purge",
+                        onsubmit: move |evt| {
+                            evt.prevent_default();
+                            executed.set(false);
+                            purge.call(false);
+                        },
+                        input { r#type: "hidden", name: "confirm", value: "" }
+                        button { class: "btn btn-secondary",
+                            if purge.pending() && !executed() {
+                                "Previewing\u{2026}"
+                            } else {
+                                "Preview the purge"
+                            }
+                        }
+                    }
+                    if let Some(count) = preview_count
+                        && count > 0
+                    {
+                        form {
+                            id: "purge-confirm",
+                            method: "post",
+                            action: "/admin/forms/purge",
+                            onsubmit: move |evt| {
+                                evt.prevent_default();
+                                executed.set(true);
+                                purge.call(true);
+                            },
+                            input { r#type: "hidden", name: "confirm", value: "1" }
+                            button { class: "btn btn-error",
+                                if purge.pending() && executed() {
+                                    "Deleting\u{2026}"
+                                } else {
+                                    "Delete {count} items for good"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Maps the purge's fixed codes (both the `?bad=` redirect and the twin's
+/// `Failed`) to card text; unknown codes fold into the retry message so a
+/// hand-crafted query string can only ever pick from this table.
+fn purge_message(code: &str) -> &'static str {
+    match code {
+        "forbidden" => "Only full administrators can run the purge.",
+        _ => "The purge did not run; try again later.",
+    }
+}
+
+/// The shared tail: past-window artists the purge was not allowed to free.
+fn skip_note(skipped: u64) -> String {
+    if skipped == 0 {
+        String::new()
+    } else {
+        format!(
+            " Left {skipped} deleted artists that a remaining row still names as primary artist."
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Reactive twin of the `/admin/forms/purge` handler
+// ---------------------------------------------------------------------------
+
+/// Preview (`confirm = false`) or run (`confirm = true`) the purge, answering
+/// with the per-table counts.
+///
+/// Same service and same fixed codes as the javascript-off handler in
+/// `crate::server::forms`; only the delivery differs.
+///
+/// # Errors
+/// 401 when the session is gone. Refusals (permissions included) arrive as
+/// `Failed` data; only a purge that could not run at all is a transport error.
+#[post("/api/purge_deleted",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn purge_deleted(
+    confirm: bool,
+) -> core::result::Result<EditOutcome<PurgeResult>, HttpError> {
+    let Some(session_user) = user.0.as_ref() else {
+        // Guests never see the card; a hand-crafted POST gets the steer the
+        // 303 handler would have given.
+        return HttpError::unauthorized("Please log in to run the purge.");
+    };
+    match services::purge::purge_deleted_service(&db.0, Some(session_user), confirm).await {
+        Ok(result) => Ok(EditOutcome::Saved(result)),
+        Err(error) => {
+            tracing::warn!("purge twin rejected: {error}");
+            Ok(EditOutcome::Failed {
+                code: purge_code(&error).to_string(),
+            })
         }
     }
 }
