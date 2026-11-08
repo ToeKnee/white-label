@@ -24,7 +24,11 @@ cargo run --no-default-features --features server --bin dioxus-server
 
 `IP`/`PORT` override the bind address; `DIOXUS_PUBLIC_PATH=public` makes the
 server serve `public/main.css`, the favicon and the images (dioxus mounts
-each top-level public-dir file at its own path). The `dx` CLI is pinned to
+each top-level public-dir file at its own path). `public/main.css` is
+generated (gitignored): tailwind generates utilities by scanning the
+sources, so a `main.css` built before some new utility classes appeared
+renders that layout unstyled — re-run `npm run css` after pulling code
+that adds classes. The `dx` CLI is pinned to
 the dioxus crate version (currently 0.7.10).
 
 That SSR-only shape serves **no wasm bundle**: the pages render, navigate with

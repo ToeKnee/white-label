@@ -659,7 +659,7 @@ fn PurgeCardBody(
                 if let Some(rows) = preview_rows
                     && (rows.total() > 0 || !rows.skipped_artists.is_empty())
                 {
-                    div { class: "flex flex-row flex-wrap gap-x-8 gap-y-2 text-sm",
+                    div { class: "grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-4 text-sm",
                         {purge_listing("Artists", &rows.artists)}
                         {purge_listing("Releases", &rows.releases)}
                         {purge_listing("Tracks", &rows.tracks)}
@@ -680,9 +680,9 @@ fn PurgeCardBody(
                         input { r#type: "hidden", name: "confirm", value: "" }
                         button { class: "btn btn-secondary",
                             if purge.pending() && !executed() {
-                                "Previewing\u{2026}"
+                                "Checking\u{2026}"
                             } else {
-                                "Preview the purge"
+                                "Clean up"
                             }
                         }
                     }

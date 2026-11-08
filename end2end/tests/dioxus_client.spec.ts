@@ -492,7 +492,7 @@ test("the housekeeping preview runs through the reactive twin", async ({ page })
     if (request.resourceType() === "document") documentLoads += 1;
   });
 
-  await page.getByRole("button", { name: "Preview the purge" }).click();
+  await page.getByRole("button", { name: "Clean up" }).click();
   await expect(page.getByText("E2E Purge Page")).toBeVisible({ timeout: 10000 });
 
   // The confirm button joins the card with the preview's count, and the

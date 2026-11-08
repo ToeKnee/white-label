@@ -296,7 +296,7 @@ test("the admin dashboard renders cards and the side menu", async ({ page }) => 
   // With javascript off the preview is a plain post that 303s back to
   // `?ready=`; the gate seeds one page past the 90 day window (and earlier
   // runs may leave more), so the reload lists it server-side.
-  await page.getByRole("button", { name: "Preview the purge" }).click();
+  await page.getByRole("button", { name: "Clean up" }).click();
   await expect(page).toHaveURL(/\/admin\?ready=\d+$/);
   await expect(page.getByText("ready to go for good")).toBeVisible();
   await expect(page.getByText("E2E Purge Page")).toBeVisible();
