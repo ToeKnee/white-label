@@ -475,3 +475,28 @@ test("the markdown editor's preview renders live while typing", async ({ page })
   await body.fill("");
   await expect(preview).toBeEmpty();
 });
+
+test("the housekeeping preview runs through the reactive twin", async ({ page }) => {
+  // The reactive Housekeeping card: javascript on, the preview submit is
+  // intercepted and answered from `/api/purge_deleted` (no 303 document
+  // load). The gate seeds one page past the 90 day window, and the
+  // answer's listing names it.
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+  await page.goto(`${base}/admin`);
+  await expect(page.getByRole("heading", { level: 2, name: "Housekeeping" })).toBeVisible();
+  await clientIsLive(page);
+
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await page.getByRole("button", { name: "Preview the purge" }).click();
+  await expect(page.getByText("E2E Purge Page")).toBeVisible({ timeout: 10000 });
+
+  // The confirm button joins the card with the preview's count, and the
+  // reactive path never left the document.
+  await expect(page.getByRole("button", { name: /items for good$/ })).toBeVisible();
+  expect(documentLoads, "the preview should not reload the document").toBe(0);
+});

@@ -2901,6 +2901,23 @@ mod tests {
         assert_eq!(preview.status_code(), StatusCode::SEE_OTHER);
         assert_eq!(location(&preview), "/admin?ready=1");
 
+        // The reloaded dashboard carries the listing itself: soft-deleted
+        // rows stay out of the dashboard's tables and menu, so this admin
+        // (no `label_owner`) only ever sees the page's name in the card's
+        // preview listing.
+        let preview_body = server.get("/admin?ready=1").await.text();
+        for marker in [
+            "Housekeeping",
+            "Test Page 1",
+            "ready to go for good",
+            "/admin/forms/purge",
+        ] {
+            assert!(
+                preview_body.contains(marker),
+                "missing marker {marker} in the preview dashboard html"
+            );
+        }
+
         // A `label_owner` is refused: full admins only, and the refusal
         // carries the card's fixed code rather than the service message.
         create_test_user_with_permissions(&pool, 2, vec!["label_owner"])
@@ -2910,6 +2927,10 @@ mod tests {
         let refused = post_form(&server, "/admin/forms/purge", &[("confirm", "1")]).await;
         assert_eq!(refused.status_code(), StatusCode::SEE_OTHER);
         assert_eq!(location(&refused), "/admin?bad=forbidden");
+
+        // The GET twin that feeds the listing is admin-only too.
+        let refused_get = server.get("/api/purge_preview?wanted=true").await;
+        assert_eq!(refused_get.status_code(), StatusCode::FORBIDDEN);
 
         // The admin confirms: the ran purge carries its counts, and the
         // reloaded dashboard shows the done notice and the card itself.
@@ -2929,6 +2950,11 @@ mod tests {
                 "missing marker {marker} in the dashboard html"
             );
         }
+
+        // A guest gets the GET twin's 401, not a listing.
+        let guest = api_server(pool.clone()).await;
+        let guest_get = guest.get("/api/purge_preview?wanted=true").await;
+        assert_eq!(guest_get.status_code(), StatusCode::UNAUTHORIZED);
     }
 
     #[expect(

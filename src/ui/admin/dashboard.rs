@@ -27,7 +27,9 @@ use crate::models::page::Page;
 use crate::models::record_label::RecordLabel;
 use crate::models::release::Release;
 use crate::ui::Route;
-use crate::ui::data::{get_label_artists, get_label_pages, get_next_scheduled_release};
+use crate::ui::data::{
+    get_label_artists, get_label_pages, get_next_scheduled_release, get_purge_preview,
+};
 use crate::ui::page_data;
 use crate::ui::reactive::{refused_code, saved_row, transport_message};
 use crate::ui::use_label;
@@ -512,15 +514,19 @@ fn MailingListCard() -> Element {
 }
 
 /// Housekeeping: the two-step purge of rows past their soft-delete window
-/// ([`PURGE_AFTER_DAYS`] days; rules in [`crate::services::purge`]).
+/// ([`PURGE_AFTER_DAYS`] days; rules in [`crate::services::purge`]). The
+/// preview lists every row it would remove by name (skipped artists
+/// included), not just a count: the names ride the reactive twin's answer,
+/// or — javascript off — the card's own [`get_purge_preview`] load after
+/// the preview redirect.
 ///
 /// With javascript off both steps are plain posts to `/admin/forms/purge`:
 /// the preview form (empty `confirm`) 303s back to `/admin?ready=<count>`,
-/// which re-renders with the confirm form (it sends `confirm=1`) visible,
-/// and its redirect carries `/admin?purged=<count>&skipped=<count>`. A
-/// client build drives the same two steps through the `/api/purge_deleted`
-/// twin (a webview window cannot follow a 303, so the no-JS query codes
-/// never reach one).
+/// which re-renders with the listing and the confirm form (it sends
+/// `confirm=1`) visible, and its redirect carries
+/// `/admin?purged=<count>&skipped=<count>`. A client build drives the same
+/// two steps through the `/api/purge_deleted` twin (a webview window cannot
+/// follow a 303, so the no-JS query codes never reach one).
 #[component]
 fn PurgeCard(
     /// Rows a preview found, as a numeric string (form redirect).
@@ -532,6 +538,21 @@ fn PurgeCard(
     /// Fixed code from a refused purge (form redirect).
     bad: Option<String>,
 ) -> Element {
+    rsx! {
+        SuspenseBoundary {
+            fallback: |_context: SuspenseContext| rsx! { Loading {} },
+            PurgeCardBody { ready, purged, skipped, bad }
+        }
+    }
+}
+
+#[component]
+fn PurgeCardBody(
+    ready: Option<String>,
+    purged: Option<String>,
+    skipped: Option<String>,
+    bad: Option<String>,
+) -> Element {
     let mut purge = use_action(move |confirm: bool| async move { purge_deleted(confirm).await });
     // Which step the last reactive call was: both answer `Saved(PurgeResult)`,
     // so the card has to know whether to render the answer as a preview or
@@ -540,12 +561,22 @@ fn PurgeCard(
 
     // Numbers that arrived in query strings are re-parsed here, so nothing
     // unvalidated is ever echoed back into the page.
-    let ready_count = ready.as_deref().and_then(|code| code.parse::<u64>().ok());
-    let purged_count = purged.as_deref().and_then(|code| code.parse::<u64>().ok());
+    let ready_count = ready.as_deref().and_then(|code| code.parse::<usize>().ok());
+    let purged_count = purged
+        .as_deref()
+        .and_then(|code| code.parse::<usize>().ok());
     let skipped_count = skipped
         .as_deref()
-        .and_then(|code| code.parse::<u64>().ok())
+        .and_then(|code| code.parse::<usize>().ok())
         .unwrap_or(0);
+
+    // The `?ready=` redirect leaves the listing itself to the page: this
+    // GET load runs the read-only preview service (in-process during SSR,
+    // over HTTP in client builds). It short-circuits when no preview is
+    // pending, and the reactive path reads names off the twin's answer
+    // instead.
+    let wants_listing = ready.is_some();
+    let listed = use_page(move || page_data(get_purge_preview(wants_listing)))?;
 
     // The two paths (twin answer, query codes) fold into three slots: a
     // refusal, a done notice, and a preview — the preview is what makes the
@@ -570,11 +601,11 @@ fn PurgeCard(
             executed().then(|| {
                 format!(
                     "Permanently deleted {} tracks, {} releases, {} artists and {} pages.{}",
-                    result.tracks,
-                    result.releases,
-                    result.artists,
-                    result.pages,
-                    skip_note(result.skipped_artists),
+                    result.tracks.len(),
+                    result.releases.len(),
+                    result.artists.len(),
+                    result.pages.len(),
+                    skip_note(result.skipped_artists.len()),
                 )
             })
         },
@@ -585,6 +616,20 @@ fn PurgeCard(
         },
         |result| (!executed()).then(|| result.total()),
     );
+    // The listing's names: from this click's answer when the reactive path
+    // just previewed, otherwise from the GET load the form redirect asked
+    // for.
+    let preview_rows = match saved {
+        Some(result) => (!executed()).then_some(result),
+        None if ready_count.is_some() => match listed() {
+            Ok(rows) => Some(rows),
+            Err(error) => {
+                tracing::error!("Error while getting purge preview for dashboard: {error}");
+                None
+            }
+        },
+        None => None,
+    };
 
     rsx! {
         div { class: "mt-6 not-prose card bg-base-100 shadow-xl",
@@ -609,6 +654,17 @@ fn PurgeCard(
                              Deleted artists that a remaining row still names as its primary \
                              artist will be left in place."
                         }
+                    }
+                }
+                if let Some(rows) = preview_rows
+                    && (rows.total() > 0 || !rows.skipped_artists.is_empty())
+                {
+                    div { class: "flex flex-row flex-wrap gap-x-8 gap-y-2 text-sm",
+                        {purge_listing("Artists", &rows.artists)}
+                        {purge_listing("Releases", &rows.releases)}
+                        {purge_listing("Tracks", &rows.tracks)}
+                        {purge_listing("Pages", &rows.pages)}
+                        {purge_listing("Artists left in place", &rows.skipped_artists)}
                     }
                 }
                 div { class: "card-actions flex-wrap",
@@ -668,8 +724,26 @@ fn purge_message(code: &str) -> &'static str {
     }
 }
 
+/// One table's column of names in the preview listing; a table with
+/// nothing in it adds nothing to the card.
+fn purge_listing(title: &'static str, names: &[String]) -> Element {
+    if names.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "flex flex-col",
+            h3 { class: "font-semibold", "{title}" }
+            ul {
+                for name in names {
+                    li { "{name}" }
+                }
+            }
+        }
+    }
+}
+
 /// The shared tail: past-window artists the purge was not allowed to free.
-fn skip_note(skipped: u64) -> String {
+fn skip_note(skipped: usize) -> String {
     if skipped == 0 {
         String::new()
     } else {
@@ -684,7 +758,7 @@ fn skip_note(skipped: u64) -> String {
 // ---------------------------------------------------------------------------
 
 /// Preview (`confirm = false`) or run (`confirm = true`) the purge, answering
-/// with the per-table counts.
+/// with the per-table row names (the preview lists them on the card).
 ///
 /// Same service and same fixed codes as the javascript-off handler in
 /// `crate::server::forms`; only the delivery differs.

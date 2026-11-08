@@ -147,6 +147,20 @@ if [ -n "${DATABASE_URL:-}" ]; then
             (SELECT id FROM releases WHERE slug LIKE 'e2e-reactive-%');
         DELETE FROM releases WHERE slug LIKE 'e2e-reactive-%';" \
         || echo "WARNING: could not prune the e2e-reactive releases (is psql installed?)"
+    # A housekeeping fixture: one page soft-deleted *past* the 90 day purge
+    # window, kept aged on every run. The Housekeeping preview tests expect
+    # to see `E2E Purge Page` in the listing; no test clicks the confirm
+    # button, so the page survives run after run.
+    psql "$DATABASE_URL" -c "INSERT INTO pages (name, slug, description, body, label_id, published_at, deleted_at)
+        SELECT 'E2E Purge Page', 'e2e-purge-page', 'Housekeeping preview fixture',
+               'Left soft-deleted past the purge window on purpose.',
+               id, now(), now() - interval '91 days'
+        FROM labels
+        WHERE NOT EXISTS (SELECT 1 FROM pages WHERE slug = 'e2e-purge-page')
+        ORDER BY id LIMIT 1;
+        UPDATE pages SET deleted_at = now() - interval '91 days'
+            WHERE slug = 'e2e-purge-page';" \
+        || echo "WARNING: could not seed the housekeeping fixture page (is psql installed?)"
 else
     echo "WARNING: DATABASE_URL not set; skipping the e2e-tabs seed"
 fi

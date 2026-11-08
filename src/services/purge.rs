@@ -3,29 +3,35 @@
 //!
 //! The soft-delete flows (`.../delete`) keep rows restorable; this service
 //! is the other half, normally fired from the admin dashboard's
-//! "Housekeeping" card. It answers with per-table counts, both for a
-//! preview (`confirm = false`, which changes nothing) and for the real
-//! purge (`confirm = true`):
+//! "Housekeeping" card. It names the rows table by table, both for a
+//! preview (`confirm = false`, which only reads) and for the real purge
+//! (`confirm = true`):
 //!
 //! ```text
-//! preview:  PurgeResult { tracks: 4, releases: 2, artists: 1, pages: 0, skipped_artists: 3 }
-//! confirm:  same counts, and the rows are gone.
+//! preview:  PurgeResult { pages: ["Test Page 1"], skipped_artists: ["Test Artist 2"], ..}
+//! confirm:  the same names, and the rows are gone.
 //! ```
 //!
-//! Rules (all inside one transaction, so a purge either fully applies or
-//! not at all):
+//! The preview and the purge share their SQL predicates (the
+//! `PAST_WINDOW`/`DOOMED_TRACKS`/`ARTIST_REFS` fragments below): the
+//! preview's SELECTs list exactly the rows the purge's
+//! `DELETE ... RETURNING name` statements remove, so the card can show
+//! each doomed row by name without a throwaway write transaction.
+//!
+//! Rules (the purge runs inside one transaction, so it either fully
+//! applies or not at all):
 //!
 //! - Tracks, releases and pages past their window are removed outright.
 //! - A purged release cascades its tracks (whenever they were deleted, or
 //!   not deleted at all): a track is only ever reachable through its
 //!   release, and the `tracks.release_id` foreign key is `RESTRICT`, so
 //!   the tracks have to go first anyway.
-//! - Artists go last, once their doomed releases/tracks are gone. A
-//!   *surviving* row that still names a past-window artist as its
+//! - Artists go last, once their doomed releases/tracks are accounted
+//!   for. A *surviving* row that still names a past-window artist as its
 //!   `primary_artist_id` blocks that artist's removal: the models read
 //!   that column as a plain `i64`, and the `ON DELETE SET NULL` foreign
-//!   key would leave those rows undecodable. Those artists are counted
-//!   in `skipped_artists`; deleting the referencing rows first frees them
+//!   key would leave those rows undecodable. Those artists are named in
+//!   `skipped_artists`; deleting the referencing rows first frees them
 //!   on the next run.
 //! - Join rows (`release_artists`, `track_artists`, `release_tracks`)
 //!   follow their parent through `ON DELETE CASCADE`.
@@ -33,32 +39,60 @@
 //!   store is a separate follow-up.
 
 use chrono::Utc;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres};
 
 use super::authentication_helpers::user_with_permissions;
 use crate::api_types::purge::{PURGE_AFTER_DAYS, PurgeResult};
 use crate::error::AppError;
 use crate::models::auth::User;
 
-/// Remove every soft-deleted row older than [`PURGE_AFTER_DAYS`] days.
+/// The rows past their soft-delete window: the one predicate every
+/// preview SELECT and purge DELETE shares, so a preview can only ever
+/// list rows a confirmed run would actually remove.
+const PAST_WINDOW: &str = "deleted_at IS NOT NULL AND deleted_at < $1";
+
+/// The tracks the purge removes: their own past-window deletions, plus
+/// every track under a past-window release.
 ///
-/// With `confirm = false` the whole purge runs and is rolled back, so the
-/// counts a preview reports are the counts the real purge will produce
-/// (same statements, same order — the preview cannot drift).
+/// A track is only ever reachable through its release, and tracks must go
+/// before releases anyway (the `tracks.release_id` foreign key is
+/// `RESTRICT`).
+const DOOMED_TRACKS: &str = "(deleted_at IS NOT NULL AND deleted_at < $1
+     OR release_id IN (SELECT id FROM releases WHERE deleted_at IS NOT NULL AND deleted_at < $1))";
+
+/// A live reference that blocks a past-window artist's removal (correlated
+/// on `artists.id`): a release the purge would keep, or a track the purge
+/// would keep.
+///
+/// A kept track is one not itself past its window and not under a
+/// past-window release. Same text at preview and at purge time, because it
+/// names surviving rows directly instead of relying on what has been
+/// deleted so far.
+const ARTIST_REFS: &str = "(EXISTS (SELECT 1 FROM releases r
+          WHERE r.primary_artist_id = artists.id
+            AND NOT (r.deleted_at IS NOT NULL AND r.deleted_at < $1))
+      OR EXISTS (SELECT 1 FROM tracks t
+          WHERE t.primary_artist_id = artists.id
+            AND NOT (t.deleted_at IS NOT NULL AND t.deleted_at < $1)
+            AND t.release_id NOT IN
+                (SELECT id FROM releases WHERE deleted_at IS NOT NULL AND deleted_at < $1)))";
+
+/// Remove every soft-deleted row older than [`PURGE_AFTER_DAYS`] days, or
+/// just name the rows such a purge would remove.
 ///
 /// # Arguments
 /// * `pool` - The database connection pool
 /// * `user` - The current user; must hold the `admin` permission
-/// * `confirm` - `false` previews, `true` commits
+/// * `confirm` - `false` previews (reads only), `true` commits
 ///
 /// # Returns
-/// A [`PurgeResult`] with the per-table counts (removed, or would-be
+/// A [`PurgeResult`] naming the per-table rows (removed, or would-be
 /// removed) plus the artists skipped because live rows still reference
 /// them.
 ///
 /// # Errors
-/// If the user does not hold `admin`, or the transaction cannot run,
-/// return a `AppError`.
+/// If the user does not hold `admin`, or the queries cannot run, return
+/// an `AppError`.
 #[cfg(feature = "server")]
 pub async fn purge_deleted_service(
     pool: &PgPool,
@@ -74,60 +108,60 @@ pub async fn purge_deleted_service(
 
     let cutoff = Utc::now() - chrono::Duration::days(PURGE_AFTER_DAYS);
 
+    if !confirm {
+        return preview(pool, cutoff).await.map_err(purge_failure);
+    }
+
     let mut tx = pool.begin().await.map_err(|e| {
         tracing::error!("purge transaction could not start: {e:?}");
         AppError::internal("Could not run the purge, try again later")
     })?;
 
-    // Tracks deleted on their own, then the doomed releases' cascaded
-    // tracks, then the releases themselves (the FK above is RESTRICT).
-    let old_tracks = delete_past_window(&mut tx, "tracks", cutoff)
-        .await
-        .map_err(purge_failure)?;
-    let cascaded_tracks = sqlx::query(
-        "DELETE FROM tracks WHERE release_id IN
-         (SELECT id FROM releases WHERE deleted_at IS NOT NULL AND deleted_at < $1)",
+    // Tracks first (their own window and the doomed releases' cascades,
+    // one statement), then the releases the FK made them wait for.
+    let tracks = sorted_names(
+        &mut *tx,
+        &format!("DELETE FROM tracks WHERE {DOOMED_TRACKS} RETURNING name"),
+        cutoff,
     )
-    .bind(cutoff)
-    .execute(&mut *tx)
     .await
-    .map_err(purge_failure)?
-    .rows_affected();
-    let releases = delete_past_window(&mut tx, "releases", cutoff)
-        .await
-        .map_err(purge_failure)?;
-    let pages = delete_past_window(&mut tx, "pages", cutoff)
-        .await
-        .map_err(purge_failure)?;
-
-    // Artists last (their doomed rows are gone by now). `skipped` covers
-    // the artists a surviving row still pins as its primary artist.
-    let past_window_artists = past_window_count(&mut tx, cutoff)
-        .await
-        .map_err(purge_failure)?;
-    let artists = sqlx::query(
-        "DELETE FROM artists
-         WHERE deleted_at IS NOT NULL AND deleted_at < $1
-           AND NOT EXISTS (SELECT 1 FROM releases r WHERE r.primary_artist_id = artists.id)
-           AND NOT EXISTS (SELECT 1 FROM tracks t WHERE t.primary_artist_id = artists.id)",
+    .map_err(purge_failure)?;
+    let releases = sorted_names(
+        &mut *tx,
+        &format!("DELETE FROM releases WHERE {PAST_WINDOW} RETURNING name"),
+        cutoff,
     )
-    .bind(cutoff)
-    .execute(&mut *tx)
     .await
-    .map_err(purge_failure)?
-    .rows_affected();
-    let skipped_artists = past_window_artists.saturating_sub(artists);
+    .map_err(purge_failure)?;
+    let pages = sorted_names(
+        &mut *tx,
+        &format!("DELETE FROM pages WHERE {PAST_WINDOW} RETURNING name"),
+        cutoff,
+    )
+    .await
+    .map_err(purge_failure)?;
 
-    if confirm {
-        tx.commit().await.map_err(purge_failure)?;
-    } else {
-        // The preview: the deletes above ran (so the counts and the FK
-        // ordering are exactly the real purge's) and are now undone.
-        tx.rollback().await.map_err(purge_failure)?;
-    }
+    // Artists last; the rows that blocked them are gone by now, and
+    // `skipped_artists` names the ones live rows still pin.
+    let artists = sorted_names(
+        &mut *tx,
+        &format!("DELETE FROM artists WHERE {PAST_WINDOW} AND NOT {ARTIST_REFS} RETURNING name"),
+        cutoff,
+    )
+    .await
+    .map_err(purge_failure)?;
+    let skipped_artists = sorted_names(
+        &mut *tx,
+        &format!("SELECT name FROM artists WHERE {PAST_WINDOW} AND {ARTIST_REFS}"),
+        cutoff,
+    )
+    .await
+    .map_err(purge_failure)?;
+
+    tx.commit().await.map_err(purge_failure)?;
 
     Ok(PurgeResult {
-        tracks: old_tracks + cascaded_tracks,
+        tracks,
         releases,
         artists,
         pages,
@@ -135,35 +169,60 @@ pub async fn purge_deleted_service(
     })
 }
 
-/// `DELETE` the rows of `table` whose `deleted_at` predates `cutoff`.
-///
-/// Only the literal table names used below ever reach the format string.
-async fn delete_past_window(
-    tx: &mut Transaction<'_, Postgres>,
-    table: &'static str,
-    cutoff: chrono::DateTime<Utc>,
-) -> sqlx::Result<u64> {
-    let sql = format!("DELETE FROM {table} WHERE deleted_at IS NOT NULL AND deleted_at < $1");
-    let removed = sqlx::query(&sql)
-        .bind(cutoff)
-        .execute(&mut **tx)
-        .await?
-        .rows_affected();
-    Ok(removed)
+/// The read-only twin of the purge: the same fragments, as SELECTs.
+#[cfg(feature = "server")]
+async fn preview(pool: &PgPool, cutoff: chrono::DateTime<Utc>) -> sqlx::Result<PurgeResult> {
+    Ok(PurgeResult {
+        tracks: sorted_names(
+            pool,
+            &format!("SELECT name FROM tracks WHERE {DOOMED_TRACKS}"),
+            cutoff,
+        )
+        .await?,
+        releases: sorted_names(
+            pool,
+            &format!("SELECT name FROM releases WHERE {PAST_WINDOW}"),
+            cutoff,
+        )
+        .await?,
+        artists: sorted_names(
+            pool,
+            &format!("SELECT name FROM artists WHERE {PAST_WINDOW} AND NOT {ARTIST_REFS}"),
+            cutoff,
+        )
+        .await?,
+        pages: sorted_names(
+            pool,
+            &format!("SELECT name FROM pages WHERE {PAST_WINDOW}"),
+            cutoff,
+        )
+        .await?,
+        skipped_artists: sorted_names(
+            pool,
+            &format!("SELECT name FROM artists WHERE {PAST_WINDOW} AND {ARTIST_REFS}"),
+            cutoff,
+        )
+        .await?,
+    })
 }
 
-/// How many artists sit past the soft-delete window, purged or not.
-async fn past_window_count(
-    tx: &mut Transaction<'_, Postgres>,
+/// Collect one column of names and sort them, so both surfaces list the
+/// same rows in the same order. Works against a pool (previews) or a
+/// transaction (the purge's `DELETE ... RETURNING name`).
+async fn sorted_names<'e, E>(
+    exec: E,
+    sql: &str,
     cutoff: chrono::DateTime<Utc>,
-) -> sqlx::Result<u64> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM artists WHERE deleted_at IS NOT NULL AND deleted_at < $1",
-    )
-    .bind(cutoff)
-    .fetch_one(&mut **tx)
-    .await?;
-    Ok(count.max(0).cast_unsigned())
+) -> sqlx::Result<Vec<String>>
+where
+    E: sqlx::Executor<'e, Database = Postgres>,
+{
+    let mut names = sqlx::query_scalar::<_, String>(sql)
+        .bind(cutoff)
+        .fetch_all(exec)
+        .await?;
+    names.sort();
+    Ok(names)
 }
 
 /// Database failures keep their detail in the log and answer as one fixed
@@ -224,6 +283,10 @@ mod tests {
 
         let guest = purge_deleted_service(&pool, None, true).await;
         assert!(guest.is_err(), "guests may not purge");
+
+        // Even a preview is admin-only: the names it lists are admin data.
+        let preview = purge_deleted_service(&pool, Some(&owner), false).await;
+        assert!(preview.is_err(), "label_owner alone may not preview");
     }
 
     #[sqlx::test]
@@ -240,10 +303,11 @@ mod tests {
         let preview = purge_deleted_service(&pool, Some(&admin), false)
             .await
             .expect("preview runs");
-        assert_eq!(preview.artists, 1);
-        assert_eq!(preview.skipped_artists, 0);
+        assert_eq!(preview.artists, ["Test Artist 1"]);
+        assert_eq!(preview.skipped_artists, Vec::<String>::new());
 
-        // The rollback left the row where it was, restorable as before.
+        // The read-only preview left the row where it was, restorable as
+        // before.
         let still_there = crate::models::artist::Artist::get_by_id(&pool, artist.id)
             .await
             .expect("fetch artist");
@@ -253,11 +317,47 @@ mod tests {
         let purged = purge_deleted_service(&pool, Some(&admin), true)
             .await
             .expect("purge runs");
-        assert_eq!(purged.artists, 1);
+        assert_eq!(purged.artists, ["Test Artist 1"]);
         let gone = crate::models::artist::Artist::find_by_id(&pool, artist.id)
             .await
             .expect("fetch artist");
         assert!(gone.is_none(), "the confirmed purge removed the row");
+    }
+
+    #[sqlx::test]
+    async fn preview_names_the_rows_the_purge_removes(pool: PgPool) {
+        let admin = create_test_user_with_permissions(&pool, 1, vec!["admin"])
+            .await
+            .expect("admin user");
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        // Artist and its only release are both past the window: the
+        // release goes first, which frees the artist.
+        let artist = create_test_artist(&pool, 1, Some(label.clone()))
+            .await
+            .expect("artist");
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .expect("release");
+        age_release(&pool, release).await;
+        age_artist(&pool, artist.clone()).await;
+        let page = create_test_page(&pool, 1, Some(label.clone()))
+            .await
+            .expect("page");
+        age_page(&pool, page.clone()).await;
+
+        let preview = purge_deleted_service(&pool, Some(&admin), false)
+            .await
+            .expect("preview runs");
+        assert_eq!(preview.artists, ["Test Artist 1"]);
+        assert_eq!(preview.releases, ["Test Release 1"]);
+        assert_eq!(preview.pages, ["Test Page 1"]);
+
+        // The confirmed purge answers with exactly the names the preview
+        // showed: same fragments, same rules.
+        let purged = purge_deleted_service(&pool, Some(&admin), true)
+            .await
+            .expect("purge runs");
+        assert_eq!(preview, purged);
     }
 
     #[sqlx::test]
@@ -309,9 +409,12 @@ mod tests {
             .expect("purge runs");
 
         // Two cascaded tracks (one live!) and one old soft-deleted track.
-        assert_eq!(result.tracks, 3);
-        assert_eq!(result.releases, 1);
-        assert_eq!(result.pages, 1);
+        assert_eq!(
+            result.tracks,
+            ["Test Track 1", "Test Track 2", "Test Track 3"]
+        );
+        assert_eq!(result.releases, ["Test Release 1"]);
+        assert_eq!(result.pages, ["Test Page 1"]);
 
         for track_slug in ["test-track-1", "test-track-2", "test-track-3"] {
             let track = crate::models::track::Track::find_by_slug(&pool, track_slug.to_string())
@@ -334,8 +437,8 @@ mod tests {
 
         // The past-window artist was skipped, not purged: removing it
         // would leave keeper_release with a null primary artist.
-        assert_eq!(result.artists, 0);
-        assert_eq!(result.skipped_artists, 1);
+        assert_eq!(result.artists, Vec::<String>::new());
+        assert_eq!(result.skipped_artists, ["Test Artist 1"]);
         let blocked_artist = crate::models::artist::Artist::get_by_id(&pool, artist.id)
             .await
             .expect("fetch artist");
@@ -365,9 +468,9 @@ mod tests {
         let result = purge_deleted_service(&pool, Some(&admin), true)
             .await
             .expect("purge runs");
-        assert_eq!(result.releases, 1);
-        assert_eq!(result.artists, 1);
-        assert_eq!(result.skipped_artists, 0);
+        assert_eq!(result.releases, ["Test Release 1"]);
+        assert_eq!(result.artists, ["Test Artist 1"]);
+        assert_eq!(result.skipped_artists, Vec::<String>::new());
         assert!(
             crate::models::artist::Artist::find_by_id(&pool, artist.id)
                 .await
@@ -394,7 +497,7 @@ mod tests {
             .await
             .expect("purge runs");
         assert_eq!(result.total(), 0);
-        assert_eq!(result.skipped_artists, 0);
+        assert_eq!(result.skipped_artists, Vec::<String>::new());
 
         let artist = crate::models::artist::Artist::get_by_id(&pool, artist.id)
             .await

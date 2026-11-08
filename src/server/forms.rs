@@ -964,10 +964,12 @@ const fn links_code(error: &AppError) -> &'static str {
 
 /// Preview (`confirm` empty) or run (`confirm=1`) the housekeeping purge,
 /// answering through the dashboard's query codes: `?ready=<count>` after a
-/// preview (the service rolls its own deletes back), `?purged=<count>&
-/// skipped=<count>` after a real purge, `?bad=<code>` on refusal. The
-/// dashboard card (`crate::ui::admin::dashboard::PurgeCard`) maps the codes
-/// to text; only re-parsed counts travel, never submitted strings.
+/// preview (a read-only listing; the card reloads it through
+/// `crate::ui::data::get_purge_preview` and shows the names),
+/// `?purged=<count>&skipped=<count>` after a real purge, `?bad=<code>` on
+/// refusal. The dashboard card (`crate::ui::admin::dashboard::PurgeCard`)
+/// maps the codes to text; only re-parsed counts travel, never submitted
+/// strings.
 async fn purge_deleted(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
@@ -982,7 +984,7 @@ async fn purge_deleted(
         Ok(result) if confirm => Redirect::to(&format!(
             "/admin?purged={}&skipped={}",
             result.total(),
-            result.skipped_artists
+            result.skipped_artists.len()
         )),
         Ok(result) => Redirect::to(&format!("/admin?ready={}", result.total())),
         Err(error) => {
@@ -993,7 +995,7 @@ async fn purge_deleted(
 }
 
 /// A purge has no user-input failure modes: the session either lacks the
-/// `admin` permission or the transaction could not run. The reactive twin
+/// `admin` permission or the queries could not run. The reactive twin
 /// in `crate::ui::admin::dashboard` answers with the same codes.
 pub const fn purge_code(error: &AppError) -> &'static str {
     match error {

@@ -24,6 +24,7 @@ use crate::api_types::artist::ArtistResult;
 use crate::api_types::links::LinksResult;
 use crate::api_types::menu::AdminMenu;
 use crate::api_types::page::PageResult;
+use crate::api_types::purge::PurgeResult;
 use crate::api_types::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
 use crate::api_types::release::{ReleaseResult, ReleasesResult};
 use crate::api_types::track::TrackResult;
@@ -284,6 +285,30 @@ pub async fn get_current_user() -> core::result::Result<Option<User>, HttpError>
 pub async fn get_admin_menu(include_deleted: bool) -> core::result::Result<AdminMenu, HttpError> {
     match services::menu::admin_menu(&db.0, user.0.as_ref(), include_deleted).await {
         Ok(menu) => Ok(menu),
+        Err(error) => to_http_error(&error),
+    }
+}
+
+/// The rows the housekeeping purge would remove right now, named per
+/// table — the read-only twin of the no-JS preview step (rules in
+/// `crate::services::purge`). The dashboard card asks for it after the
+/// preview form's `?ready=` redirect, so the listing also renders with
+/// javascript off. `wanted` lets the card skip the queries when no
+/// preview is pending. Like the purge itself, full admins only.
+///
+/// # Errors
+/// 401/403 when the session is not a full admin, 500 with a retry
+/// message when the rows cannot be loaded.
+#[get("/api/purge_preview?wanted",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn get_purge_preview(wanted: bool) -> core::result::Result<PurgeResult, HttpError> {
+    if !wanted {
+        return Ok(PurgeResult::default());
+    }
+    match services::purge::purge_deleted_service(&db.0, user.0.as_ref(), false).await {
+        Ok(preview) => Ok(preview),
         Err(error) => to_http_error(&error),
     }
 }
