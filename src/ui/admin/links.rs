@@ -61,10 +61,16 @@ pub fn EditArtistLinks(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            EditArtistLinksBody {
-                artist_slug,
-                updated,
-                bad,
+            // Keyed so switching artists remounts the body; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for (artist_slug, updated, bad) in [(artist_slug, updated, bad)] {
+                EditArtistLinksBody {
+                    key: "{artist_slug}",
+                    artist_slug,
+                    updated,
+                    bad,
+                }
             }
         }
     }

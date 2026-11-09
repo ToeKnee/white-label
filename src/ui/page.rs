@@ -21,7 +21,15 @@ pub fn PageDetails(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            PageBody { slug }
+            // Keyed so switching pages remounts the body; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for slug in [slug] {
+                PageBody {
+                    key: "{slug}",
+                    slug,
+                }
+            }
         }
     }
 }

@@ -123,9 +123,19 @@ pub type PageValue<T> = MappedSignal<PageLoad<T>, Signal<Option<PageLoad<T>>>>;
 /// resolved. Without that, the client refetches during its first render and
 /// shows suspense fallbacks where the server rendered content, so hydration
 /// stops matching node for node and the interpreter dies on an unknown node
-/// id. Inside the closure, [`page_data`] swaps the page fn's [`HttpError`]
+/// Inside the closure, [`page_data`] swaps the page fn's [`HttpError`]
 /// for [`PageFailure`], since the value has to survive serde to reach the
 /// client.
+///
+/// A load re-runs only when a *signal* it read changes, never when plain
+/// props change — and dioxus reuses a component instance when navigation
+/// only swaps parameters at the same route position (one release to the
+/// next). So every body that keys its loads on route params is remounted
+/// at its call site by a one-item `for` loop carrying a `key:` derived
+/// from those params (see `EditReleaseBody` for the pattern): dioxus
+/// ignores `key:` on a static child, but a fragment child honours it and
+/// swaps the instance. Without the remount, the captured first-render
+/// params keep serving the previous row.
 ///
 /// ```ignore
 /// let artist = use_page(move || page_data(get_artist(slug())))?;

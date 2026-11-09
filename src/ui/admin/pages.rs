@@ -194,7 +194,17 @@ pub fn EditPage(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            EditPageBody { slug, updated, bad }
+            // Keyed so switching pages remounts the body; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for (slug, updated, bad) in [(slug, updated, bad)] {
+                EditPageBody {
+                    key: "{slug}",
+                    slug,
+                    updated,
+                    bad,
+                }
+            }
         }
     }
 }

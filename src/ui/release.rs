@@ -33,9 +33,15 @@ pub fn ReleasePage(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            ReleaseBody {
-                artist_slug,
-                release_slug,
+            // Keyed so switching releases remounts the body; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for (artist_slug, release_slug) in [(artist_slug, release_slug)] {
+                ReleaseBody {
+                    key: "{artist_slug}/{release_slug}",
+                    artist_slug,
+                    release_slug,
+                }
             }
         }
     }

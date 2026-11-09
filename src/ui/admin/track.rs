@@ -77,7 +77,16 @@ pub fn Tracks(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            TracksBody { artist_slug, release_slug }
+            // Keyed so switching releases remounts the listing; the key
+            // only counts on fragment children, hence the one-item loop
+            // (dioxus ignores `key:` on static children — see use_page).
+            for (artist_slug, release_slug) in [(artist_slug, release_slug)] {
+                TracksBody {
+                    key: "{artist_slug}/{release_slug}",
+                    artist_slug,
+                    release_slug,
+                }
+            }
         }
     }
 }
@@ -248,10 +257,16 @@ pub fn CreateTrack(
         h1 { "New Track" }
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            CreateTrackBody {
-                artist_slug,
-                release_slug,
-                bad,
+            // Keyed so the create targets the right release; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for (artist_slug, release_slug, bad) in [(artist_slug, release_slug, bad)] {
+                CreateTrackBody {
+                    key: "{artist_slug}/{release_slug}",
+                    artist_slug,
+                    release_slug,
+                    bad,
+                }
             }
         }
     }
@@ -459,7 +474,10 @@ pub fn EditTrack(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            EditTrackBody {
+            // Keyed so switching tracks remounts the body; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for (
                 artist_slug,
                 release_slug,
                 track_slug,
@@ -467,6 +485,18 @@ pub fn EditTrack(
                 bad,
                 uploaded,
                 bad_upload,
+            ) in [(artist_slug, release_slug, track_slug, updated, bad, uploaded, bad_upload)]
+            {
+                EditTrackBody {
+                    key: "{artist_slug}/{release_slug}/{track_slug}",
+                    artist_slug,
+                    release_slug,
+                    track_slug,
+                    updated,
+                    bad,
+                    uploaded,
+                    bad_upload,
+                }
             }
         }
     }

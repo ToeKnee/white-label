@@ -36,10 +36,18 @@ pub fn EditArtistImages(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            EditArtistImagesBody {
-                artist_slug,
-                uploaded,
-                bad_upload,
+            // Keyed so switching artists remounts the body; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for (artist_slug, uploaded, bad_upload) in [
+                (artist_slug, uploaded, bad_upload),
+            ] {
+                EditArtistImagesBody {
+                    key: "{artist_slug}",
+                    artist_slug,
+                    uploaded,
+                    bad_upload,
+                }
             }
         }
     }

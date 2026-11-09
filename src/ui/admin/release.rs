@@ -82,7 +82,15 @@ pub fn Releases(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            ReleasesBody { artist_slug }
+            // Keyed so switching artists remounts the body; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for artist_slug in [artist_slug] {
+                ReleasesBody {
+                    key: "{artist_slug}",
+                    artist_slug,
+                }
+            }
         }
     }
 }
@@ -257,7 +265,16 @@ pub fn CreateRelease(
         h1 { "New Release" }
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            CreateReleaseBody { artist_slug, bad }
+            // Keyed so the create targets the right artist; the key only
+            // counts on fragment children, hence the one-item loop (dioxus
+            // ignores `key:` on static children — see use_page).
+            for (artist_slug, bad) in [(artist_slug, bad)] {
+                CreateReleaseBody {
+                    key: "{artist_slug}",
+                    artist_slug,
+                    bad,
+                }
+            }
         }
     }
 }
@@ -433,13 +450,29 @@ pub fn EditRelease(
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            EditReleaseBody {
+            // Keyed on the row's params: dioxus keeps this instance when
+            // only params change (one release to the next), and a page
+            // load re-runs only on signal changes, so switching rows has
+            // to remount the body — see `crate::ui::use_page`. The key
+            // only counts on fragment children, hence the one-item loop.
+            for (
                 artist_slug,
                 release_slug,
                 updated,
                 bad,
                 uploaded,
                 bad_upload,
+            ) in [(artist_slug, release_slug, updated, bad, uploaded, bad_upload)]
+            {
+                EditReleaseBody {
+                    key: "{artist_slug}/{release_slug}",
+                    artist_slug,
+                    release_slug,
+                    updated,
+                    bad,
+                    uploaded,
+                    bad_upload,
+                }
             }
         }
     }

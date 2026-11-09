@@ -246,6 +246,60 @@ test("the release editor creates, saves, deletes and restores reactively", async
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
 
+test("the menu moves between two releases of the same artist", async ({ page }) => {
+  // The Ideas.md report: navigating between two rows of the same route
+  // variant (release to release) reuses the editor's component instance,
+  // and a `use_page` load only re-runs on signal changes, so the editor
+  // used to stay pinned to the first row. The body now remounts on a
+  // param-derived key, so the second row loads — inside one document.
+  requireAdmin();
+
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await loginAs(page, "e2e-admin");
+
+  // Create a second release under `e2e-tabs` reactively and land in its
+  // editor (the gate prunes `e2e-reactive-%` rows before each run).
+  const stamp = Date.now();
+  await page.goto(`${base}/admin/artist/e2e-tabs/releases/new`);
+  await expect(h1(page)).toHaveText("New Release");
+  await clientIsLive(page);
+  const loadsBefore = documentLoads;
+
+  await page.fill('input[name="name"]', `E2E Reactive ${stamp}`);
+  await page.fill('input[name="catalogue_number"]', `E2E-${stamp}`);
+  const menuRefreshed = page.waitForResponse((response) => response.url().includes("/api/admin_menu"), {
+    timeout: 15000,
+  });
+  await page.getByRole("button", { name: "Create" }).click();
+  // The accepted create re-fetched the menu, so its listing is settled and
+  // both releases' links are in it.
+  await menuRefreshed;
+  await expect(h1(page)).toHaveText(`E2E Reactive ${stamp} - E2E Tabs Artist`, { timeout: 15000 });
+
+  // Open the artist's submenu (a closed `details` by default) and click
+  // the seeded release's link: same route variant, only the params differ.
+  await page.locator("ul.w-56 summary a", { hasText: "E2E Tabs Artist" }).evaluate((anchor) => {
+    (anchor.closest("details") as HTMLDetailsElement).open = true;
+  });
+  await page.locator('ul.w-56 a[href*="e2e-audio-release"]').click();
+
+  // The editor has to follow the navigation to the other row. Before the
+  // remount-on-param-key fix it stayed on the reactive release.
+  await expect(h1(page)).toHaveText("E2E Audio Release - E2E Tabs Artist", { timeout: 15000 });
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/release\/e2e-audio-release/, {
+    timeout: 15000,
+  });
+  expect(documentLoads, "a menu click is SPA navigation").toBe(loadsBefore);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
 test("the profile page saves reactively and keeps the session", async ({ page }) => {
   // A window has no page load to carry
   // `/profile?saved=1`, so the twin answers with the stored account, which the
