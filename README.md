@@ -18,7 +18,7 @@ dashboard and the artist/release/track/links/images editors). The three
 `dioxus-*` bins are the whole app now:
 
 ```bash
-npm install && npm run css   # tailwind + daisyUI -> public/main.css
+npm install   # tailwind + daisyUI CLI; `build.rs` then regenerates public/main.css
 cargo run --no-default-features --features server --bin dioxus-server
 ```
 
@@ -26,9 +26,11 @@ cargo run --no-default-features --features server --bin dioxus-server
 server serve `public/main.css`, the favicon and the images (dioxus mounts
 each top-level public-dir file at its own path). `public/main.css` is
 generated (gitignored): tailwind generates utilities by scanning the
-sources, so a `main.css` built before some new utility classes appeared
-renders that layout unstyled — re-run `npm run css` after pulling code
-that adds classes. The `dx` CLI is pinned to
+sources, so the crate's `build.rs` reruns `npm run css` whenever `src/`,
+`style/` or the npm config changes — the stylesheet can no longer lag
+behind the classes the code uses. A machine without `node_modules` (or
+without `npm` on PATH) skips that step with a `cargo:warning`; prebuild
+`public/main.css` with `npm run css` there before serving. The `dx` CLI is pinned to
 the dioxus crate version (currently 0.7.10).
 
 That SSR-only shape serves **no wasm bundle**: the pages render, navigate with
@@ -332,7 +334,7 @@ IP=127.0.0.1 PORT=8127 DIOXUS_PUBLIC_PATH=public \
 ## Compiling for Release
 
 ```bash
-npm install && npm run css        # public/main.css, picked up by the web bundle
+npm install                     # `build.rs` regenerates public/main.css from here on
 cargo build --release --bin dioxus-server
 dx build --release --platform web --bin dioxus-web --features web --no-default-features
 ```

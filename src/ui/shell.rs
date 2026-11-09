@@ -54,11 +54,16 @@ pub fn App() -> Element {
 }
 
 /// Chrome shared by every route: navbar, page body inside `<main>`, footer.
+/// The chrome is a flex column filling at least the viewport, and `<main>`
+/// flexes, so the footer sits at the bottom of a short page and directly
+/// below the content on a long one — whichever is lower.
 #[component]
 pub fn AppShell() -> Element {
     rsx! {
-        LabelHeader {}
-        main { Outlet::<Route> {} }
-        LabelFooter {}
+        div { class: "flex min-h-screen flex-col",
+            LabelHeader {}
+            main { class: "flex-1", Outlet::<Route> {} }
+            LabelFooter {}
+        }
     }
 }

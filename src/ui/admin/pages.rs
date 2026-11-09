@@ -49,7 +49,7 @@ use crate::ui::reactive::{posted_fields, refused_code, saved_row, transport_mess
 use crate::ui::use_label;
 use crate::ui::use_page;
 use crate::ui::use_user;
-use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
+use crate::ui::utils::{InlineError, Loading, Success, ToastArea, permission_allows};
 use crate::ui::{Route, redirect};
 
 // Server-only: the twins' bodies run in the server half of the `#[post]`
@@ -106,8 +106,14 @@ fn CreatePageBody(
     // build. The router is looked up rather than hooked (`use_navigator` would
     // panic) because the routerless SSR markup tests render this page alone.
     let router = try_use_context::<RouterContext>();
-    let mut create =
-        use_action(move |fields: PageCreateFields| async move { create_page(fields).await });
+    let prefs = use_context::<super::AdminPrefs>();
+    let mut create = use_action(move |fields: PageCreateFields| async move {
+        let answer = create_page(fields).await;
+        if matches!(answer, Ok(EditOutcome::Saved(_))) {
+            prefs.refresh_menu();
+        }
+        answer
+    });
     use_effect(move || {
         // The action resolves only after the submit handler has returned, so
         // leaving the page happens in an effect (as on the auth pages).
@@ -132,11 +138,13 @@ fn CreatePageBody(
                 create.call(posted_fields::<PageCreateFields>(&evt));
             },
             div { class: "grid gap-6",
-                if let Some(message) = page_message(bad.as_deref()) {
-                    InlineError { message: message.to_string() }
-                }
-                if let Some(message) = create_message {
-                    InlineError { message }
+                ToastArea {
+                    if let Some(message) = page_message(bad.as_deref()) {
+                        InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = create_message {
+                        InlineError { message }
+                    }
                 }
                 input { r#type: "hidden", name: "label_id", value: label_id.to_string() }
                 div { class: "divider", "Public" }
@@ -226,8 +234,14 @@ fn EditPageBody(slug: String, updated: Option<String>, bad: Option<String>) -> E
     // a client build the `onsubmit` handlers below prevent the post and call
     // the twins at the bottom of this module; the plain form posts stay as the
     // javascript-off path (and are the only path a browser without one has).
-    let mut edit =
-        use_action(move |request: PageEdit| async move { apply_page_edit(request).await });
+    let prefs = use_context::<super::AdminPrefs>();
+    let mut edit = use_action(move |request: PageEdit| async move {
+        let answer = apply_page_edit(request).await;
+        if matches!(answer, Ok(EditOutcome::Saved(_))) {
+            prefs.refresh_menu();
+        }
+        answer
+    });
     let saved = saved_row(edit.value());
     let just_saved = saved.is_some();
     // The row on screen follows the last save: a rename brings its new slug
@@ -244,16 +258,18 @@ fn EditPageBody(slug: String, updated: Option<String>, bad: Option<String>) -> E
     rsx! {
         document::Title { "Edit {page.name}" }
         h1 { "Edit {page.name}" }
-        Success {
-            message: format!("{} Updated!", page.name),
-            show: updated.is_some() || just_saved,
-        }
-        if let Some(message) = page_message(bad.as_deref()) {
-            InlineError { message: message.to_string() }
-        }
-        if let Some(message) = reactive_message {
-            // Same fixed-code table the `?bad=` redirect path uses.
-            InlineError { message }
+        ToastArea {
+            Success {
+                message: format!("{} Updated!", page.name),
+                show: updated.is_some() || just_saved,
+            }
+            if let Some(message) = page_message(bad.as_deref()) {
+                InlineError { message: message.to_string() }
+            }
+            if let Some(message) = reactive_message {
+                // Same fixed-code table the `?bad=` redirect path uses.
+                InlineError { message }
+            }
         }
 
         form { method: "post", action: "/admin/forms/page/update",

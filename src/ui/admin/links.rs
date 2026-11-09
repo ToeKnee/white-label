@@ -43,7 +43,7 @@ use crate::ui::page_data;
 use crate::ui::reactive::{posted_fields, refused_code, saved_row, transport_message};
 use crate::ui::use_page;
 use crate::ui::use_user;
-use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
+use crate::ui::utils::{InlineError, Loading, Success, ToastArea, permission_allows};
 use crate::ui::{Route, redirect};
 
 use super::artist::{DeleteForm, RestoreForm, artist_message, delete_artist, restore_artist};
@@ -113,10 +113,15 @@ fn EditArtistLinksBody(
     // they answer replaces the fetched one, so the header name, the
     // Delete/Restore swap and the fixed-code alerts follow the save — the
     // links themselves keep their own action below.
-    let mut artist_row =
-        use_action(
-            move |request: ArtistRowEdit| async move { apply_artist_row_edit(request).await },
-        );
+    let prefs = use_context::<super::AdminPrefs>();
+    let mut artist_row = use_action(move |request: ArtistRowEdit| async move {
+        let answer = apply_artist_row_edit(request).await;
+        if matches!(answer, Ok(EditOutcome::Saved(_))) {
+            // A delete or restore changes what the menu lists.
+            prefs.refresh_menu();
+        }
+        answer
+    });
     let artist = saved_row(artist_row.value())
         .unwrap_or(fetched_artist)
         .artist;
@@ -161,21 +166,23 @@ fn EditArtistLinksBody(
     rsx! {
         document::Title { "{artist_name} Links" }
         h1 { "{artist_name} Links" }
-        Success {
-            message: format!("{artist_name} Links Updated!"),
-            show: updated.is_some() || action_succeeded,
-        }
-        if let Some(message) = links_message(bad.as_deref()) {
-            InlineError { message: message.to_string() }
-        }
-        if let Some(Err(error)) = saved {
-            // Reactive-path failures show the raw service message.
-            InlineError { message: error.to_string() }
-        }
-        if let Some(message) = artist_row_message {
-            // The artist twins refuse with the very codes the
-            // `/admin/forms/artist/{delete,restore}` handlers put in `?bad=`.
-            InlineError { message }
+        ToastArea {
+            Success {
+                message: format!("{artist_name} Links Updated!"),
+                show: updated.is_some() || action_succeeded,
+            }
+            if let Some(message) = links_message(bad.as_deref()) {
+                InlineError { message: message.to_string() }
+            }
+            if let Some(Err(error)) = saved {
+                // Reactive-path failures show the raw service message.
+                InlineError { message: error.to_string() }
+            }
+            if let Some(message) = artist_row_message {
+                // The artist twins refuse with the very codes the
+                // `/admin/forms/artist/{delete,restore}` handlers put in `?bad=`.
+                InlineError { message }
+            }
         }
 
         form {

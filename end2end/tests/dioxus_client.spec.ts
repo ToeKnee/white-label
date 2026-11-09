@@ -193,6 +193,14 @@ test("the release editor creates, saves, deletes and restores reactively", async
     timeout: 15000,
   });
 
+  // The side menu's listing follows the create. Its load resolves once per
+  // mount and the layout outlives every admin navigation, so the accepted
+  // save bumps the counter the load tracks and the row's link shows up
+  // without a document load.
+  await expect(page.locator(`ul.w-56 a[href*="e2e-reactive-${stamp}"]`)).not.toHaveCount(0, {
+    timeout: 15000,
+  });
+
   // A reactive save renders from the answer instead of a reload: the alert and
   // the header follow the rename, no `?updated=1` appears, and the hidden slug
   // the next save (and the uploader) targets moves with it.
@@ -211,6 +219,13 @@ test("the release editor creates, saves, deletes and restores reactively", async
     .getAttribute("value");
   expect(slug, "the hidden slug follows the rename").toMatch(/-renamed$/);
 
+  // The same follow-through on the rename: the menu's link for this release
+  // now targets the new slug (an unrefreshed menu would still link the old
+  // one, which 404s).
+  await expect(page.locator('ul.w-56 a[href*="-renamed"]')).not.toHaveCount(0, {
+    timeout: 15000,
+  });
+
   // Soft delete swaps the editor's Delete button for Restore with no page load
   // (the row in the answer carries `deleted_at`), and restore swaps it back.
   await page.getByRole("button", { name: "Delete" }).click();
@@ -222,6 +237,10 @@ test("the release editor creates, saves, deletes and restores reactively", async
   // gate's prune step removes these rows before the next run.
   await page.getByRole("button", { name: "Delete" }).click();
   await expect(page.getByRole("button", { name: "Restore" })).toBeVisible({ timeout: 15000 });
+
+  // And on the delete: with "show deleted" off, the refreshed menu load
+  // drops the soft-deleted row.
+  await expect(page.locator('ul.w-56 a[href*="-renamed"]')).toHaveCount(0, { timeout: 15000 });
 
   expect(documentLoads, "create, save, delete and restore are all fetches").toBe(loadsBefore);
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);

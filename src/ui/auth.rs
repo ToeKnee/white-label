@@ -67,7 +67,7 @@ use crate::ui::redirect;
 use crate::ui::upload::FileUploadWithProgress;
 use crate::ui::use_session_hint;
 use crate::ui::use_user;
-use crate::ui::utils::{InlineError, Loading, Success};
+use crate::ui::utils::{InlineError, Loading, Success, ToastArea};
 
 // Server-only: the twins' bodies run in the server half of the macros, next to
 // the same services and session records the form handlers use.
@@ -466,13 +466,15 @@ fn ProfileForm(
                 edit.call(posted_fields::<ClientProfileFields>(&evt));
             },
             div { class: "grid gap-6",
-                Success { message: success_message, show: saved.is_some() || just_saved }
-                if let Some(message) = profile_message(bad.as_deref()) {
-                    InlineError { message: message.to_string() }
-                }
-                if let Some(message) = reactive_message {
-                    // Same fixed-code table the `?bad=` redirect path uses.
-                    InlineError { message }
+                ToastArea {
+                    Success { message: success_message, show: saved.is_some() || just_saved }
+                    if let Some(message) = profile_message(bad.as_deref()) {
+                        InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = reactive_message {
+                        // Same fixed-code table the `?bad=` redirect path uses.
+                        InlineError { message }
+                    }
                 }
                 ProfileFields { user: user_for_fields }
             }
@@ -625,15 +627,17 @@ fn PasswordForm(
                 submit.call(posted_fields::<ClientPasswordFields>(&evt));
             },
             div { class: "grid gap-6",
-                Success {
-                    message: "Password Updated!".to_string(),
-                    show: updated.is_some() || just_changed,
-                }
-                if let Some(message) = change_password_message(bad.as_deref()) {
-                    InlineError { message: message.to_string() }
-                }
-                if let Some(message) = reactive_message {
-                    InlineError { message }
+                ToastArea {
+                    Success {
+                        message: "Password Updated!".to_string(),
+                        show: updated.is_some() || just_changed,
+                    }
+                    if let Some(message) = change_password_message(bad.as_deref()) {
+                        InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = reactive_message {
+                        InlineError { message }
+                    }
                 }
 
                 label { class: "flex gap-2 items-center input",

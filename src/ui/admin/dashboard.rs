@@ -35,7 +35,7 @@ use crate::ui::reactive::{refused_code, saved_row, transport_message};
 use crate::ui::use_label;
 use crate::ui::use_page;
 use crate::ui::use_user;
-use crate::ui::utils::{InlineError, Loading, StatusBadge, Success};
+use crate::ui::utils::{InlineError, Loading, StatusBadge, Success, ToastArea};
 use crate::utils::shorten_string::shorten_string;
 use dioxus::router::Link;
 
@@ -553,7 +553,16 @@ fn PurgeCardBody(
     skipped: Option<String>,
     bad: Option<String>,
 ) -> Element {
-    let mut purge = use_action(move |confirm: bool| async move { purge_deleted(confirm).await });
+    let prefs = use_context::<super::AdminPrefs>();
+    let mut purge = use_action(move |confirm: bool| async move {
+        let answer = purge_deleted(confirm).await;
+        // Only the executed purge removes rows the menu may still be
+        // listing; the preview changes nothing.
+        if confirm && matches!(answer, Ok(EditOutcome::Saved(_))) {
+            prefs.refresh_menu();
+        }
+        answer
+    });
     // Which step the last reactive call was: both answer `Saved(PurgeResult)`,
     // so the card has to know whether to render the answer as a preview or
     // as the done notice.
@@ -639,11 +648,13 @@ fn PurgeCardBody(
                     "Items deleted more than {PURGE_AFTER_DAYS} days ago can be removed for \
                      good. This cannot be undone."
                 }
-                if let Some(message) = problem {
-                    InlineError { message }
-                }
-                if let Some(message) = done {
-                    Success { message, show: true }
+                ToastArea {
+                    if let Some(message) = problem {
+                        InlineError { message }
+                    }
+                    if let Some(message) = done {
+                        Success { message, show: true }
+                    }
                 }
                 if let Some(count) = preview_count {
                     if count == 0 {

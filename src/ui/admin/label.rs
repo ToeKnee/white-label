@@ -32,7 +32,7 @@ use crate::ui::markdown_html;
 use crate::ui::reactive::{posted_fields, refused_code, saved_row, transport_message};
 use crate::ui::use_label;
 use crate::ui::use_user;
-use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
+use crate::ui::utils::{InlineError, Loading, Success, ToastArea, permission_allows};
 use crate::ui::{Route, redirect};
 
 // Server-only: the twin's body runs in the server half of the `#[post]` macro,
@@ -93,7 +93,15 @@ fn EditLabelBody(
     // prevents the post and calls the twin at the bottom of this module; the
     // plain form post stays as the javascript-off path (and is the only path
     // a browser without one has).
-    let mut edit = use_action(move |fields: LabelFields| async move { update_label(fields).await });
+    let prefs = use_context::<super::AdminPrefs>();
+    let mut edit = use_action(move |fields: LabelFields| async move {
+        let answer = update_label(fields).await;
+        if matches!(answer, Ok(EditOutcome::Saved(_))) {
+            // The menu's label column shows the label's name.
+            prefs.refresh_menu();
+        }
+        answer
+    });
     let saved = saved_row(edit.value());
     let just_saved = saved.is_some();
     // The header, the alerts and the form values follow the last save, so a
@@ -113,16 +121,18 @@ fn EditLabelBody(
                 edit.call(posted_fields::<LabelFields>(&evt));
             },
             div { class: "grid gap-6",
-                Success {
-                    message: format!("{} Updated!", label.name),
-                    show: updated.is_some() || just_saved,
-                }
-                if let Some(message) = label_message(bad.as_deref()) {
-                    InlineError { message: message.to_string() }
-                }
-                if let Some(message) = reactive_message {
-                    // Same fixed-code table the `?bad=` redirect path uses.
-                    InlineError { message }
+                ToastArea {
+                    Success {
+                        message: format!("{} Updated!", label.name),
+                        show: updated.is_some() || just_saved,
+                    }
+                    if let Some(message) = label_message(bad.as_deref()) {
+                        InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = reactive_message {
+                        // Same fixed-code table the `?bad=` redirect path uses.
+                        InlineError { message }
+                    }
                 }
 
                 input {

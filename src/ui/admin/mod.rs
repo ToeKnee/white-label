@@ -68,6 +68,28 @@ pub struct AdminPrefs {
     /// `Deleted` rung of [`crate::models::Visibility`] and soft-deleted
     /// rows appear. Default off: deleted rows are hidden.
     pub show_deleted: Signal<bool>,
+    /// Counts the reactive saves made anywhere in the admin section. Read
+    /// inside the side menu's page load (in `AdminMenuBody`) and bumped by
+    /// the editors through `AdminPrefs::refresh_menu`, so the menu follows
+    /// creates, renames, soft-deletes and restores that never reload the
+    /// document.
+    pub menu_version: Signal<u64>,
+}
+
+impl AdminPrefs {
+    /// Tell the side menu its listing is stale.
+    ///
+    /// Like every [`crate::ui::use_page`] load, the menu's resolves once per
+    /// mount, and `AdminRoot` is a layout that outlives every admin
+    /// navigation — so without this nudge a reactive save would leave the
+    /// menu's rows (and the slug behind each artist/release link) frozen
+    /// until the next document load. Editors call it from inside their
+    /// `use_action` future when a save is accepted. It is deliberately *not*
+    /// called from a `use_effect`: reading the counter to bump it there would
+    /// subscribe the effect to its own write and loop.
+    pub(crate) fn refresh_menu(mut self) {
+        self.menu_version.with_mut(|version| *version += 1);
+    }
 }
 
 /// The admin layout: menu + permission gate around every admin page.
@@ -78,7 +100,11 @@ pub fn AdminRoot() -> Element {
     // outside the provider closure — hooks inside a provider closure
     // violate Dioxus's hook rules and panic during render.
     let show_deleted = use_signal(|| false);
-    use_context_provider(|| AdminPrefs { show_deleted });
+    let menu_version = use_signal(|| 0);
+    use_context_provider(|| AdminPrefs {
+        show_deleted,
+        menu_version,
+    });
 
     rsx! {
         div { class: "flex",
@@ -124,12 +150,19 @@ fn AdminGateBody() -> Element {
 /// The side menu, loaded from the `admin_menu` service (403/401 for
 /// non-admins, which falls through to the skeleton below). The
 /// "Show deleted" checkbox flips the shared signal; reading it inside the
-/// `use_page` closure re-runs the menu load when it changes.
+/// `use_page` closure re-runs the menu load when it changes — as does
+/// reading the save counter that [`AdminPrefs::refresh_menu`] bumps.
 #[component]
 fn AdminMenuBody() -> Element {
     let prefs = use_context::<AdminPrefs>();
     let mut show_deleted = prefs.show_deleted;
-    let menu = use_page(move || page_data(get_admin_menu(show_deleted())))?;
+    let menu_version = prefs.menu_version;
+    let menu = use_page(move || {
+        // Reading the counter here is what makes a reactive save re-run this
+        // load; see [`AdminPrefs::refresh_menu`].
+        let _menu_version = menu_version();
+        page_data(get_admin_menu(show_deleted()))
+    })?;
     let menu = match menu() {
         Ok(menu) => menu,
         Err(error) => {

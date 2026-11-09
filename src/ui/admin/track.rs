@@ -53,7 +53,7 @@ use crate::ui::reactive::{
 use crate::ui::upload::{FileUploadWithProgress, stored_file_url};
 use crate::ui::use_page;
 use crate::ui::use_user;
-use crate::ui::utils::{InlineError, Loading, Success, permission_allows};
+use crate::ui::utils::{InlineError, Loading, Success, ToastArea, permission_allows};
 use crate::ui::{Route, redirect};
 
 // Server-only: the twins' bodies run in the server half of the `#[post]`
@@ -291,7 +291,8 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
     // release slug steers to the releases list.
     let release_artist_slug = artist_slug.clone();
     let release_slug_for_resource = release_slug.clone();
-    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
+    let prefs = use_context::<super::AdminPrefs>();
+    let show_deleted = prefs.show_deleted;
     let release_resource = use_page(move || {
         page_data(get_release(
             release_artist_slug.clone(),
@@ -316,8 +317,13 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
     // build. The router is looked up rather than hooked (`use_navigator` would
     // panic) because the routerless SSR markup tests render this page alone.
     let router = try_use_context::<RouterContext>();
-    let mut create =
-        use_action(move |fields: TrackCreateFields| async move { create_track(fields).await });
+    let mut create = use_action(move |fields: TrackCreateFields| async move {
+        let answer = create_track(fields).await;
+        if matches!(answer, Ok(EditOutcome::Saved(_))) {
+            prefs.refresh_menu();
+        }
+        answer
+    });
     let new_track_artist = artist_slug.clone();
     let new_track_release = release_slug.clone();
     use_effect(move || {
@@ -351,12 +357,14 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
                 ));
             },
             div { class: "grid gap-6",
-                if let Some(message) = track_message(bad.as_deref()) {
-                    InlineError { message: message.to_string() }
-                }
-                if let Some(message) = create_message {
-                    // Same fixed-code table the `?bad=` redirect path uses.
-                    InlineError { message }
+                ToastArea {
+                    if let Some(message) = track_message(bad.as_deref()) {
+                        InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = create_message {
+                        // Same fixed-code table the `?bad=` redirect path uses.
+                        InlineError { message }
+                    }
                 }
                 input { r#type: "hidden", name: "release_id", value: release_id.to_string() }
                 input { r#type: "hidden", name: "artist_slug", value: artist_slug }
@@ -508,7 +516,8 @@ fn EditTrackBody(
 
     let track_release_artist_slug = artist_slug.clone();
     let track_release_slug = release_slug.clone();
-    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
+    let prefs = use_context::<super::AdminPrefs>();
+    let show_deleted = prefs.show_deleted;
     let release_resource = use_page(move || {
         page_data(get_release(
             track_release_artist_slug.clone(),
@@ -558,8 +567,13 @@ fn EditTrackBody(
     // a client build the `onsubmit` handlers below prevent the post and call
     // the twins at the bottom of this module; the plain form posts stay as the
     // javascript-off path (and are the only path a browser without one has).
-    let mut edit =
-        use_action(move |request: TrackEdit| async move { apply_track_edit(request).await });
+    let mut edit = use_action(move |request: TrackEdit| async move {
+        let answer = apply_track_edit(request).await;
+        if matches!(answer, Ok(EditOutcome::Saved(_))) {
+            prefs.refresh_menu();
+        }
+        answer
+    });
     let saved = saved_row(edit.value());
     let just_saved = saved.is_some();
     // The row on screen follows the last save: a rename brings its new slug
@@ -593,16 +607,18 @@ fn EditTrackBody(
     rsx! {
         document::Title { "{name_for_header} - {release_name} - {artist_name}" }
         h1 { "{name_for_header} - {release_name} - {artist_name}" }
-        Success {
-            message: format!("{} Updated!", track.name),
-            show: updated.is_some() || just_saved,
-        }
-        if let Some(message) = track_message(bad.as_deref()) {
-            InlineError { message: message.to_string() }
-        }
-        if let Some(message) = reactive_message {
-            // Same fixed-code table the `?bad=` redirect path uses.
-            InlineError { message }
+        ToastArea {
+            Success {
+                message: format!("{} Updated!", track.name),
+                show: updated.is_some() || just_saved,
+            }
+            if let Some(message) = track_message(bad.as_deref()) {
+                InlineError { message: message.to_string() }
+            }
+            if let Some(message) = reactive_message {
+                // Same fixed-code table the `?bad=` redirect path uses.
+                InlineError { message }
+            }
         }
 
         form { method: "post", action: "/admin/forms/track/update",

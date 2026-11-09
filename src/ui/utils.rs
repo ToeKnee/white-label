@@ -9,6 +9,10 @@
 //! - The permission guards take the resolved session user and a [`Route`],
 //!   and swap the page out through the shared
 //!   [`crate::ui::redirect`] helper.
+//! - Action feedback (`Success`/`InlineError` for saves, uploads run
+//!   through forms and the housekeeping purge) is wrapped in one
+//!   `ToastArea` per page, so it floats in the corner however far the
+//!   page has scrolled.
 
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
@@ -139,6 +143,27 @@ pub fn Success(
     }
 }
 
+/// Action feedback floats at the bottom-right in a fixed daisyUI toast
+/// corner, so a save notice is visible however far the page has scrolled.
+///
+/// A page wraps its whole alert group (success *and* errors) in a single
+/// `ToastArea`: daisyUI stacks children inside one toast container, while
+/// two sibling containers would overlap. Alerts here are purely
+/// informational, so the layer sets `pointer-events-none` and never blocks
+/// clicks on the controls underneath it.
+#[component]
+pub fn ToastArea(
+    /// The alerts to float in the corner: [`Success`] and [`InlineError`]
+    /// components.
+    children: Element,
+) -> Element {
+    rsx! {
+        div { class: "toast toast-end z-50 pointer-events-none",
+            {children}
+        }
+    }
+}
+
 /// The badge (daisy class, text) for an item's state, or `None` when there
 /// is nothing to show. Order of precedence: deleted beats a future publish
 /// date ("Coming Soon"), and no publish date at all means "Draft". A past
@@ -216,7 +241,9 @@ mod tests {
     use dioxus::ssr::render_element;
 
     use super::badge_for;
-    use super::{ErrorPage, InlineError, Loading, NotFound, ServerErrors, StatusBadge, Success};
+    use super::{
+        ErrorPage, InlineError, Loading, NotFound, ServerErrors, StatusBadge, Success, ToastArea,
+    };
     use crate::error::AppError;
 
     /// The chrono dates as `None` need a type hint for the component props.
@@ -329,6 +356,33 @@ mod tests {
         assert!(html.contains("alert alert-error"), "{html}");
         assert!(html.contains("Slug already taken."), "{html}");
         assert!(html.contains("role=\"alert\""), "{html}");
+    }
+
+    #[test]
+    fn toast_area_stacks_its_alerts_in_one_corner_layer() {
+        let html = render_element(rsx! {
+            ToastArea {
+                Success {
+                    message: "Saved!".to_string(),
+                    show: true,
+                }
+                InlineError {
+                    message: "Slug already taken.".to_string(),
+                }
+            }
+        });
+        assert!(html.contains("toast toast-end"), "{html}");
+        assert!(html.contains("pointer-events-none"), "{html}");
+        // Both alerts render inside the layer, unchanged.
+        assert!(html.contains("alert alert-success"), "{html}");
+        assert!(html.contains("alert alert-error"), "{html}");
+    }
+
+    #[test]
+    fn toast_area_renders_an_empty_inert_layer_when_nothing_shows() {
+        let empty = render_element(rsx! { ToastArea {} });
+        assert!(empty.contains("toast toast-end"), "{empty}");
+        assert!(!empty.contains("alert"), "{empty}");
     }
 
     #[test]

@@ -58,7 +58,9 @@ use crate::ui::upload::{FileUploadWithProgress, stored_file_url};
 use crate::ui::use_label;
 use crate::ui::use_page;
 use crate::ui::use_user;
-use crate::ui::utils::{ErrorPage, InlineError, Loading, StatusBadge, Success, permission_allows};
+use crate::ui::utils::{
+    ErrorPage, InlineError, Loading, StatusBadge, Success, ToastArea, permission_allows,
+};
 use crate::ui::{Route, redirect};
 
 // Server-only: the twins' bodies run in the server half of the `#[post]`
@@ -305,10 +307,17 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
     // build. The router is looked up rather than hooked (`use_navigator` would
     // panic) because the routerless SSR markup tests render this page alone.
     let router = try_use_context::<RouterContext>();
-    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
+    let prefs = use_context::<super::AdminPrefs>();
+    let show_deleted = prefs.show_deleted;
     let mut create = use_action(move |fields: ReleaseCreateFields| {
         let include_deleted = show_deleted();
-        async move { create_release(include_deleted, fields).await }
+        async move {
+            let answer = create_release(include_deleted, fields).await;
+            if matches!(answer, Ok(EditOutcome::Saved(_))) {
+                prefs.refresh_menu();
+            }
+            answer
+        }
     });
     let new_release_artist = artist_slug.clone();
     use_effect(move || {
@@ -343,11 +352,13 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
                 ));
             },
             div { class: "grid gap-6",
-                if let Some(message) = release_message(bad.as_deref()) {
-                    InlineError { message: message.to_string() }
-                }
-                if let Some(message) = create_message {
-                    InlineError { message }
+                ToastArea {
+                    if let Some(message) = release_message(bad.as_deref()) {
+                        InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = create_message {
+                        InlineError { message }
+                    }
                 }
                 input { r#type: "hidden", name: "label_id", value: label_id.to_string() }
                 input { r#type: "hidden", name: "artist_slug", value: artist_slug }
@@ -474,7 +485,8 @@ fn EditReleaseBody(
     // The single release row stays openable even when deleted (so Restore
     // can appear); its track listing follows the shared "show deleted"
     // toggle.
-    let show_deleted = use_context::<super::AdminPrefs>().show_deleted;
+    let prefs = use_context::<super::AdminPrefs>();
+    let show_deleted = prefs.show_deleted;
     let release_artist_slug = artist_slug.clone();
     let release_slug_for_resource = release_slug.clone();
     let release_resource = use_page(move || {
@@ -506,7 +518,13 @@ fn EditReleaseBody(
         // The Saved payload's track list should match what the page
         // currently shows, so the toggle is read when the action runs.
         let include_deleted = show_deleted();
-        async move { apply_release_edit(request, include_deleted).await }
+        async move {
+            let answer = apply_release_edit(request, include_deleted).await;
+            if matches!(answer, Ok(EditOutcome::Saved(_))) {
+                prefs.refresh_menu();
+            }
+            answer
+        }
     });
     let saved = saved_row(edit.value());
     let just_saved = saved.is_some();
@@ -545,17 +563,19 @@ fn EditReleaseBody(
             div { class: "w-2/3",
                 document::Title { "{release.name} - {artist.name}" }
                 h1 { "{release.name} - {artist.name}" }
-        Success {
-            message: format!("{} Updated!", release.name),
-            show: updated.is_some() || just_saved,
-        }
-        if let Some(message) = release_message(bad.as_deref()) {
-            InlineError { message: message.to_string() }
-        }
-        if let Some(message) = reactive_message {
-            // Same fixed-code table the `?bad=` redirect path uses.
-            InlineError { message }
-        }
+                ToastArea {
+                    Success {
+                        message: format!("{} Updated!", release.name),
+                        show: updated.is_some() || just_saved,
+                    }
+                    if let Some(message) = release_message(bad.as_deref()) {
+                        InlineError { message: message.to_string() }
+                    }
+                    if let Some(message) = reactive_message {
+                        // Same fixed-code table the `?bad=` redirect path uses.
+                        InlineError { message }
+                    }
+                }
 
         form {
             method: "post",
