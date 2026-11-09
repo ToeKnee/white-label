@@ -23,6 +23,13 @@ pub mod models;
 pub mod server;
 #[cfg(feature = "server")]
 pub mod services;
+/// Remembering the login across desktop restarts: which session cookies
+/// the OS credential store should hold.
+///
+/// The web build has no use for it (browsers persist `Max-Age`d cookies
+/// themselves).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod session_store;
 /// The app's UI: pages, the hydrated wasm client and the desktop window.
 ///
 /// All three build from this module; server-only parts inside it (the server

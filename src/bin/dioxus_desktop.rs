@@ -3,6 +3,9 @@
 //! app boots client-side and every fullstack call in `ui/data.rs` becomes an
 //! HTTP request made by dioxus' own `reqwest` client, which keeps a
 //! process-wide cookie jar, so the session cookie round-trips natively.
+//! `prepare` (see `session_store::desktop`) replaces that jar with one that
+//! also keeps a remembered ("remember me", `Max-Age`d) session cookie in the
+//! OS credential store, so the login survives closing the window.
 //!
 //! The window's title and icon are set here rather than left to `dx`: the CLI
 //! only bakes its `Dioxus.toml` title into the binary for release builds, so
@@ -80,6 +83,12 @@ fn main() {
     let origin = api_origin();
     tracing::info!("desktop client talking to {origin}");
     dioxus::fullstack::set_server_url(origin);
+    // Seed the cookie jar from the OS credential store (a "remember me"
+    // login from a previous run) and install the client that keeps
+    // remembering. Must come after `set_server_url` (the jar is keyed by
+    // the origin) and before the first server fn call (which would build
+    // dioxus' own default client).
+    white_label::session_store::desktop::prepare(origin);
 
     dioxus::LaunchBuilder::new()
         .with_cfg(window_config())

@@ -280,6 +280,27 @@ in `ui/data.rs` is a dioxus server fn that becomes an HTTP call, made by
 dioxus' own `reqwest` client, which keeps a process-wide cookie jar, so the
 session cookie round-trips without any CORS or `SameSite` work.
 
+That jar now outlives the window when the user asked it to. On the web the
+browser does the remembering: "Remember me" (checked by default on the login
+form) gives the session cookie a 30-day `Max-Age`
+(`server::current_user::remember_session`) and the browser persists it. On
+desktop `src/session_store.rs` + `src/session_store/desktop.rs` do the same
+with the OS credential store (`keyring`'s `v1` mode, MIT/Apache-2.0: Keychain
+on macOS, Credential Manager on Windows, the Secret Service — GNOME Keyring,
+KWallet — on Linux). The bin's `prepare()` (called in `dioxus_desktop.rs`
+after `set_server_url`, before launch) replaces dioxus' lazily-built client
+through its `GLOBAL_REQUEST_CLIENT` hook with one whose cookie jar captures
+full `Set-Cookie` lines and re-seeds from the store at startup. A cookie that
+arrives with a positive `Max-Age` is stored verbatim (attributes and all) under
+service `net.ynottony.whitelabel`, one entry per API origin; the next start
+ages it down to the time left and stops accepting it once it is past, exactly
+like a browser would, and logout or expiry deletes the entry. Session cookies
+without `Max-Age` — the ones that should die with the window — are never
+stored. A machine with no Secret Service at all gets a warning and an ordinary
+non-remembered login. The decision rules (`decide`, `restore_cookie`) are
+framework-free and unit-tested under the server build; the window itself is
+never exercised in CI.
+
 dioxus blocks in-app navigation after the first load, so the plain-HTML 303 form
 fallbacks the SSR pages use are inert in the window: every form a user needs to
 submit natively goes through the reactive `use_action` + JSON-twin path. Login,

@@ -49,8 +49,25 @@ pub fn App() -> Element {
         // `public/main.css` at this exact path, ahead of the SSR fallback; a
         // desktop window loads it from its own bundle instead.
         document::Stylesheet { href: bundled_asset("/main.css") }
+        RememberedLogin {}
         Router::<Route> {}
     }
+}
+
+/// Desktop only: keeps the OS credential store in step with the session,
+/// so a "remember me" login survives closing the window
+/// (`session_store::desktop`). On the web and server builds there is
+/// nothing to do — the browser persists the `Max-Age`d session cookie
+/// itself — so the wrapper renders nothing and names no desktop-only
+/// module.
+#[cfg(feature = "desktop")]
+fn RememberedLogin() -> Element {
+    crate::session_store::desktop::SessionPersistence()
+}
+
+#[cfg(not(feature = "desktop"))]
+fn RememberedLogin() -> Element {
+    rsx! {}
 }
 
 /// Chrome shared by every route: navbar, page body inside `<main>`, footer.
