@@ -121,7 +121,12 @@ fn SignedInMenu(user: User) -> Element {
                             }
                             "{username}"
                         }
-                        ul { class: "p-2 rounded-t-none bg-base-100", "data-theme": "light",
+                        // `bg-base-100` rather than the dropdown's default
+                        // translucency: the menu floats over page content.
+                        // (It used to force `data-theme="light"` too — a
+                        // no-op since only the `lofi` and `black` themes are
+                        // compiled in.)
+                        ul { class: "p-2 rounded-t-none bg-base-100",
                             li {
                                 Link {
                                     to: Route::EditProfile {
