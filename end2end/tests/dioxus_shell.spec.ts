@@ -367,6 +367,40 @@ test("the admin dashboard renders cards and the side menu", async ({ page }) => 
   await expect(page.getByRole("button", { name: /and \d+ files for good$/ })).toBeVisible();
 });
 
+test("the avatar dropdown is readable and above the page (light scheme)", async ({ page }) => {
+  // Both bugs this pins are light-theme layout bugs in the navbar: the
+  // dropdown inherits the navbar's white `text-primary-content` (which
+  // rendered white on its white `bg-base-100` panel) and the dashboard's
+  // cards are `position:relative`, so the dropdown needs its own z-index
+  // or it paints *under* them. Playwright's default colour scheme is
+  // light, which is where the contrast bug bites.
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+  await page.goto(`${base}/admin`);
+  await expect(page.getByRole("heading", { level: 2, name: "Housekeeping" })).toBeVisible();
+
+  await page.locator(".navbar summary").click();
+  const probe = await page.evaluate(() => {
+    const ul = document.querySelector(".navbar details > ul");
+    if (!ul) return null;
+    const link = ul.querySelector("a");
+    const style = getComputedStyle(link);
+    const box = ul.getBoundingClientRect();
+    const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return {
+      linkColor: style.color,
+      panelBackground: getComputedStyle(ul).backgroundColor,
+      linkReachable: top !== null && ul.contains(top),
+    };
+  });
+  expect(probe, "the avatar dropdown renders").not.toBeNull();
+  expect(
+    probe.linkColor,
+    `dropdown text (${probe.linkColor}) must not be the panel colour (${probe.panelBackground})`,
+  ).not.toBe(probe.panelBackground);
+  expect(probe.linkReachable, "the dropdown must float above the cards").toBe(true);
+});
+
 test("page create, update, delete and restore round-trip", async ({ page }) => {
   requireAdmin();
   await loginAs(page, "e2e-admin");

@@ -121,12 +121,17 @@ fn SignedInMenu(user: User) -> Element {
                             }
                             "{username}"
                         }
-                        // `bg-base-100` rather than the dropdown's default
-                        // translucency: the menu floats over page content.
-                        // (It used to force `data-theme="light"` too — a
-                        // no-op since only the `lofi` and `black` themes are
-                        // compiled in.)
-                        ul { class: "p-2 rounded-t-none bg-base-100",
+                        // The dropdown inherits the navbar's `bg-primary
+                        // text-primary-content` (white text). It needs the
+                        // matching *pair* here — `text-base-content` next to
+                        // `bg-base-100` — or its ghost links render white on
+                        // white in light themes (only `lofi` and `black`
+                        // themes are compiled in, so a `data-theme` swap is
+                        // not an option). The `z-50` matters too: the
+                        // dashboard cards are `position:relative`, and the
+                        // dropdown would otherwise paint *under* them.
+                        ul {
+                            class: "z-50 p-2 rounded-t-none bg-base-100 text-base-content",
                             li {
                                 Link {
                                     to: Route::EditProfile {
