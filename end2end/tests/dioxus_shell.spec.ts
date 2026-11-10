@@ -224,6 +224,23 @@ test("the artists index lists the public artists", async ({ page }) => {
   await expect(page.locator("a .card-title").first()).toBeVisible();
 });
 
+test("the release page offers Play buttons and no media without a client", async ({ page }) => {
+  // The global player needs the wasm client, and this server carries no
+  // wasm bundle: the SSR page (the same markup the client hydrates) lists
+  // the audio track with its `⏵ Play` button, but all media lives in the
+  // bar — so there are no players on the page, and a Play click has no
+  // client to answer it.
+  await page.goto(`${base}/artists/e2e-tabs/e2e-audio-release`);
+  await expect(h1(page)).toHaveText("E2E Audio Release");
+  await expect(page.getByRole("button", { name: "Play E2E Audio Track" })).toBeVisible();
+  await expect(page.locator("audio")).toHaveCount(0, "the media only lives in the bar");
+  await expect(page.locator("#global-player")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Play E2E Audio Track" }).click();
+  await expect(page.locator("#global-player")).toHaveCount(0, "no client, so no bar");
+  await expect(page.locator("audio")).toHaveCount(0, "and no media appears either");
+});
+
 test("an unknown artist slug renders an empty artist page", async ({ page }) => {
   // A missing artist is logged and rendered as an empty artist page rather
   // than redirected; the 404 comes from the data endpoint, not from the route.

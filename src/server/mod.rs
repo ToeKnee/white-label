@@ -378,15 +378,17 @@ mod tests {
         );
     }
 
-    /// A guest hears what a track has been given: the public release page puts
-    /// the browser's player on a row with an audio file, and leaves a row
-    /// without one alone.
+    /// What a track with audio gives a guest: the public release page puts
+    /// a `⏵ Play` button on a row with an audio file, and leaves a row
+    /// without one alone. The media itself only lives in the global player
+    /// bar (which needs the wasm client to open): the SSR page never ships
+    /// an `<audio>` element.
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
     )]
     #[sqlx::test]
-    async fn a_track_with_audio_gets_a_public_player(pool: PgPool) {
+    async fn a_track_with_audio_gets_a_play_button(pool: PgPool) {
         seed_public_site(&pool).await;
         let server = test_server(pool.clone(), None).await;
         let release_url = "/artists/test-artist-1/test-release-1";
@@ -394,8 +396,8 @@ mod tests {
         let before = server.get(release_url).await;
         assert_shell(&before, &[CHROME[0], "Test Track 1"]);
         assert!(
-            !before.text().contains("<audio"),
-            "a track with no file gets no player"
+            !before.text().contains("Play Test Track 1"),
+            "a track with no file gets no Play button"
         );
 
         sqlx::query("UPDATE tracks SET audio = $1 WHERE slug = $2")
@@ -404,9 +406,16 @@ mod tests {
             .execute(&pool)
             .await
             .expect("stored audio");
+        let after = server.get(release_url).await;
+        // U+FE0E asks for a text (non-emoji) ⏵, so the glyph takes the
+        // theme's colour.
         assert_shell(
-            &server.get(release_url).await,
-            &["<audio", "src=\"/uploads/tracks/1700000000-castles.flac\""],
+            &after,
+            &["aria-label=\"Play Test Track 1\"", "⏵\u{FE0E} Play"],
+        );
+        assert!(
+            !after.text().contains("<audio"),
+            "the media lives in the bar alone: the SSR page carries no players"
         );
     }
 

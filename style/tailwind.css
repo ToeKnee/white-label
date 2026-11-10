@@ -50,3 +50,16 @@
 @theme inline {
     --color-brand-plate: var(--brand-plate);
 }
+
+/* The player bar's transport glyphs. U+23EE/U+23ED/U+23CF (⏮⏭⏏) are
+ * emoji-*first* codepoints, and a colour-emoji font ignores the CSS colour
+ * entirely. The U+FE0E text-presentation selector in the button labels is not
+ * enough for Chromium's font fallback on Linux (it reaches the emoji font
+ * anyway), so list text fonts that ship these glyphs first: Segoe on Windows,
+ * Apple Symbols on macOS, Noto/Symbola/FreeSans on Linux. As text they inherit
+ * the bar's `text-base-content`. */
+.player-glyph {
+    font-family:
+        "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", "Symbola",
+        "FreeSans", sans-serif;
+}

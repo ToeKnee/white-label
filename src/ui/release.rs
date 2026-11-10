@@ -1,7 +1,12 @@
 //! The public release page.
 //!
 //! Album details plus the track list, each track showing its featured artists
-//! and, when it has an audio file, the browser's own player.
+//! and, when it has an audio file, a `⏵ Play` button: that seeds the global
+//! player bar at the bottom of the page (and the release's tracks with audio
+//! as its queue), which keeps the sound going across navigation. While the
+//! bar plays, the rows offer `+ Add to Queue` instead (see
+//! [`crate::ui::player`]). All the media lives in the bar: without the wasm
+//! client the page shows the buttons but no players at all.
 //!
 //! Unlike the other public pages, a failed fetch here *redirects*: an
 //! unknown artist falls back to the artists index, an unknown release to
@@ -18,6 +23,7 @@ use crate::ui::assets::{display_image_url, served_file_url};
 use crate::ui::data::{get_artist, get_release};
 use crate::ui::markdown_html;
 use crate::ui::page_data;
+use crate::ui::player::{PlayableTrack, use_player};
 use crate::ui::use_page;
 use crate::ui::utils::Loading;
 use crate::utils::shorten_string::shorten_string;
@@ -104,20 +110,29 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
                     class: "pl-6 w-1/2 h-auto",
                 }
             }
-            TrackList { tracks }
+            TrackList {
+                tracks,
+                release_name: release.name.clone(),
+            }
         }
     }
 }
 
-/// The tracks on a release, or nothing when there are none.
+/// The tracks on a release, or nothing when there are none. The tracks with
+/// audio also become the queue the global player steps through when a row's
+/// Play button is clicked.
 #[component]
 fn TrackList(
     /// The tracks to display
     tracks: Vec<TrackWithArtists>,
+    /// The release's name, used as the bar's second line when a track has no
+    /// featured artists to show instead.
+    release_name: String,
 ) -> Element {
     if tracks.is_empty() {
         return rsx! {};
     }
+    let queue = playable_queue(&tracks, &release_name);
     rsx! {
         h2 { "Tracks" }
         ul { class: "list bg-base-100",
@@ -125,22 +140,51 @@ fn TrackList(
                 Track {
                     key: "{track.track.slug}",
                     track,
+                    queue: queue.clone(),
                 }
             }
         }
     }
 }
 
-/// One track row: thumbnail, name, featured artists, shortened blurb, and a
-/// player when the track has an audio file.
+/// One track row: thumbnail, name, featured artists, shortened blurb, and —
+/// when the track has an audio file — a `⏵ Play` button (which hands the
+/// track, with this release's audio tracks as its queue, to the global bar),
+/// shown as `+ Add to Queue` while the bar plays. Both need the client; a
+/// browser without javascript sees the buttons but no media.
 #[component]
 fn Track(
     /// The track to display
     track: TrackWithArtists,
+    /// This release's global-player queue (its tracks with audio), so the row
+    /// can hand the bar the whole list and find its own place in it.
+    queue: Vec<PlayableTrack>,
 ) -> Element {
     let featured = featured_artist_names(&track);
     let blurb = shorten_string(track.track.description.clone());
-    let player_source = audio_source(&track);
+
+    let player = use_player();
+    let bar_is_open = player().is_active();
+    let is_loaded = player().is_playing(&track.track.slug);
+
+    // A row is in the queue exactly when it has audio; `None` rows get no
+    // button at all.
+    let queue_position = queue
+        .iter()
+        .position(|queued| queued.slug == track.track.slug);
+
+    // One handle per handler. Play moves the queue (the row has no further
+    // use for it); Add to Queue keeps a clone of just this row's entry.
+    let mut play_handler = player;
+    let mut add_handler = player;
+    let own_entry = queue_position.map(|position| queue[position].clone());
+    let queue_for_play = queue;
+    let add_button_class = if is_loaded {
+        "btn btn-ghost btn-active"
+    } else {
+        "btn btn-ghost"
+    };
+
     rsx! {
         li { class: "list-row",
             div {
@@ -160,14 +204,40 @@ fn Track(
                     }
                 }
                 p { class: "text-xs list-col-wrap", "{blurb}" }
-                // The browser's own player. Uploaded audio lives under
-                // `/uploads`, which the server serves to anyone, so a guest
-                // hears the same track a signed-in visitor does.
-                if let Some(source) = player_source {
-                    audio {
-                        class: "w-full not-prose",
-                        controls: true,
-                        src: source,
+                // Uploaded audio lives under `/uploads`, which the server
+                // serves to anyone, so a guest hears the same track a
+                // signed-in visitor does. `⏵ Play` (shown whenever the bar
+                // is closed) starts the track in the bar with this release's
+                // audio tracks as the queue; while the bar plays the button
+                // becomes `+ Add to Queue`, which appends this row's track
+                // to the live queue without disturbing the loaded one.
+                if let Some(position) = queue_position {
+                    if bar_is_open {
+                        // The loaded row keeps the button too: adding the
+                        // playing track replays it later, on purpose.
+                        if let Some(entry) = own_entry {
+                            button {
+                                class: "{add_button_class}",
+                                aria_label: "Add {track.track.name} to queue",
+                                onclick: move |_| {
+                                    add_handler.write().enqueue(entry.clone());
+                                },
+                                "+ Add to Queue"
+                            }
+                        }
+                    } else {
+                        button {
+                            class: "btn btn-ghost",
+                            aria_label: "Play {track.track.name}",
+                            onclick: move |_| {
+                                play_handler
+                                    .write()
+                                    .play(queue_for_play.clone(), position);
+                            },
+                            // U+FE0E, as in the bar's transport: a text ⏵
+                            // in the theme's colour, not an emoji.
+                            "⏵\u{FE0E} Play"
+                        }
                     }
                 }
             }
@@ -180,6 +250,32 @@ fn Track(
 /// window, where the page's own origin has no uploads (see [`crate::ui::assets`]).
 fn audio_source(track: &TrackWithArtists) -> Option<String> {
     track.track.audio_url().map(|url| served_file_url(&url))
+}
+
+/// This release's global-player queue: the tracks with audio, in list order,
+/// each carrying what the bar shows. Featured artists (when any) form the
+/// bar's second line, otherwise the release's name does. Tracks without audio
+/// are left out, so previous/next step only through playable tracks.
+#[must_use]
+fn playable_queue(tracks: &[TrackWithArtists], release_name: &str) -> Vec<PlayableTrack> {
+    tracks
+        .iter()
+        .filter_map(|track| {
+            let audio_src = audio_source(track)?;
+            let featured = featured_artist_names(track);
+            let line = if featured.is_empty() {
+                release_name.to_string()
+            } else {
+                format!("Featuring {featured}")
+            };
+            Some(PlayableTrack {
+                slug: track.track.slug.clone(),
+                title: track.track.name.clone(),
+                line,
+                audio_src,
+            })
+        })
+        .collect()
 }
 
 /// Names of artists who contributed to the track, excluding the primary
@@ -198,7 +294,7 @@ fn featured_artist_names(track: &TrackWithArtists) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{audio_source, featured_artist_names};
+    use super::{audio_source, featured_artist_names, playable_queue};
     use crate::models::artist::Artist;
     use crate::models::track::Track;
     use crate::models::track_with_artists::TrackWithArtists;
@@ -254,5 +350,49 @@ mod tests {
     fn a_track_without_audio_gets_no_player() {
         let pair = track_with_artists(1, &[1]);
         assert_eq!(audio_source(&pair), None, "no file, no player");
+    }
+
+    #[test]
+    fn the_queue_holds_the_tracks_with_audio_in_list_order() {
+        let mut with_audio = track_with_artists(1, &[1]);
+        with_audio.track.slug = "second".to_string();
+        with_audio.track.name = "Second Track".to_string();
+        with_audio.track.audio = Some("1700000000-second.wav".to_string());
+        let mut first = track_with_artists(1, &[1]);
+        first.track.slug = "first".to_string();
+        first.track.name = "First Track".to_string();
+        first.track.audio = Some("1700000000-first.wav".to_string());
+        let silent = track_with_artists(1, &[1]);
+
+        let queue = playable_queue(&[first, silent, with_audio], "Test Release");
+        assert_eq!(
+            queue
+                .iter()
+                .map(|track| track.slug.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first", "second"],
+            "rows without audio are left out"
+        );
+    }
+
+    #[test]
+    fn queue_lines_use_featured_artists_then_the_release_name() {
+        let mut featured_track = track_with_artists(1, &[1, 2, 3]);
+        featured_track.track.audio = Some("1700000000-one.wav".to_string());
+        let mut plain_track = track_with_artists(1, &[1]);
+        plain_track.track.audio = Some("1700000000-two.wav".to_string());
+
+        let queue = playable_queue(&[featured_track, plain_track], "Test Release");
+        assert_eq!(queue[0].line, "Featuring Artist 2, Artist 3");
+        assert_eq!(queue[1].line, "Test Release", "no features, so the release");
+    }
+
+    #[test]
+    fn a_release_without_any_audio_has_an_empty_queue() {
+        let tracks = vec![track_with_artists(1, &[1]), track_with_artists(1, &[1, 2])];
+        assert!(
+            playable_queue(&tracks, "Test Release").is_empty(),
+            "nothing playable, so nothing to queue"
+        );
     }
 }

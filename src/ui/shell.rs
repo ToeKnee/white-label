@@ -23,20 +23,25 @@ use crate::ui::SessionHint;
 use crate::ui::assets::bundled_asset;
 use crate::ui::footer::LabelFooter;
 use crate::ui::header::LabelHeader;
+use crate::ui::player::{GlobalPlayer, PlayerState};
 
 /// The application root — handed to `dioxus::server::router` in
 /// `crate::server::build_router`.
 ///
-/// Sets up the document head and provides the chrome's [`SessionHint`]. (The
-/// current user is not a context: every component that needs it reads the
-/// session through `super::use_user`, and the label the chrome shows comes
-/// from `super::use_label` in the components that render it.)
+/// Sets up the document head and provides the chrome's [`SessionHint`] and the
+/// global player's [`PlayerState`]. (The current user is not a context: every
+/// component that needs it reads the session through `super::use_user`, and the
+/// label the chrome shows comes from `super::use_label` in the components that
+/// render it.)
 ///
 /// The session hint is what a reactive sign-in or sign-out hands the chrome,
-/// which outlives the navigation and cannot re-read its own page resource
-/// (see [`SessionHint`]).
+/// which outlives the navigation and cannot re-read its own page resource (see
+/// [`SessionHint`]). The player state is provided here rather than in a page so
+/// it — and the audio the bar holds — outlives every route change (see
+/// [`crate::ui::player`]).
 pub fn App() -> Element {
     use_context_provider(|| Signal::new(SessionHint::Unknown));
+    use_context_provider(|| Signal::new(PlayerState::default()));
 
     rsx! {
         document::Meta { charset: "utf-8" }
@@ -70,16 +75,22 @@ fn RememberedLogin() -> Element {
     rsx! {}
 }
 
-/// Chrome shared by every route: navbar, page body inside `<main>`, footer.
-/// The chrome is a flex column filling at least the viewport, and `<main>`
-/// flexes, so the footer sits at the bottom of a short page and directly
-/// below the content on a long one — whichever is lower.
+/// Chrome shared by every route: navbar, page body inside `<main>`, the player
+/// bar, footer. The chrome is a flex column filling at least the viewport, and
+/// `<main>` flexes, so the footer sits at the bottom of a short page and
+/// directly below the content on a long one — whichever is lower. The player bar
+/// is sticky to the bottom edge and renders nothing while no track is loaded.
+///
+/// The bar is chrome rather than page content on purpose: it sits outside the
+/// `Outlet`, so navigating between pages never rebuilds it and a loaded track
+/// keeps playing (see [`crate::ui::player`]).
 #[component]
 pub fn AppShell() -> Element {
     rsx! {
         div { class: "flex min-h-screen flex-col",
             LabelHeader {}
             main { class: "flex-1", Outlet::<Route> {} }
+            GlobalPlayer {}
             LabelFooter {}
         }
     }

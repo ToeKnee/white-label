@@ -33,6 +33,8 @@ pub mod footer;
 pub mod header;
 /// Marketing/legal page details.
 pub mod page;
+/// The global player: the track queue that survives navigation, and its bar.
+pub mod player;
 /// Shared plumbing for the reactive editors.
 pub mod reactive;
 /// The record label home page.

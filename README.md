@@ -124,6 +124,39 @@ in `end2end/` once if the `chromium-1117` / `firefox-1449` builds are missing �
 the client spec runs in both browsers now, and an `npx` from elsewhere installs
 builds this version cannot launch.)
 
+### The global player
+
+`src/ui/player.rs` holds the global player: one track at a time, kept alive
+while the user navigates. `App` provides `PlayerState` as a context (it
+outlives the router) and `AppShell` renders the `GlobalPlayer` bar between
+`<main>` and the footer — _outside_ the `Outlet`, so navigating swaps only the
+page body and the bar's `<audio>` element is never torn down mid-track.
+Transport is glyph buttons (`⏮` `⏭` `⏏`, forced to text presentation —
+`U+FE0E` in the labels plus a `player-glyph` font list in
+`style/tailwind.css`, or browsers paint them from a colour-emoji font that
+ignores the theme): previous/next walk the queue and hold at either end
+rather than wrapping, and a finished track steps to the next.
+
+The public release page (`src/ui/release.rs`) is the play surface: while the
+bar is closed each audio row offers `⏵ Play`, which seeds the bar with that
+track and the release's audio tracks as its queue; while the bar plays, rows
+offer `+ Add to Queue` instead — appending to the end never disturbs the
+loaded track, so a listener grows the queue from any release page (tracks
+can repeat). The bar is the only media on the public site: without the wasm
+client — a browser without javascript, or a server serving no wasm bundle —
+the page shows the buttons and no players at all (the admin track editor's
+preview slot is its own thing, for verifying uploads). Desktop windows are
+covered the same way: `PlayableTrack::audio_src` goes through
+`served_file_url`, so it points at the API origin.
+
+The gate pins both halves: the client spec proves Play opens the bar, that
+Add to Queue counts the place up while the tagged audio node stays put, and
+that the tagged node survives two SPA navigations (and that Close returns the
+rows' Play buttons); the shell spec proves the no-client page offers the
+buttons with no media and no bar. The gate seed repairs
+`e2e-audio-track`'s audio column to `999999999-e2e-audio-track.wav` every run
+(writing the bytes too), so the public pins never see an audio-less fixture.
+
 ### Uploads with progress
 
 `src/ui/upload.rs` holds the picker widget and its two dioxus endpoints. It is

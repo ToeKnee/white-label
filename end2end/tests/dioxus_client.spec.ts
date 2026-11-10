@@ -578,6 +578,114 @@ test("the track editor uploads audio and plays it without a reload", async ({ pa
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
 
+test("Add to Queue grows the live queue without disturbing playback", async ({ page }) => {
+  // While the bar plays, the rows offer `+ Add to Queue` instead of `⏵
+  // Play`: a click appends its track to the end of the queue (here the
+  // playing track itself, repeated twice), and the loaded track — the
+  // tagged audio node — is untouched while the bar's place counts up.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`${base}/artists/e2e-tabs/e2e-audio-release`);
+  await expect(h1(page)).toHaveText("E2E Audio Release");
+  await clientIsLive(page);
+
+  await page.getByRole("button", { name: "Play E2E Audio Track" }).click();
+  await expect(page.locator("#global-player")).toContainText("1 of 1");
+  const add = page.getByRole("button", { name: "Add E2E Audio Track to queue" });
+  await expect(add).toHaveClass(/btn-active/, "the loaded row's button changed");
+  await page.locator("#global-player audio").evaluate((el) => ((el as HTMLElement).dataset.wlProbe = "kept"));
+
+  await add.click();
+  // The fixture's zero-sample wave ends (so the bar advances) as soon as it
+  // loads, hence these pins watch the queue *total* — only Add to Queue can
+  // raise it — rather than the ordinal.
+  await expect(page.locator("#global-player")).toContainText("of 2");
+  await add.click();
+  await expect(page.locator("#global-player")).toContainText("of 3");
+
+  // The bar itself stayed put: one media element on the page, and the
+  // tagged node was never rebuilt.
+  await expect(page.locator("audio")).toHaveCount(1, "only the bar makes sound");
+  await expect(page.locator('#global-player audio[data-wl-probe="kept"]')).toHaveCount(1);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
+test("the global player keeps its track through SPA navigation", async ({ page }) => {
+  // `e2e-audio-track`'s audio name can change mid-run (the upload specs post
+  // to the same fixture row), so pins assert the `/uploads/tracks/` shape
+  // rather than a fixed file name.
+  // The Ideas.md ask: keep listening while moving around the site. The bar
+  // is chrome outside the `Outlet`, so navigation swaps only the page body;
+  // the bar's `<audio>` node — tagged below with a dataset — must survive it
+  // rather than being rebuilt. A guest needs no session to listen.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await page.goto(`${base}/artists/e2e-tabs/e2e-audio-release`);
+  await expect(h1(page)).toHaveText("E2E Audio Release");
+  await clientIsLive(page);
+
+  // With the bar closed the row offers `⏵ Play`, and no media is on the
+  // page yet (the bar is the only player).
+  await expect(page.locator("audio")).toHaveCount(0, "the media only lives in the bar");
+  await expect(page.locator("#global-player")).toHaveCount(0);
+  await page.getByRole("button", { name: "Play E2E Audio Track" }).click();
+
+  // The bar took over: track and place show, and it is the only media on
+  // the page; the row's button became the loaded track's `+ Add to Queue`.
+  await expect(page.locator("#global-player")).toBeVisible();
+  await expect(page.locator("#global-player")).toContainText("E2E Audio Track");
+  await expect(page.locator("#global-player")).toContainText("1 of 1");
+  await expect(page.locator("audio")).toHaveCount(1, "only the bar makes sound");
+  await expect(page.locator("#global-player audio")).toHaveAttribute("src", /^\/uploads\/tracks\//);
+  await expect(page.getByRole("button", { name: "Add E2E Audio Track to queue" })).toHaveClass(/btn-active/);
+
+  // Tag the bar's audio node, then prove *that node* (not just "an audio")
+  // survives two SPA navigations: home via the brand link, then the artist
+  // page from home's artist list.
+  await page.locator("#global-player audio").evaluate((el) => ((el as HTMLElement).dataset.wlProbe = "kept"));
+  const loadsBeforeNavigating = documentLoads;
+
+  await page.locator(".navbar-start a").click();
+  await expect(page).toHaveURL(`${base}/`);
+  await expect(page.locator('#global-player audio[data-wl-probe="kept"]')).toHaveCount(1);
+  await expect(page.locator("#global-player")).toContainText("E2E Audio Track");
+
+  await page.locator('a[href="/artists/e2e-tabs"]').click();
+  await expect(page).toHaveURL(`${base}/artists/e2e-tabs`);
+  await expect(page.locator('#global-player audio[data-wl-probe="kept"]')).toHaveCount(1);
+  expect(documentLoads, "the bar outlived SPA navigation, not a reload").toBe(loadsBeforeNavigating);
+
+  // Transport: a one-track queue holds at both ends (previous/next do not
+  // wrap) and leaves the tagged node alone.
+  await page.getByRole("button", { name: "Next track" }).click();
+  await page.getByRole("button", { name: "Previous track" }).click();
+  await expect(page.locator("#global-player")).toContainText("1 of 1");
+  await expect(page.locator('#global-player audio[data-wl-probe="kept"]')).toHaveCount(1);
+
+  // Close puts the bar away; navigating back to the release (still inside
+  // the same document) finds the row offering `⏵ Play` again — the rows
+  // never carry media of their own.
+  await page.getByRole("button", { name: "Close the player" }).click();
+  await expect(page.locator("#global-player")).toHaveCount(0);
+  await expect(page.locator("audio")).toHaveCount(0, "the artist page has no track rows");
+
+  await page.locator('a[href="/artists/e2e-tabs/e2e-audio-release"]').click();
+  await expect(h1(page)).toHaveText("E2E Audio Release");
+  await expect(page.getByRole("button", { name: "Play E2E Audio Track" })).toBeVisible();
+  await expect(page.locator("audio")).toHaveCount(0);
+  await expect(page.locator("#global-player")).toHaveCount(0);
+  expect(documentLoads, "the whole walk was one document").toBe(loadsBeforeNavigating);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
 test("the markdown editor's preview renders live while typing", async ({ page }) => {
   // The reported gap: on Firefox the preview never updated as the admin typed
   // (it only showed the server-saved text). The `MarkdownField` preview now

@@ -177,6 +177,11 @@ if [ -n "${DATABASE_URL:-}" ]; then
     # every run uploads another file to it. The track conflicts on its ISRC
     # rather than its name (`tracks` has no unique name index, and a UI rename
     # keeps the ISRC while re-slugifying), so a rerun repairs the slug back.
+    # The audio column is repaired to a fixed name every run, and that file is
+    # written in the uploads seed below: the public release page's player pins
+    # run while the upload specs are replacing this row's audio, so they need
+    # the row to name *some* file at all times (the exact name changes
+    # mid-run, so the pins assert the `/uploads/tracks/` shape, not a name).
     psql "$DATABASE_URL" -c "INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at)
         SELECT 'E2E Audio Release', 'e2e-audio-release', 'Gate fixture release for the audio uploader',
                a.label_id, 'E2E-AUDIO-1', a.id, now()
@@ -188,9 +193,10 @@ if [ -n "${DATABASE_URL:-}" ]; then
             primary_artist_id = EXCLUDED.primary_artist_id,
             published_at = COALESCE(releases.published_at, EXCLUDED.published_at),
             deleted_at = NULL;
-        INSERT INTO tracks (name, slug, description, lyrics, isrc_code, bpm, primary_artist_id, release_id, track_number, published_at)
+        INSERT INTO tracks (name, slug, description, lyrics, isrc_code, bpm, primary_artist_id, release_id, track_number, published_at, audio)
         SELECT 'E2E Audio Track', 'e2e-audio-track', 'Gate fixture track for the audio uploader',
-               '', 'E2EAUD12345', 120, r.primary_artist_id, r.id, 1, now()
+               '', 'E2EAUD12345', 120, r.primary_artist_id, r.id, 1, now(),
+               '999999999-e2e-audio-track.wav'
         FROM releases r WHERE r.slug = 'e2e-audio-release'
         ON CONFLICT (isrc_code) DO UPDATE SET
             name = EXCLUDED.name,
@@ -198,7 +204,8 @@ if [ -n "${DATABASE_URL:-}" ]; then
             release_id = EXCLUDED.release_id,
             primary_artist_id = EXCLUDED.primary_artist_id,
             published_at = COALESCE(tracks.published_at, EXCLUDED.published_at),
-            deleted_at = NULL;
+            deleted_at = NULL,
+            audio = EXCLUDED.audio;
         INSERT INTO release_artists (artist_id, release_id)
         SELECT a.id, r.id FROM artists a, releases r
             WHERE a.slug = 'e2e-tabs' AND r.slug = 'e2e-audio-release'
@@ -266,6 +273,12 @@ if [ -n "${UPLOAD_PATH:-}" ]; then
     # click — which no test performs — would ever remove them.
     printf 'E2E purge preview fixture, not a real image' > "$UPLOAD_PATH/releases/999999999-e2e-purge-release.jpg"
     printf 'E2E purge preview fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999999-e2e-purge-track.wav"
+    # The bytes the audio fixture row names. Contents irrelevant: the public
+    # player pins never decode sound, they only check that a src appears and
+    # survives navigation. Rewritten every run, and any file the upload specs
+    # add later just replaces the row's name (this one becomes an orphan,
+    # which the sweep fixtures already keep the purge preview honest about).
+    printf 'E2E player pin fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999999-e2e-audio-track.wav"
     # The unreferenced-file sweep fixture: a file no row (or seed) ever
     # names, which the preview must always list and a confirmed purge
     # would remove. Recreated every run, so an accidental manual purge
