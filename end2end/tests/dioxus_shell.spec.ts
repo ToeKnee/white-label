@@ -79,6 +79,55 @@ const loginAs = async (page: import("@playwright/test").Page, username: string) 
 const requireAdmin = () =>
   test.skip(process.env.E2E_ADMIN_OK !== "1", "needs e2e-admin seeded; see run-dioxus-gate.sh");
 
+/**
+ * Measures what a brand-logo `<img>` is painted *on*. The artwork's ink is fixed
+ * (the Spotify wordmark is near-black; Apple and Threads ship no fill at all, so
+ * they render black), so readability is a property of the backing: the first
+ * opaque background at or above the img, falling back to the white canvas the
+ * browser paints. Colours go through a 1x1 canvas because daisyUI themes compute
+ * to oklch/lab; `luma` is perceived brightness on a 0..255 scale and `backing`
+ * keeps the sRGB channels, so a test can tell a tint from white. `pageLuma` is
+ * the `<html>` background, which flips with the colour scheme and so proves an
+ * `emulateMedia` call actually changed the theme.
+ */
+const measureLogoBacking = async (page: import("@playwright/test").Page, logo: string) => {
+  const measured = await page.evaluate((selector) => {
+    const channels = (colour: string) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("canvas 2d is unavailable");
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = colour;
+      context.fillRect(0, 0, 1, 1);
+      return [...context.getImageData(0, 0, 1, 1).data] as [number, number, number, number];
+    };
+    const luma = ([red, green, blue]: [number, number, number, number]) =>
+      Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue);
+
+    const img = document.querySelector(selector);
+    if (!img) return null;
+    let backing: [number, number, number, number] = [255, 255, 255, 255];
+    for (let node: Element | null = img; node; node = node.parentElement) {
+      const colour = channels(getComputedStyle(node).backgroundColor);
+      if (colour[3] === 255) {
+        backing = colour;
+        break;
+      }
+    }
+    const card = img.closest(".card");
+    return {
+      backing: [...backing],
+      backingLuma: luma(backing),
+      cardLuma: card ? luma(channels(getComputedStyle(card).backgroundColor)) : null,
+      pageLuma: luma(channels(getComputedStyle(document.documentElement).backgroundColor)),
+    };
+  }, logo);
+
+  expect(measured, `${logo} should render a logo`).not.toBeNull();
+  return measured!;
+};
+
 test("home renders the shell: navbar, main, footer", async ({ page }) => {
   await page.goto(`${base}/`);
   await expect(page.locator(".navbar")).toBeVisible();
@@ -217,6 +266,42 @@ test("an unknown release slug under a known artist shows 404", async ({ page }) 
   await expect(page.locator("footer")).toBeVisible();
 });
 
+test("streaming logos keep a light backing for their fixed dark ink", async ({ page }) => {
+  // Official brand artwork cannot be recoloured (the Spotify wordmark is
+  // near-black, Apple ships no fill at all), while the `black` theme paints the
+  // page itself black, so each logo tile carries a light backing of its own:
+  // `bg-brand-plate`, whose colour each theme supplies (white in `lofi`, a tint
+  // of `black`'s blues in dark mode — see `style/tailwind.css`). `e2e-logos` is
+  // seeded by `run-dioxus-gate.sh` and is deliberately *not* the artist the
+  // links save/clear tests edit, since those wipe its rows mid-run.
+  const spotifyLogo = 'img[src$="/music_services/Spotify.svg"]';
+  await page.goto(`${base}/artists/e2e-logos`);
+  await expect(page.locator(spotifyLogo)).toBeVisible();
+
+  await page.emulateMedia({ colorScheme: "light" });
+  const light = await measureLogoBacking(page, spotifyLogo);
+  await page.emulateMedia({ colorScheme: "dark" });
+  const dark = await measureLogoBacking(page, spotifyLogo);
+
+  // Whatever the theme paints the page, the fixed ink must sit on light.
+  expect(light.backingLuma, "the light theme needs a light backing").toBeGreaterThanOrEqual(180);
+  expect(dark.backingLuma, "the dark theme needs a light backing").toBeGreaterThanOrEqual(180);
+  // The colour-scheme emulation really did swap themes: `lofi` paints the page
+  // near-white, `black` near-black. Without that, the check above would just be
+  // measuring one theme twice.
+  expect(light.pageLuma, "the light theme paints the page light").toBeGreaterThanOrEqual(200);
+  expect(dark.pageLuma, "the dark theme paints the page dark").toBeLessThanOrEqual(60);
+  // On a dark page the light has to come from the tile, not from the page.
+  expect(dark.backingLuma - dark.pageLuma).toBeGreaterThanOrEqual(120);
+  // The backing is themed rather than hardcoded white: `lofi` plates on white so
+  // the tile disappears into that light page, while the dark theme plates with a
+  // tint of its own blues — light enough to read, without glaring white tiles.
+  expect(light.backingLuma, "the light theme plates on white").toBeGreaterThanOrEqual(250);
+  expect(dark.backingLuma, "the dark theme plates with a tint, not white").toBeLessThan(250);
+  const [tintRed, , tintBlue] = dark.backing;
+  expect(tintBlue, "the dark theme's plate tints toward its own blues").toBeGreaterThan(tintRed);
+});
+
 test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
   requireAdmin();
   await loginAs(page, "e2e-admin");
@@ -251,6 +336,23 @@ test("nested admin tabs navigate and mark the active tab", async ({ page }) => {
   await expect(h1(page)).toHaveText("E2E Tabs Artist Images");
   await expect(page.getByRole("tab", { name: "Images" })).toHaveClass(/tab-active/);
   await expect(page.locator('input[name="file_to_upload"]')).toHaveCount(1);
+});
+
+test("the links editor gives its streaming logos a light panel", async ({ page }) => {
+  // The card class is the saved/unsaved signal (accent versus secondary) and
+  // `lofi` paints both dark, so the logo gets a light panel *inside* the card
+  // rather than the card turning light. Every platform card renders whether or
+  // not the artist has a saved row, so this needs no streaming rows seeded.
+  requireAdmin();
+  const spotifyLogo = 'img[src$="/music_services/Spotify.svg"]';
+  await loginAs(page, "e2e-admin");
+  await page.goto(`${base}/admin/artist/e2e-tabs/links`);
+  await expect(page.locator(spotifyLogo)).toBeVisible();
+
+  const backing = await measureLogoBacking(page, spotifyLogo);
+  expect(backing.backingLuma, "the logo needs a light backing").toBeGreaterThanOrEqual(180);
+  expect(backing.cardLuma, "the light theme paints the link card dark").not.toBeNull();
+  expect(backing.cardLuma!).toBeLessThan(100);
 });
 
 test("an upload works without javascript, as a multipart form post", async ({ page }) => {

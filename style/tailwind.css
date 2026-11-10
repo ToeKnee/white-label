@@ -18,3 +18,35 @@
     --color-neutral-content: #141618;
     --color-info: #b13840;
 }
+
+/* Backing for official brand artwork (the streaming logos). Their ink is fixed by
+ * the brand files — Spotify/Tidal/Amazon wordmarks are near-black, and Apple and
+ * Threads ship no fill at all, so they render black — which means the artwork
+ * needs a light surface under it whatever the theme paints around it. `bg-brand-plate`
+ * supplies one per theme: white under `lofi`, whose page is already light, and a
+ * soft tint of the `black` palette's blues there, so dark-mode tiles read as part
+ * of the theme instead of glaring white.
+ *
+ * The selectors mirror how daisyUI scopes the two compiled themes
+ * (`lofi --default`, `black --prefersdark`); the app never sets `data-theme`, the
+ * theme-controller variant is included only so an explicit override still works. */
+:root,
+[data-theme="lofi"] {
+    --brand-plate: #ffffff;
+}
+
+[data-theme="black"] {
+    --brand-plate: #d8e4ea;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        --brand-plate: #d8e4ea;
+    }
+}
+
+/* `inline` keeps the var reference in the generated utility, so `bg-brand-plate`
+ * resolves per theme at its use site. */
+@theme inline {
+    --color-brand-plate: var(--brand-plate);
+}

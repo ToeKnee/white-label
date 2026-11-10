@@ -262,7 +262,7 @@ fn SocialLinks(
     }
 }
 
-/// The music service links for an artist, as logo cards.
+/// The music service links for an artist, as logo tiles on a light backing.
 #[component]
 fn MusicLinks(
     /// The artist's name, for the heading.
@@ -283,19 +283,20 @@ fn MusicLinks(
                         href: music_service.url.clone(),
                         class: "link link-hover",
                         target: "_blank",
-                        div { class: "shadow-sm card bg-neutral text-neutral-content card-xs",
-                            div { class: "card-body",
-                                figure {
-                                    img {
-                                        class: "m-2 w-auto h-6",
-                                        src: bundled_asset(&format!(
-                                            "/images/music_services/{platform}.svg",
-                                            platform = music_service.platform,
-                                        )),
-                                        alt: music_service.platform.to_string(),
-                                    }
-                                }
-                            }
+                        // Official brand artwork ships fixed near-black ink (the Spotify,
+                        // Tidal and Amazon wordmarks, and Apple/Threads ship no fill at all),
+                        // and the `black` theme paints the page itself dark, so the logo
+                        // carries its own light backing rather than sitting on a card: a dark
+                        // card would just frame the logo in black. `bg-brand-plate` is that
+                        // backing, themed (white in `lofi`, a tint of `black`'s palette in
+                        // dark mode) — see `style/tailwind.css`.
+                        img {
+                            class: "w-auto h-8 rounded bg-brand-plate p-1",
+                            src: bundled_asset(&format!(
+                                "/images/music_services/{platform}.svg",
+                                platform = music_service.platform,
+                            )),
+                            alt: music_service.platform.to_string(),
                         }
                     }
                 }

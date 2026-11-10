@@ -315,6 +315,13 @@ fn MusicServiceCards(
                 div { class: "{card_class}",
                     div { class: "card-body",
                         figure {
+                            // The card class stays the saved/unsaved signal, and `lofi`
+                            // paints it dark, so the logo gets a light panel of its own here
+                            // too: a plate around the logo alone would read as a black frame,
+                            // while this panel spans the card. `bg-brand-plate` is the themed
+                            // backing from `style/tailwind.css`; `ui::artist::MusicLinks`
+                            // gives its logos the same backing.
+                            class: "w-full rounded bg-brand-plate p-2",
                             img {
                                 class: "w-auto h-12",
                                 src: "{icon}",

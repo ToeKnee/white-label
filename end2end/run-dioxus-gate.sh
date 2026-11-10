@@ -139,6 +139,30 @@ if [ -n "${DATABASE_URL:-}" ]; then
             label_id = EXCLUDED.label_id,
             published_at = COALESCE(artists.published_at, EXCLUDED.published_at),
             deleted_at = NULL;" || echo "WARNING: could not seed the e2e-tabs artist (is psql installed?)"
+    # A public artist whose only job is to carry streaming links, so its artist
+    # page always renders the "Listen to ..." logo tiles that the backing pin in
+    # `tests/dioxus_shell.spec.ts` measures. It is separate from `e2e-tabs` on
+    # purpose: the links save/clear tests delete `e2e-tabs`' rows mid-run, and
+    # the specs run in parallel. `music_services` has no unique index over
+    # (artist_id, platform), so the links guard with NOT EXISTS, not ON CONFLICT.
+    psql "$DATABASE_URL" -c "INSERT INTO artists (name, slug, description, website, label_id, published_at)
+        SELECT 'E2E Logos Artist', 'e2e-logos', 'Gate fixture artist for the streaming-logo pins',
+               'https://e2e-logos.example.com', id, now()
+        FROM labels ORDER BY id LIMIT 1
+        ON CONFLICT (name) DO UPDATE SET
+            slug = EXCLUDED.slug,
+            label_id = EXCLUDED.label_id,
+            published_at = COALESCE(artists.published_at, EXCLUDED.published_at),
+            deleted_at = NULL;
+        INSERT INTO music_services (artist_id, platform, url)
+        SELECT a.id, link.platform::platform, link.url FROM artists a
+        CROSS JOIN (VALUES ('Spotify', 'https://open.spotify.com/artist/e2e-logos'),
+                           ('Bandcamp', 'https://e2e-logos.bandcamp.com'))
+            AS link(platform, url)
+        WHERE a.slug = 'e2e-logos'
+          AND NOT EXISTS (SELECT 1 FROM music_services ms
+              WHERE ms.artist_id = a.id AND ms.platform = link.platform::platform);" \
+        || echo "WARNING: could not seed the e2e-logos streaming artist (is psql installed?)"
     # The release editor client spec creates a row per browser run (a unique
     # name and catalogue number, left soft-deleted on purpose). Pruning first
     # keeps the seeded artist's release list short and every run equivalent to

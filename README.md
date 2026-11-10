@@ -105,7 +105,10 @@ to in the dev database once (see the comments in the script; the browser
 checks skip without it), an `e2e-tabs` artist row the script seeds
 straight into the dev DB with `psql` and **repairs** on every run (its slug
 does not match `slugify(name)` on purpose: if a code path ever re-derives a
-slug from a name on save, the page pins break instead of drifting quietly), a
+slug from a name on save, the page pins break instead of drifting quietly), an
+`e2e-logos` artist carrying `Spotify` and `Bandcamp` streaming links (its public
+page renders the logo tiles the readability pin measures, and the links
+save/clear tests deliberately never touch it), a
 chromium navigation + auth smoke test against the SSR-only server, and the
 hydrated-client run against the `dx` bundle server (dev DB; ports 8127 and
 8131). Page pins go through `pin`/`no_pin`, which print what they checked and
