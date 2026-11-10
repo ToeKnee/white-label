@@ -63,6 +63,9 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
     // Cloning inside the closures: `use_page` keeps them as `FnMut`s it may
     // call again on a later refetch.
     let navigator = use_navigator();
+    // The track list hands its artist slug to the global player: that is the
+    // catalogue the queue is topped up from when it runs out.
+    let tracklist_artist_slug = artist_slug.clone();
 
     let artist = use_page(move || page_data(get_artist(artist_slug.clone())))?;
     let artist = match artist() {
@@ -113,6 +116,7 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
             TrackList {
                 tracks,
                 release_name: release.name.clone(),
+                artist_slug: tracklist_artist_slug,
             }
         }
     }
@@ -120,7 +124,8 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
 
 /// The tracks on a release, or nothing when there are none. The tracks with
 /// audio also become the queue the global player steps through when a row's
-/// Play button is clicked.
+/// Play button is clicked, and each entry carries `artist_slug` so the bar
+/// knows whose catalogue to draw more tracks from when that queue runs out.
 #[component]
 fn TrackList(
     /// The tracks to display
@@ -128,11 +133,14 @@ fn TrackList(
     /// The release's name, used as the bar's second line when a track has no
     /// featured artists to show instead.
     release_name: String,
+    /// The artist this release belongs to, by slug: every queue entry's
+    /// catalogue, for the bar's auto-append.
+    artist_slug: String,
 ) -> Element {
     if tracks.is_empty() {
         return rsx! {};
     }
-    let queue = playable_queue(&tracks, &release_name);
+    let queue = playable_queue(&tracks, &release_name, &artist_slug);
     rsx! {
         h2 { "Tracks" }
         ul { class: "list bg-base-100",
@@ -253,11 +261,16 @@ fn audio_source(track: &TrackWithArtists) -> Option<String> {
 }
 
 /// This release's global-player queue: the tracks with audio, in list order,
-/// each carrying what the bar shows. Featured artists (when any) form the
-/// bar's second line, otherwise the release's name does. Tracks without audio
-/// are left out, so previous/next step only through playable tracks.
+/// each carrying what the bar shows plus this release's artist (the catalogue
+/// the bar tops up from). Featured artists (when any) form the bar's second
+/// line, otherwise the release's name does. Tracks without audio are left
+/// out, so previous/next step only through playable tracks.
 #[must_use]
-fn playable_queue(tracks: &[TrackWithArtists], release_name: &str) -> Vec<PlayableTrack> {
+fn playable_queue(
+    tracks: &[TrackWithArtists],
+    release_name: &str,
+    artist_slug: &str,
+) -> Vec<PlayableTrack> {
     tracks
         .iter()
         .filter_map(|track| {
@@ -273,16 +286,19 @@ fn playable_queue(tracks: &[TrackWithArtists], release_name: &str) -> Vec<Playab
                 title: track.track.name.clone(),
                 line,
                 audio_src,
+                artist_slug: artist_slug.to_string(),
             })
         })
         .collect()
 }
 
 /// Names of artists who contributed to the track, excluding the primary
-/// artist (the `FeaturedTrackArtists` component's logic; extracted as a
-/// pure function so the empty case and the join are testable).
+/// artist (the `FeaturedTrackArtists` component's logic; extracted as a pure
+/// function so the empty case and the join are testable). Shared with the
+/// global player, which builds the same bar line for the tracks it fetches
+/// when a queue runs out.
 #[must_use]
-fn featured_artist_names(track: &TrackWithArtists) -> String {
+pub(crate) fn featured_artist_names(track: &TrackWithArtists) -> String {
     track
         .artists
         .iter()
@@ -364,7 +380,7 @@ mod tests {
         first.track.audio = Some("1700000000-first.wav".to_string());
         let silent = track_with_artists(1, &[1]);
 
-        let queue = playable_queue(&[first, silent, with_audio], "Test Release");
+        let queue = playable_queue(&[first, silent, with_audio], "Test Release", "test-artist");
         assert_eq!(
             queue
                 .iter()
@@ -376,13 +392,27 @@ mod tests {
     }
 
     #[test]
+    fn every_queue_entry_carries_the_release_artist() {
+        // The bar tops the queue up from this slug when it runs out, so each
+        // entry has to carry it.
+        let mut with_audio = track_with_artists(1, &[1]);
+        with_audio.track.audio = Some("1700000000-one.wav".to_string());
+        let queue = playable_queue(&[with_audio], "Test Release", "jimi");
+        assert_eq!(queue[0].artist_slug, "jimi");
+    }
+
+    #[test]
     fn queue_lines_use_featured_artists_then_the_release_name() {
         let mut featured_track = track_with_artists(1, &[1, 2, 3]);
         featured_track.track.audio = Some("1700000000-one.wav".to_string());
         let mut plain_track = track_with_artists(1, &[1]);
         plain_track.track.audio = Some("1700000000-two.wav".to_string());
 
-        let queue = playable_queue(&[featured_track, plain_track], "Test Release");
+        let queue = playable_queue(
+            &[featured_track, plain_track],
+            "Test Release",
+            "test-artist",
+        );
         assert_eq!(queue[0].line, "Featuring Artist 2, Artist 3");
         assert_eq!(queue[1].line, "Test Release", "no features, so the release");
     }
@@ -391,7 +421,7 @@ mod tests {
     fn a_release_without_any_audio_has_an_empty_queue() {
         let tracks = vec![track_with_artists(1, &[1]), track_with_artists(1, &[1, 2])];
         assert!(
-            playable_queue(&tracks, "Test Release").is_empty(),
+            playable_queue(&tracks, "Test Release", "test-artist").is_empty(),
             "nothing playable, so nothing to queue"
         );
     }

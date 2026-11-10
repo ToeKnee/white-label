@@ -526,6 +526,51 @@ impl Track {
 
         Ok(artists)
     }
+
+    /// The artist's playable tracks, for the global player's auto-append:
+    /// tracks with an audio file, led by this artist, from releases that are
+    /// themselves published and not deleted, skipping any whose slug appears
+    /// in `exclude_slugs` (what the live queue already holds), capped at
+    /// `limit`. Chosen at random so repeat listeners keep hearing different
+    /// tracks from the catalogue.
+    ///
+    /// Visibility is deliberately the public one only: this feeds a listener
+    /// topping up their queue, not an editor's preview, so unpublished and
+    /// soft-deleted tracks and releases never appear.
+    ///
+    /// # Errors
+    /// Database failures surface as they are; an unknown `artist_id` simply
+    /// answers with no rows.
+    #[cfg(feature = "server")]
+    pub async fn list_playable_by_artist_id(
+        pool: &PgPool,
+        artist_id: i64,
+        exclude_slugs: &[String],
+        limit: i64,
+    ) -> anyhow::Result<Vec<Self>> {
+        let tracks = sqlx::query_as::<_, Self>(
+            "SELECT tracks.* FROM tracks
+             INNER JOIN releases ON tracks.release_id = releases.id
+             WHERE tracks.primary_artist_id = $1
+              AND tracks.audio IS NOT NULL
+              AND tracks.deleted_at IS NULL
+              AND tracks.published_at IS NOT NULL
+              AND tracks.published_at < NOW()
+              AND releases.deleted_at IS NULL
+              AND releases.published_at IS NOT NULL
+              AND releases.published_at < NOW()
+              AND NOT (tracks.slug = ANY($2::text[]))
+             ORDER BY random()
+             LIMIT $3",
+        )
+        .bind(artist_id)
+        .bind(exclude_slugs)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(tracks)
+    }
 }
 
 #[cfg(test)]

@@ -27,7 +27,7 @@ use crate::api_types::page::PageResult;
 use crate::api_types::purge::PurgeResult;
 use crate::api_types::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
 use crate::api_types::release::{ReleaseResult, ReleasesResult};
-use crate::api_types::track::TrackResult;
+use crate::api_types::track::{ContinuationResult, TrackResult};
 #[cfg(feature = "server")]
 use crate::error::AppError;
 use crate::forms::links::LinksForm;
@@ -234,6 +234,33 @@ pub async fn get_track(
     )
     .await
     {
+        Ok(result) => Ok(result),
+        Err(error) => to_http_error(&error),
+    }
+}
+
+/// Tracks to top the global player's queue up with when it runs out (see
+/// [`crate::ui::player`]): up to the service's batch size of audio tracks led
+/// by `artist_slug`, picked at random, skipping `exclude_slugs` — the queued
+/// slugs comma-joined (slugs never contain commas, which is what makes one
+/// query parameter enough). Public visibility only, so a guest listener gets
+/// exactly what a guest browser can open; no session extractor needed.
+///
+/// # Errors
+/// 404 when the slug matches no artist, 500 on database failure.
+#[get("/api/get_continuation_tracks?artist_slug&exclude_slugs",
+    db: crate::server::current_user::Db
+)]
+pub async fn get_continuation_tracks(
+    artist_slug: String,
+    exclude_slugs: String,
+) -> core::result::Result<ContinuationResult, HttpError> {
+    let excluded = exclude_slugs
+        .split(',')
+        .filter(|slug| !slug.is_empty())
+        .map(str::to_string)
+        .collect();
+    match services::track::continuation_tracks_service(&db.0, artist_slug, excluded).await {
         Ok(result) => Ok(result),
         Err(error) => to_http_error(&error),
     }

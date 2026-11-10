@@ -1,11 +1,14 @@
 //! Services for the tracks routes
-use crate::api_types::track::TrackResult;
+use crate::api_types::track::{ContinuationResult, TrackResult, UpcomingAudio};
 use crate::error::AppError;
 use sqlx::PgPool;
 
 use super::authentication_helpers::user_with_permissions;
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
-use crate::models::{artist::Artist, auth::User, release::Release, track::Track};
+use crate::models::{
+    artist::Artist, auth::User, release::Release, track::Track,
+    track_with_artists::TrackWithArtists,
+};
 
 /// `Artist::find_by_slug` wired onto the service error ladder: a missing
 /// row is a 404 with the model's message, a database failure stays a 500.
@@ -102,6 +105,65 @@ pub async fn get_track_service(
     })?;
 
     Ok(TrackResult { track, artists })
+}
+
+/// How many tracks one continuation batch offers the global player.
+///
+/// Small on purpose: the listener reaches the end again soon and gets a fresh
+/// random pick rather than a whole discography dumped into the queue.
+#[cfg(feature = "server")]
+pub const CONTINUATION_BATCH: i64 = 5;
+
+/// Tracks to top the global player's queue up with when it runs out.
+///
+/// Up to [`CONTINUATION_BATCH`] audio tracks led by `artist_slug`, picked at
+/// random and skipping the slugs in `exclude_slugs` (what the queue already
+/// holds). Visibility is the public one: only published, undeleted tracks on
+/// published, undeleted releases answer, whoever the session is.
+///
+/// # Errors
+/// 404 when the slug matches no artist, 500 on database failure.
+#[cfg(feature = "server")]
+pub async fn continuation_tracks_service(
+    pool: &PgPool,
+    artist_slug: String,
+    exclude_slugs: Vec<String>,
+) -> Result<ContinuationResult, AppError> {
+    let artist = lookup_artist(pool, artist_slug).await?;
+
+    let tracks =
+        Track::list_playable_by_artist_id(pool, artist.id, &exclude_slugs, CONTINUATION_BATCH)
+            .await
+            .map_err(|e| {
+                let err = format!("Error while getting continuation tracks: {e:?}");
+                tracing::error!("{err}");
+                AppError::internal(e)
+            })?;
+
+    let mut upcoming = Vec::with_capacity(tracks.len());
+    for track in tracks {
+        // Same shape the release page's rows carry, so the player maps them
+        // the same way; the batch is at most `CONTINUATION_BATCH` long, so
+        // this per-track loading matches `Release::get_tracks`' own pattern.
+        let artists = track.get_artists(pool).await.map_err(|e| {
+            let err = format!("Error while getting track artists: {e:?}");
+            tracing::error!("{err}");
+            AppError::internal(e)
+        })?;
+        let release = Release::get_by_id(pool, track.release_id)
+            .await
+            .map_err(|e| {
+                let err = format!("Error while getting the track's release: {e:?}");
+                tracing::error!("{err}");
+                AppError::internal(e)
+            })?;
+        upcoming.push(UpcomingAudio {
+            track: TrackWithArtists { track, artists },
+            release_name: release.name,
+        });
+    }
+
+    Ok(ContinuationResult { tracks: upcoming })
 }
 
 /// Create a new track
@@ -771,6 +833,222 @@ mod tests {
         assert_eq!(
             restored_track.unwrap_err().to_string(),
             "You do not have permission.".to_string()
+        );
+    }
+
+    /// Give a track an audio file name. Uploads own the `audio` column in the
+    /// model layer (an update deliberately keeps a stored file), so these
+    /// fixtures set it straight, as the SSR tests in `crate::server` do.
+    async fn give_audio(pool: &PgPool, track: &Track, file: &str) {
+        sqlx::query("UPDATE tracks SET audio = $1 WHERE id = $2")
+            .bind(file)
+            .bind(track.id)
+            .execute(pool)
+            .await
+            .expect("stored audio");
+    }
+
+    /// The slugs the service offered, sorted: the batch arrives in random
+    /// order, so the pins assert membership rather than sequence.
+    fn continuation_slugs(result: &ContinuationResult) -> Vec<String> {
+        let mut slugs: Vec<String> = result
+            .tracks
+            .iter()
+            .map(|upcoming| upcoming.track.track.slug.clone())
+            .collect();
+        slugs.sort();
+        slugs
+    }
+
+    #[sqlx::test]
+    async fn continuation_offers_the_artist_audio_tracks(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label))
+            .await
+            .unwrap();
+        let release_one = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let release_two = create_test_release(&pool, 2, Some(artist.clone()))
+            .await
+            .unwrap();
+        let on_one = create_test_track(&pool, 1, Some(release_one), Some(artist.clone()))
+            .await
+            .unwrap();
+        let on_two = create_test_track(&pool, 2, Some(release_two.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+        let _silent = create_test_track(&pool, 3, Some(release_two), Some(artist.clone()))
+            .await
+            .unwrap();
+        give_audio(&pool, &on_one, "1700000000-one.wav").await;
+        give_audio(&pool, &on_two, "1700000000-two.wav").await;
+
+        let result = continuation_tracks_service(&pool, artist.slug.clone(), Vec::new())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            continuation_slugs(&result),
+            vec!["test-track-1", "test-track-2"],
+            "tracks with audio, on either release, and no silent row"
+        );
+        // The bar shows where each fetched track came from, and its featured
+        // artists come along in the same shape the release page carries.
+        let by_slug: std::collections::BTreeMap<_, _> = result
+            .tracks
+            .iter()
+            .map(|upcoming| (upcoming.track.track.slug.as_str(), upcoming))
+            .collect();
+        assert_eq!(by_slug["test-track-1"].release_name, "Test Release 1");
+        assert_eq!(by_slug["test-track-2"].release_name, "Test Release 2");
+        assert_eq!(
+            by_slug["test-track-1"].track.artists.len(),
+            1,
+            "the featured artists come along in the same shape the release page carries"
+        );
+        assert!(
+            result
+                .tracks
+                .iter()
+                .all(|upcoming| upcoming.track.track.audio_url().is_some()),
+            "everything offered is playable"
+        );
+    }
+
+    #[sqlx::test]
+    async fn continuation_leaves_out_the_queued_slugs(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let first = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+        let second = create_test_track(&pool, 2, Some(release), Some(artist.clone()))
+            .await
+            .unwrap();
+        give_audio(&pool, &first, "1700000000-one.wav").await;
+        give_audio(&pool, &second, "1700000000-two.wav").await;
+
+        // The live queue holds `first` (and names it twice, as Add to Queue
+        // may): the fetch must offer `second` only.
+        let excluded = vec![first.slug.clone(), first.slug.clone()];
+        let result = continuation_tracks_service(&pool, artist.slug.clone(), excluded)
+            .await
+            .unwrap();
+        assert_eq!(continuation_slugs(&result), vec!["test-track-2"]);
+    }
+
+    #[sqlx::test]
+    async fn continuation_shields_the_listener_from_invisible_rows(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        // One audio track for each way a row can hide from the public: the
+        // track itself unpublished, soft-deleted, or dated ahead, and the
+        // track sitting under a soft-deleted or unpublished release.
+        let unpublished = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+        let deleted = create_test_track(&pool, 2, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+        let deleted = deleted.delete(&pool).await.unwrap();
+        let future = create_test_track(&pool, 3, Some(release), Some(artist.clone()))
+            .await
+            .unwrap();
+        // `None` releases: each gets its own, created along with the track.
+        let on_deleted_release = create_test_track(&pool, 4, None, Some(artist.clone()))
+            .await
+            .unwrap();
+        let on_unpublished_release = create_test_track(&pool, 5, None, Some(artist.clone()))
+            .await
+            .unwrap();
+
+        // The visibility shifts themselves go straight to SQL: they are the
+        // rows' stored state, not model edits.
+        sqlx::query("UPDATE tracks SET published_at = NULL WHERE slug = $1")
+            .bind("test-track-1")
+            .execute(&pool)
+            .await
+            .expect("unpublished track");
+        sqlx::query("UPDATE tracks SET published_at = now() + interval '1 day' WHERE slug = $1")
+            .bind("test-track-3")
+            .execute(&pool)
+            .await
+            .expect("future track");
+        sqlx::query("UPDATE releases SET deleted_at = now() WHERE id = $1")
+            .bind(on_deleted_release.release_id)
+            .execute(&pool)
+            .await
+            .expect("soft-deleted release");
+        sqlx::query("UPDATE releases SET published_at = NULL WHERE id = $1")
+            .bind(on_unpublished_release.release_id)
+            .execute(&pool)
+            .await
+            .expect("unpublished release");
+        // Every one of them names an audio file: it is visibility, not
+        // silence, that leaves them out.
+        for track in [
+            &unpublished,
+            &deleted,
+            &future,
+            &on_deleted_release,
+            &on_unpublished_release,
+        ] {
+            give_audio(&pool, track, "1700000000-hidden.wav").await;
+        }
+
+        let result = continuation_tracks_service(&pool, artist.slug.clone(), Vec::new())
+            .await
+            .unwrap();
+        assert!(
+            result.tracks.is_empty(),
+            "nothing a guest should not already be able to open"
+        );
+    }
+
+    #[sqlx::test]
+    async fn continuation_caps_the_batch(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 1).await.unwrap();
+        let artist = create_test_artist(&pool, 1, Some(record_label))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        for n in 1..=7 {
+            let track = create_test_track(&pool, n, Some(release.clone()), Some(artist.clone()))
+                .await
+                .unwrap();
+            give_audio(&pool, &track, &format!("1700000000-track-{n}.wav")).await;
+        }
+
+        let result = continuation_tracks_service(&pool, artist.slug.clone(), Vec::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            result.tracks.len(),
+            usize::try_from(CONTINUATION_BATCH).unwrap(),
+            "a discography stays out of the queue: the next end asks for more"
+        );
+    }
+
+    #[sqlx::test]
+    async fn continuation_unknown_artist_is_not_found(pool: PgPool) {
+        let result = continuation_tracks_service(&pool, "nobody".to_string(), Vec::new()).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not find artist with slug nobody.".to_string()
         );
     }
 }

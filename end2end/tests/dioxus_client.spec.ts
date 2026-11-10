@@ -686,6 +686,49 @@ test("the global player keeps its track through SPA navigation", async ({ page }
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
 
+test("the queue auto-appends the artist's other tracks when it runs out", async ({ page }) => {
+  // The Ideas.md ask, on the `e2e-radio` fixtures: album A has one audio
+  // track, album B two, and the fetch answers at random, so the pins watch
+  // queue *totals*, artist membership and the bar's release line — never
+  // ordinals or batch order. Chromium ends a zero-sample fixture the moment
+  // it loads, so the bar may already have appended (and run to the end)
+  // before the first click; the assertions below hold at every point of
+  // that race.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`${base}/artists/e2e-radio/e2e-radio-album-a`);
+  await expect(h1(page)).toHaveText("E2E Radio Album A");
+  await clientIsLive(page);
+
+  await page.getByRole("button", { name: "Play Radio Track A1" }).click();
+  await expect(page.locator("#global-player")).toBeVisible();
+  await expect(page.locator("#global-player")).toContainText(/Radio Track [AB][12]/);
+
+  // `⏭` past the end of the seeded one-track queue: the artist's other
+  // audio tracks join the queue (all three total), and the loaded track now
+  // comes from album B — the release name the service carried along.
+  await page.getByRole("button", { name: "Next track" }).click();
+  await expect(page.locator("#global-player")).toContainText("of 3");
+  await expect(page.locator("#global-player")).toContainText(/Radio Track B[12]/);
+  await expect(page.locator("#global-player")).toContainText("E2E Radio Album B");
+
+  // Another `⏭` reaches the end of the fetched batch.
+  await page.getByRole("button", { name: "Next track" }).click();
+  await expect(page.locator("#global-player")).toContainText("3 of 3");
+
+  // A third `⏭` asks once more and the artist has nothing left outside the
+  // queue: the bar sits on the track it reached, and keeps sitting there.
+  const title = page.locator("#global-player div.font-semibold");
+  const loaded = await title.innerText();
+  await page.getByRole("button", { name: "Next track" }).click();
+  await expect(title).toHaveText(loaded);
+  await expect(page.locator("#global-player")).toContainText("3 of 3");
+  await expect(page.locator("audio")).toHaveCount(1, "still only the bar's media");
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
 test("the markdown editor's preview renders live while typing", async ({ page }) => {
   // The reported gap: on Firefox the preview never updated as the admin typed
   // (it only showed the server-saved text). The `MarkdownField` preview now

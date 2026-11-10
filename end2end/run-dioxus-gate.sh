@@ -211,6 +211,92 @@ if [ -n "${DATABASE_URL:-}" ]; then
             WHERE a.slug = 'e2e-tabs' AND r.slug = 'e2e-audio-release'
         ON CONFLICT (artist_id, release_id) DO NOTHING;" \
         || echo "WARNING: could not seed the audio fixture (is psql installed?)"
+    # The auto-append fixtures: a published artist (`e2e-radio`) with two
+    # published releases — album A carries one audio track, album B two — so
+    # the player's continuation fetch always has the same three-track
+    # catalogue to offer. Separate from `e2e-tabs` on purpose: the pins that
+    # watch the *no*-continuation case run in parallel with the specs that
+    # mutate that fixture, and the fetch keys on the playing track's primary
+    # artist. Tracks conflict on fresh ISRCs (`tracks` has no unique name
+    # index); the audio columns are hard-repaired to fixed names every run
+    # and their bytes written in the uploads seed below (the pins never
+    # decode sound).
+    psql "$DATABASE_URL" -c "INSERT INTO artists (name, slug, description, website, label_id, published_at)
+        SELECT 'E2E Radio Artist', 'e2e-radio', 'Gate fixture artist for the auto-append pins',
+               'https://e2e-radio.example.com', id, now()
+        FROM labels ORDER BY id LIMIT 1
+        ON CONFLICT (name) DO UPDATE SET
+            slug = EXCLUDED.slug,
+            label_id = EXCLUDED.label_id,
+            published_at = COALESCE(artists.published_at, EXCLUDED.published_at),
+            deleted_at = NULL;
+        INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at)
+        SELECT 'E2E Radio Album A', 'e2e-radio-album-a', 'Auto-append fixture: the played album',
+               a.label_id, 'E2E-RADIO-A', a.id, now()
+        FROM artists a WHERE a.slug = 'e2e-radio'
+        ON CONFLICT (name) DO UPDATE SET
+            slug = EXCLUDED.slug,
+            label_id = EXCLUDED.label_id,
+            catalogue_number = EXCLUDED.catalogue_number,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(releases.published_at, EXCLUDED.published_at),
+            deleted_at = NULL;
+        INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at)
+        SELECT 'E2E Radio Album B', 'e2e-radio-album-b', 'Auto-append fixture: the continuation album',
+               a.label_id, 'E2E-RADIO-B', a.id, now()
+        FROM artists a WHERE a.slug = 'e2e-radio'
+        ON CONFLICT (name) DO UPDATE SET
+            slug = EXCLUDED.slug,
+            label_id = EXCLUDED.label_id,
+            catalogue_number = EXCLUDED.catalogue_number,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(releases.published_at, EXCLUDED.published_at),
+            deleted_at = NULL;
+        INSERT INTO tracks (name, slug, description, lyrics, isrc_code, bpm, primary_artist_id, release_id, track_number, published_at, audio)
+        SELECT 'Radio Track A1', 'e2e-radio-track-a1', 'Auto-append fixture track',
+               '', 'E2ERADIOA1', 120, r.primary_artist_id, r.id, 1, now(),
+               '999999996-e2e-radio-a1.wav'
+        FROM releases r WHERE r.slug = 'e2e-radio-album-a'
+        ON CONFLICT (isrc_code) DO UPDATE SET
+            name = EXCLUDED.name,
+            slug = EXCLUDED.slug,
+            release_id = EXCLUDED.release_id,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(tracks.published_at, EXCLUDED.published_at),
+            deleted_at = NULL,
+            audio = EXCLUDED.audio;
+        INSERT INTO tracks (name, slug, description, lyrics, isrc_code, bpm, primary_artist_id, release_id, track_number, published_at, audio)
+        SELECT 'Radio Track B1', 'e2e-radio-track-b1', 'Auto-append fixture track',
+               '', 'E2ERADIOB1', 120, r.primary_artist_id, r.id, 1, now(),
+               '999999995-e2e-radio-b1.wav'
+        FROM releases r WHERE r.slug = 'e2e-radio-album-b'
+        ON CONFLICT (isrc_code) DO UPDATE SET
+            name = EXCLUDED.name,
+            slug = EXCLUDED.slug,
+            release_id = EXCLUDED.release_id,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(tracks.published_at, EXCLUDED.published_at),
+            deleted_at = NULL,
+            audio = EXCLUDED.audio;
+        INSERT INTO tracks (name, slug, description, lyrics, isrc_code, bpm, primary_artist_id, release_id, track_number, published_at, audio)
+        SELECT 'Radio Track B2', 'e2e-radio-track-b2', 'Auto-append fixture track',
+               '', 'E2ERADIOB2', 120, r.primary_artist_id, r.id, 2, now(),
+               '999999994-e2e-radio-b2.wav'
+        FROM releases r WHERE r.slug = 'e2e-radio-album-b'
+        ON CONFLICT (isrc_code) DO UPDATE SET
+            name = EXCLUDED.name,
+            slug = EXCLUDED.slug,
+            release_id = EXCLUDED.release_id,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(tracks.published_at, EXCLUDED.published_at),
+            deleted_at = NULL,
+            audio = EXCLUDED.audio;
+        INSERT INTO release_artists (artist_id, release_id)
+        SELECT a.id, r.id FROM artists a, releases r
+            WHERE a.slug = 'e2e-radio'
+              AND r.slug IN ('e2e-radio-album-a', 'e2e-radio-album-b')
+        ON CONFLICT (artist_id, release_id) DO NOTHING;" \
+        || echo "WARNING: could not seed the e2e-radio fixtures (is psql installed?)"
     # A housekeeping fixture: one page soft-deleted *past* the 90 day purge
     # window, kept aged on every run. The Housekeeping preview tests expect
     # to see `E2E Purge Page` in the listing; no test clicks the confirm
@@ -279,6 +365,11 @@ if [ -n "${UPLOAD_PATH:-}" ]; then
     # add later just replaces the row's name (this one becomes an orphan,
     # which the sweep fixtures already keep the purge preview honest about).
     printf 'E2E player pin fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999999-e2e-audio-track.wav"
+    # The bytes the e2e-radio fixture rows name: the same zero-sample trick —
+    # the auto-append pins watch the bar's queue state, never the sound.
+    printf 'E2E auto-append pin fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999996-e2e-radio-a1.wav"
+    printf 'E2E auto-append pin fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999995-e2e-radio-b1.wav"
+    printf 'E2E auto-append pin fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999994-e2e-radio-b2.wav"
     # The unreferenced-file sweep fixture: a file no row (or seed) ever
     # names, which the preview must always list and a confirmed purge
     # would remove. Recreated every run, so an accidental manual purge
@@ -362,6 +453,13 @@ pin "$OUT/home.html" 'href="/main.css"'
 curl -sS -o /dev/null -w "main.css status=%{http_code}\n" "$base/main.css"
 curl -sS -o "$OUT/guest_profile.html" -w "guest profile status=%{http_code}\n" "$base/profile"
 pin "$OUT/guest_profile.html" 'action="/auth/login"'
+# The continuation endpoint: at this point the only playable `e2e-tabs` track
+# is `e2e-audio-track` (the purge fixture is soft-deleted), so excluding it
+# leaves nothing — the empty-list shape is pinned here, while the client spec
+# pins the appending itself against the `e2e-radio` fixtures.
+curl -sS -o "$OUT/continuation.json" -w "continuation status=%{http_code}\n" \
+  "$base/api/get_continuation_tracks?artist_slug=e2e-tabs&exclude_slugs=e2e-audio-track"
+pin "$OUT/continuation.json" '"tracks":\[\]'
 # The upload widget needs a session, so a guest never sees its markup.
 no_pin "$OUT/guest_profile.html" 'file_to_upload'
 curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \

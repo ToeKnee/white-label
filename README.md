@@ -135,7 +135,20 @@ Transport is glyph buttons (`⏮` `⏭` `⏏`, forced to text presentation —
 `U+FE0E` in the labels plus a `player-glyph` font list in
 `style/tailwind.css`, or browsers paint them from a colour-emoji font that
 ignores the theme): previous/next walk the queue and hold at either end
-rather than wrapping, and a finished track steps to the next.
+rather than wrapping, a finished track steps to the next, and when the queue
+itself runs out the bar tops it up (see below).
+
+When the queue runs out — a `⏭` at its end, or a track ending there — the bar
+fetches a continuation: `GET /api/get_continuation_tracks` (`src/ui/data.rs`,
+via `continuation_tracks_service` in `src/services/track.rs`) answers with up
+to five _random_ audio tracks led by the loaded track's artist, never one the
+queue already holds. Visibility is the public one (published, undeleted
+tracks on published, undeleted releases): the listener topping up a queue is
+not an editor previewing. Fetched tracks join the queue's end and the bar
+steps onto the first, so the music keeps going; an answer with nothing marks
+that queue (`PlayerState::mark_catalogue_exhausted`) and the bar stops asking
+until the next Play. A failed fetch just logs: the queue keeps what it had
+and the next end-of-queue try asks again.
 
 The public release page (`src/ui/release.rs`) is the play surface: while the
 bar is closed each audio row offers `⏵ Play`, which seeds the bar with that
@@ -150,12 +163,18 @@ covered the same way: `PlayableTrack::audio_src` goes through
 `served_file_url`, so it points at the API origin.
 
 The gate pins both halves: the client spec proves Play opens the bar, that
-Add to Queue counts the place up while the tagged audio node stays put, and
-that the tagged node survives two SPA navigations (and that Close returns the
-rows' Play buttons); the shell spec proves the no-client page offers the
-buttons with no media and no bar. The gate seed repairs
+Add to Queue counts the place up while the tagged audio node stays put, that
+the tagged node survives two SPA navigations (and that Close returns the
+rows' Play buttons), and — on the `e2e-radio` seed (album A: one audio track,
+album B: two) — that Next at the end of the queue appends the artist's other
+tracks and a further Next stays put once the catalogue is all queued; the
+shell spec proves the no-client page offers the buttons with no media and no
+bar, and a curl spot check pins the endpoint's empty answer for `e2e-tabs`
+(its only playable track, excluded). The gate seed repairs
 `e2e-audio-track`'s audio column to `999999999-e2e-audio-track.wav` every run
-(writing the bytes too), so the public pins never see an audio-less fixture.
+(writing the bytes too), so the public pins never see an audio-less fixture;
+the `e2e-radio` fixtures get the same treatment (their bytes: `999999996-` to
+`999999994-e2e-radio-*.wav`).
 
 ### Uploads with progress
 
