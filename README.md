@@ -212,6 +212,24 @@ and pages that show the image pass `on_uploaded` to the widget and swap their
 `<img src>` from it — a page cannot refetch its own page data, since `use_page`
 never exposes its resource.
 
+Uploads also get garbage collection at the row end: the admin "Housekeeping"
+card (and `services::purge`) permanently removes rows past their 90-day
+soft-delete window, and each upload file that no surviving row names any more —
+a name only the doomed rows held, live rows included when a purge cascades
+them — is named in the preview (the card's "Upload files" listing, `<dir>/<file>`
+under `UPLOAD_PATH`) and deleted after the commit. A name any surviving row
+still shares (two tracks on one stored audio file), an artist the purge had to
+skip, or a restorable row inside its window keeps its files; a hand-edited name
+with a path separator is never offered and never removed; and without a
+configured `UPLOAD_PATH` the purge only removes rows. The sweep goes further
+and collects files the database stopped naming long ago — replaced
+avatars/covers/audio leave their previous file behind, and purges predating
+this service left rows' files on disk — anything under `UPLOAD_PATH`'s
+`artists`, `releases`, `tracks` or `avatars` directories that no row names at
+all is previewed and removed, and such a file-only purge is worth running even
+with no rows past their window. The `tmp/` staging directory and stray
+subdirectories are never swept.
+
 ### The desktop window
 
 The same `src/ui` page tree also builds as a native window (`dioxus-desktop`:

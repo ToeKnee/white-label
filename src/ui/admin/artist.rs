@@ -88,6 +88,7 @@ fn CreateArtistBody(
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }
@@ -220,6 +221,7 @@ fn EditArtistBody(artist_slug: String, updated: Option<String>, bad: Option<Stri
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }

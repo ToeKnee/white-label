@@ -70,6 +70,7 @@ fn EditArtistImagesBody(
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }

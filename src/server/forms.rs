@@ -33,6 +33,7 @@
 //! ```
 
 use axum::Router;
+use axum::extract::Extension;
 use axum::extract::Form;
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::post;
@@ -966,13 +967,15 @@ const fn links_code(error: &AppError) -> &'static str {
 /// answering through the dashboard's query codes: `?ready=<count>` after a
 /// preview (a read-only listing; the card reloads it through
 /// `crate::ui::data::get_purge_preview` and shows the names),
-/// `?purged=<count>&skipped=<count>` after a real purge, `?bad=<code>` on
-/// refusal. The dashboard card (`crate::ui::admin::dashboard::PurgeCard`)
+/// `?purged=<count>&skipped=<count>&files=<count>` after a real purge
+/// (`files` counts the orphaned upload files removed with the rows),
+/// `?bad=<code>` on refusal. The dashboard card (`crate::ui::admin::dashboard::PurgeCard`)
 /// maps the codes to text; only re-parsed counts travel, never submitted
 /// strings.
 async fn purge_deleted(
     Db(pool): Db,
     CurrentUser(current_user): CurrentUser,
+    Extension(upload_root): Extension<super::UploadRoot>,
     Form(args): Form<PurgeFields>,
 ) -> impl IntoResponse {
     if current_user.is_none() {
@@ -980,11 +983,14 @@ async fn purge_deleted(
     }
 
     let confirm = args.confirm == "1";
-    match services::purge::purge_deleted_service(&pool, current_user.as_ref(), confirm).await {
+    let root = upload_root.as_path();
+    match services::purge::purge_deleted_service(&pool, current_user.as_ref(), confirm, root).await
+    {
         Ok(result) if confirm => Redirect::to(&format!(
-            "/admin?purged={}&skipped={}",
+            "/admin?purged={}&skipped={}&files={}",
             result.total(),
-            result.skipped_artists.len()
+            result.skipped_artists.len(),
+            result.files.len(),
         )),
         Ok(result) => Redirect::to(&format!("/admin?ready={}", result.total())),
         Err(error) => {

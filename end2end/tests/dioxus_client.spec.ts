@@ -627,8 +627,19 @@ test("the housekeeping preview runs through the reactive twin", async ({ page })
   await page.getByRole("button", { name: "Clean up" }).click();
   await expect(page.getByText("E2E Purge Page")).toBeVisible({ timeout: 10000 });
 
+  // The listing also names the upload files the purge would take with the
+  // rows (the gate seeds an aged release/track pair whose files sit under
+  // UPLOAD_PATH; see run-dioxus-gate.sh), and the file the sweep finds
+  // because no row names it at all.
+  await expect(page.getByRole("heading", { level: 3, name: "Upload files" })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText("releases/999999999-e2e-purge-release.jpg")).toBeVisible();
+  await expect(page.getByText("tracks/999999999-e2e-purge-track.wav")).toBeVisible();
+  await expect(page.getByText("artists/999999998-e2e-orphan.png")).toBeVisible();
+
   // The confirm button joins the card with the preview's count, and the
-  // reactive path never left the document.
-  await expect(page.getByRole("button", { name: /items for good$/ })).toBeVisible();
+  // reactive path never left the document. The gate environment always
+  // has files (the seed pair plus the orphan fixture), so the label must
+  // count them: "<n> items and <m> files for good".
+  await expect(page.getByRole("button", { name: /and \d+ files for good$/ })).toBeVisible();
   expect(documentLoads, "the preview should not reload the document").toBe(0);
 });

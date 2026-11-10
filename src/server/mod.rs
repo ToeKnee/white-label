@@ -45,6 +45,13 @@ impl UploadRoot {
     pub fn root(&self) -> Option<String> {
         self.0.as_ref().map(|path| path.display().to_string())
     }
+
+    /// The uploads directory as a borrowed path, when there is one (the
+    /// shape the housekeeping purge needs to reach the files themselves).
+    #[must_use]
+    pub fn as_path(&self) -> Option<&std::path::Path> {
+        self.0.as_deref()
+    }
 }
 
 /// Build the Dioxus server's router (database, sessions, uploads, Dioxus
@@ -184,7 +191,7 @@ mod tests {
         create_test_track, create_test_user, create_test_user_with_permissions,
     };
     use crate::server::build_router;
-    use crate::server::test_support::{self, api_server};
+    use crate::server::test_support::{self, api_server, api_server_with_uploads};
 
     /// Build the real router and wrap it for in-process HTTP.
     async fn test_server(pool: PgPool, upload_path: Option<std::path::PathBuf>) -> TestServer {
@@ -2969,9 +2976,9 @@ mod tests {
         login_as(&server, 1).await;
         let done = post_form(&server, "/admin/forms/purge", &[("confirm", "1")]).await;
         assert_eq!(done.status_code(), StatusCode::SEE_OTHER);
-        assert_eq!(location(&done), "/admin?purged=1&skipped=0");
+        assert_eq!(location(&done), "/admin?purged=1&skipped=0&files=0");
 
-        let body = server.get("/admin?purged=1&skipped=0").await.text();
+        let body = server.get("/admin?purged=1&skipped=0&files=0").await.text();
         for marker in [
             "Housekeeping",
             "Permanently deleted 1 items.",
@@ -2987,6 +2994,112 @@ mod tests {
         let guest = api_server(pool.clone()).await;
         let guest_get = guest.get("/api/purge_preview?wanted=true").await;
         assert_eq!(guest_get.status_code(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn purge_form_names_and_removes_orphan_uploads(pool: PgPool) {
+        use crate::models::test_helpers::{
+            create_test_artist, create_test_record_label, create_test_release, create_test_track,
+        };
+
+        create_test_user_with_permissions(&pool, 1, vec!["admin"])
+            .await
+            .expect("admin user");
+        let label = create_test_record_label(&pool, 1).await.expect("label");
+        let artist = create_test_artist(&pool, 1, Some(label.clone()))
+            .await
+            .expect("artist");
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .expect("release");
+        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .expect("track");
+        sqlx::query("UPDATE artists SET primary_image = $1 WHERE id = $2")
+            .bind("old-artist.jpg")
+            .bind(artist.id)
+            .execute(&pool)
+            .await
+            .expect("artist image");
+        sqlx::query("UPDATE tracks SET audio = $1 WHERE id = $2")
+            .bind("song.flac")
+            .bind(track.id)
+            .execute(&pool)
+            .await
+            .expect("track audio");
+        for (table, id) in [("releases", release.id), ("artists", artist.id)] {
+            sqlx::query(&format!(
+                "UPDATE {table} SET deleted_at = NOW() - INTERVAL '91 days' WHERE id = $1"
+            ))
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("age the row past the window");
+        }
+
+        let uploads = tempfile::tempdir().expect("uploads dir");
+        for (dir, file) in [("artists", "old-artist.jpg"), ("tracks", "song.flac")] {
+            std::fs::create_dir_all(uploads.path().join(dir)).expect("uploads subdirectory");
+            std::fs::write(uploads.path().join(dir).join(file), b"content").expect("upload file");
+        }
+        let server = api_server_with_uploads(&pool, uploads.path().to_path_buf()).await;
+        login_as(&server, 1).await;
+
+        // The preview names the files as well as the rows: through the GET
+        // twin (the JSON the card loads) and in the dashboard HTML (which
+        // is also the javascript-off listing).
+        let json = server.get("/api/purge_preview?wanted=true").await.text();
+        for marker in ["artists/old-artist.jpg", "tracks/song.flac"] {
+            assert!(
+                json.contains(marker),
+                "the preview JSON should name {marker}: {json}"
+            );
+        }
+        let preview_body = server.get("/admin?ready=3").await.text();
+        for marker in ["Upload files", "artists/old-artist.jpg", "tracks/song.flac"] {
+            assert!(
+                preview_body.contains(marker),
+                "missing marker {marker} in the preview dashboard html"
+            );
+        }
+
+        // The reactive twin (the path a hydrating client drives the card
+        // from) answers with the same file names.
+        let twin = server
+            .post("/api/purge_deleted")
+            .json(&serde_json::json!({ "confirm": false }))
+            .await;
+        assert_eq!(twin.status_code(), StatusCode::OK);
+        let twin_body = twin.text();
+        for marker in ["artists/old-artist.jpg", "tracks/song.flac"] {
+            assert!(
+                twin_body.contains(marker),
+                "the reactive preview should name {marker}: {twin_body}"
+            );
+        }
+
+        // The confirm redirect counts the files, and the files really go.
+        let done = post_form(&server, "/admin/forms/purge", &[("confirm", "1")]).await;
+        assert_eq!(location(&done), "/admin?purged=3&skipped=0&files=2");
+        for (dir, file) in [("artists", "old-artist.jpg"), ("tracks", "song.flac")] {
+            assert!(
+                !uploads.path().join(dir).join(file).exists(),
+                "the purge removed {dir}/{file}"
+            );
+        }
+        // And the done notice mentions them.
+        let done_body = server
+            .get(&format!("/admin?{}", &location(&done)[7..]))
+            .await
+            .text();
+        assert!(
+            done_body.contains("2 upload files went with them"),
+            "the done notice should name the file count"
+        );
     }
 
     #[expect(

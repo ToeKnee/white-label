@@ -55,6 +55,8 @@ pub fn Dashboard(
     purged: Option<String>,
     /// Past-window artists a ran purge left in place (form redirect).
     skipped: Option<String>,
+    /// Orphaned upload files a ran purge removed (form redirect).
+    files: Option<String>,
     /// Fixed code from a refused purge (form redirect).
     bad: Option<String>,
 ) -> Element {
@@ -68,7 +70,7 @@ pub fn Dashboard(
             UpcomingRelease {}
             MailingListCard {}
         }
-        PurgeCard { ready, purged, skipped, bad }
+        PurgeCard { ready, purged, skipped, files, bad }
     }
 }
 
@@ -515,10 +517,12 @@ fn MailingListCard() -> Element {
 
 /// Housekeeping: the two-step purge of rows past their soft-delete window
 /// ([`PURGE_AFTER_DAYS`] days; rules in [`crate::services::purge`]). The
-/// preview lists every row it would remove by name (skipped artists
-/// included), not just a count: the names ride the reactive twin's answer,
-/// or — javascript off — the card's own [`get_purge_preview`] load after
-/// the preview redirect.
+/// preview lists every row and upload file it would remove by name
+/// (skipped artists included), not just a count: the names ride the
+/// reactive twin's answer, or — javascript off — the card's own
+/// [`get_purge_preview`] load after the preview redirect. Unreferenced
+/// upload files count towards the confirm button even when no row is
+/// past its window.
 ///
 /// With javascript off both steps are plain posts to `/admin/forms/purge`:
 /// the preview form (empty `confirm`) 303s back to `/admin?ready=<count>`,
@@ -529,19 +533,21 @@ fn MailingListCard() -> Element {
 /// follow a 303, so the no-JS query codes never reach one).
 #[component]
 fn PurgeCard(
-    /// Rows a preview found, as a numeric string (form redirect).
+    /// Rows a purge preview found, as a numeric string (form redirect).
     ready: Option<String>,
     /// Rows a purge removed, as a numeric string (form redirect).
     purged: Option<String>,
     /// Past-window artists a ran purge left in place (form redirect).
     skipped: Option<String>,
+    /// Orphaned upload files a ran purge removed (form redirect).
+    files: Option<String>,
     /// Fixed code from a refused purge (form redirect).
     bad: Option<String>,
 ) -> Element {
     rsx! {
         SuspenseBoundary {
             fallback: |_context: SuspenseContext| rsx! { Loading {} },
-            PurgeCardBody { ready, purged, skipped, bad }
+            PurgeCardBody { ready, purged, skipped, files, bad }
         }
     }
 }
@@ -551,6 +557,7 @@ fn PurgeCardBody(
     ready: Option<String>,
     purged: Option<String>,
     skipped: Option<String>,
+    files: Option<String>,
     bad: Option<String>,
 ) -> Element {
     let prefs = use_context::<super::AdminPrefs>();
@@ -578,6 +585,10 @@ fn PurgeCardBody(
         .as_deref()
         .and_then(|code| code.parse::<usize>().ok())
         .unwrap_or(0);
+    let files_count = files
+        .as_deref()
+        .and_then(|code| code.parse::<usize>().ok())
+        .unwrap_or(0);
 
     // The `?ready=` redirect leaves the listing itself to the page: this
     // GET load runs the read-only preview service (in-process during SSR,
@@ -600,22 +611,41 @@ fn PurgeCardBody(
     let done = saved.clone().map_or_else(
         || {
             purged_count.map(|count| {
-                format!(
-                    "Permanently deleted {count} items.{}",
-                    skip_note(skipped_count)
-                )
+                // A files-only purge (rows all inside their windows) reads
+                // better without the "0 items" preamble.
+                if count == 0 {
+                    format!(
+                        "Permanently deleted {files_count} upload files.{}",
+                        skip_note(skipped_count)
+                    )
+                } else {
+                    format!(
+                        "Permanently deleted {count} items.{}{}",
+                        file_note(files_count),
+                        skip_note(skipped_count)
+                    )
+                }
             })
         },
         |result| {
             executed().then(|| {
-                format!(
-                    "Permanently deleted {} tracks, {} releases, {} artists and {} pages.{}",
-                    result.tracks.len(),
-                    result.releases.len(),
-                    result.artists.len(),
-                    result.pages.len(),
-                    skip_note(result.skipped_artists.len()),
-                )
+                if result.total() == 0 {
+                    format!(
+                        "Permanently deleted {} upload files.{}",
+                        result.files.len(),
+                        skip_note(result.skipped_artists.len()),
+                    )
+                } else {
+                    format!(
+                        "Permanently deleted {} tracks, {} releases, {} artists and {} pages.{}{}",
+                        result.tracks.len(),
+                        result.releases.len(),
+                        result.artists.len(),
+                        result.pages.len(),
+                        file_note(result.files.len()),
+                        skip_note(result.skipped_artists.len()),
+                    )
+                }
             })
         },
     );
@@ -639,6 +669,9 @@ fn PurgeCardBody(
         },
         None => None,
     };
+    // Files ride the listing, both paths: the card text and the confirm
+    // button count them next to the rows.
+    let preview_files = preview_rows.as_ref().map_or(0, |rows| rows.files.len());
 
     rsx! {
         div { class: "mt-6 not-prose card bg-base-100 shadow-xl",
@@ -657,13 +690,25 @@ fn PurgeCardBody(
                     }
                 }
                 if let Some(count) = preview_count {
-                    if count == 0 {
+                    if count == 0 && preview_files == 0 {
                         p { "Nothing has passed the {PURGE_AFTER_DAYS} day window yet." }
                     } else {
-                        p {
-                            "{count} items are past the window and ready to go for good. \
-                             Deleted artists that a remaining row still names as its primary \
-                             artist will be left in place."
+                        if count > 0 {
+                            p {
+                                "{count} items are past the window and ready to go for good. \
+                                 Deleted artists that a remaining row still names as its primary \
+                                 artist will be left in place."
+                            }
+                        }
+                        if preview_files > 0 {
+                            if count > 0 {
+                                p { "{preview_files} upload files go with them." }
+                            } else {
+                                p {
+                                    "No rows are past the window, but {preview_files} upload \
+                                     files named by no row at all are ready to go for good."
+                                }
+                            }
                         }
                     }
                 }
@@ -676,6 +721,7 @@ fn PurgeCardBody(
                         {purge_listing("Tracks", &rows.tracks)}
                         {purge_listing("Pages", &rows.pages)}
                         {purge_listing("Artists left in place", &rows.skipped_artists)}
+                        {purge_listing("Upload files", &rows.files)}
                     }
                 }
                 div { class: "card-actions flex-wrap",
@@ -698,7 +744,7 @@ fn PurgeCardBody(
                         }
                     }
                     if let Some(count) = preview_count
-                        && count > 0
+                        && (count > 0 || preview_files > 0)
                     {
                         form {
                             id: "purge-confirm",
@@ -713,8 +759,12 @@ fn PurgeCardBody(
                             button { class: "btn btn-error",
                                 if purge.pending() && executed() {
                                     "Deleting\u{2026}"
-                                } else {
+                                } else if count == 0 {
+                                    "Delete {preview_files} files for good"
+                                } else if preview_files == 0 {
                                     "Delete {count} items for good"
+                                } else {
+                                    "Delete {count} items and {preview_files} files for good"
                                 }
                             }
                         }
@@ -764,6 +814,16 @@ fn skip_note(skipped: usize) -> String {
     }
 }
 
+/// The shared head: upload files the purge took with the rows (names live
+/// in the preview listing; the done notice only counts them).
+fn file_note(files: usize) -> String {
+    if files == 0 {
+        String::new()
+    } else {
+        format!(" {files} upload files went with them.")
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Reactive twin of the `/admin/forms/purge` handler
 // ---------------------------------------------------------------------------
@@ -779,7 +839,8 @@ fn skip_note(skipped: usize) -> String {
 /// `Failed` data; only a purge that could not run at all is a transport error.
 #[post("/api/purge_deleted",
     db: crate::server::current_user::Db,
-    user: crate::server::current_user::CurrentUser
+    user: crate::server::current_user::CurrentUser,
+    upload_root: axum::Extension<crate::server::UploadRoot>
 )]
 pub async fn purge_deleted(
     confirm: bool,
@@ -789,7 +850,8 @@ pub async fn purge_deleted(
         // 303 handler would have given.
         return HttpError::unauthorized("Please log in to run the purge.");
     };
-    match services::purge::purge_deleted_service(&db.0, Some(session_user), confirm).await {
+    let root = upload_root.0.as_path();
+    match services::purge::purge_deleted_service(&db.0, Some(session_user), confirm, root).await {
         Ok(result) => Ok(EditOutcome::Saved(result)),
         Err(error) => {
             tracing::warn!("purge twin rejected: {error}");

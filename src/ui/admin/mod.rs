@@ -186,7 +186,7 @@ fn AdminMenuBody() -> Element {
                     "Show deleted"
                 }
             }
-            li { Link { to: Route::Dashboard { ready: None, purged: None, skipped: None, bad: None }, "Dashboard" } }
+            li { Link { to: Route::Dashboard { ready: None, purged: None, skipped: None, bad: None, files: None }, "Dashboard" } }
             li {
                 Link { to: Route::EditLabel { updated: None, bad: None },
                     "{menu.record_label.name}"
@@ -375,6 +375,7 @@ mod tests {
                     purged: None,
                     skipped: None,
                     bad: None,
+                    files: None,
                 },
                 "/admin?",
             ),

@@ -105,6 +105,7 @@ fn ReleasesBody(artist_slug: String) -> Element {
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }
@@ -289,6 +290,7 @@ fn CreateReleaseBody(artist_slug: String, bad: Option<String>) -> Element {
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }
@@ -495,6 +497,7 @@ fn EditReleaseBody(
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }

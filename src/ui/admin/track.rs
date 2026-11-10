@@ -101,6 +101,7 @@ fn TracksBody(artist_slug: String, release_slug: String) -> Element {
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }
@@ -282,6 +283,7 @@ fn CreateTrackBody(artist_slug: String, release_slug: String, bad: Option<String
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }
@@ -520,6 +522,7 @@ fn EditTrackBody(
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }

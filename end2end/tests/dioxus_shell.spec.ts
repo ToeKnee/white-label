@@ -353,8 +353,18 @@ test("the admin dashboard renders cards and the side menu", async ({ page }) => 
   await expect(page).toHaveURL(/\/admin\?ready=\d+$/);
   await expect(page.getByText("ready to go for good")).toBeVisible();
   await expect(page.getByText("E2E Purge Page")).toBeVisible();
-  // The confirm step is offered with the count the preview found.
-  await expect(page.getByRole("button", { name: /items for good$/ })).toBeVisible();
+  // The listing names the upload files the purge orphans with them (the
+  // gate seeds an aged release/track pair whose files sit under
+  // UPLOAD_PATH; see run-dioxus-gate.sh), plus the sweep fixture no row
+  // ever named.
+  await expect(page.getByRole("heading", { level: 3, name: "Upload files" })).toBeVisible();
+  await expect(page.getByText("releases/999999999-e2e-purge-release.jpg")).toBeVisible();
+  await expect(page.getByText("tracks/999999999-e2e-purge-track.wav")).toBeVisible();
+  await expect(page.getByText("artists/999999998-e2e-orphan.png")).toBeVisible();
+  // The confirm step is offered with the count the preview found: files
+  // are always present in the gate environment (the seed pair plus the
+  // orphan fixture), so the label must count them alongside the items.
+  await expect(page.getByRole("button", { name: /and \d+ files for good$/ })).toBeVisible();
 });
 
 test("page create, update, delete and restore round-trip", async ({ page }) => {

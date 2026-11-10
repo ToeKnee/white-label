@@ -88,6 +88,7 @@ fn CreatePageBody(
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }
@@ -219,6 +220,7 @@ fn EditPageBody(slug: String, updated: Option<String>, bad: Option<String>) -> E
             purged: None,
             skipped: None,
             bad: None,
+            files: None,
         });
         return rsx! { Loading {} };
     }

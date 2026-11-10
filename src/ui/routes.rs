@@ -108,10 +108,10 @@ pub enum Route {
     },
     /// Admin section: menu + permission gate live in the layout.
     #[layout(AdminRoot)]
-    /// Admin dashboard. `ready`, `purged`, `skipped` and `bad` carry the
-    /// housekeeping purge form's fixed codes from its redirect (posts to
+    /// Admin dashboard. `ready`, `purged`, `skipped`, `files` and `bad` carry
+    /// the housekeeping purge form's fixed codes from its redirect (posts to
     /// `/admin/forms/purge`; see `crate::services::purge`).
-    #[route("/admin?:ready&:purged&:skipped&:bad")]
+    #[route("/admin?:ready&:purged&:skipped&:bad&:files")]
     Dashboard {
         /// Row count from a purge preview ("this many would go").
         ready: Option<String>,
@@ -121,6 +121,8 @@ pub enum Route {
         skipped: Option<String>,
         /// Error code from a refused purge.
         bad: Option<String>,
+        /// Orphaned upload files a ran purge removed.
+        files: Option<String>,
     },
     /// Edit the record label's details. `updated` and `bad` carry fixed
     /// codes from the label form's redirect (posts to
@@ -461,7 +463,8 @@ mod tests {
                 ready: None,
                 purged: None,
                 skipped: None,
-                bad: None
+                bad: None,
+                files: None
             }
         );
         assert_eq!(
@@ -727,7 +730,8 @@ mod tests {
                 ready: None,
                 purged: None,
                 skipped: None,
-                bad: None
+                bad: None,
+                files: None
             }
         );
         assert_eq!(parse("/artists/"), Route::ArtistsPage {});

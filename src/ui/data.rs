@@ -301,13 +301,15 @@ pub async fn get_admin_menu(include_deleted: bool) -> core::result::Result<Admin
 /// message when the rows cannot be loaded.
 #[get("/api/purge_preview?wanted",
     db: crate::server::current_user::Db,
-    user: crate::server::current_user::CurrentUser
+    user: crate::server::current_user::CurrentUser,
+    upload_root: axum::Extension<crate::server::UploadRoot>
 )]
 pub async fn get_purge_preview(wanted: bool) -> core::result::Result<PurgeResult, HttpError> {
     if !wanted {
         return Ok(PurgeResult::default());
     }
-    match services::purge::purge_deleted_service(&db.0, user.0.as_ref(), false).await {
+    let root = upload_root.0.as_path();
+    match services::purge::purge_deleted_service(&db.0, user.0.as_ref(), false, root).await {
         Ok(preview) => Ok(preview),
         Err(error) => to_http_error(&error),
     }

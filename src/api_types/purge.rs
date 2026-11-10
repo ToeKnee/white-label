@@ -18,7 +18,8 @@ pub const PURGE_AFTER_DAYS: i64 = 90;
 /// POST /api/purge_deleted  {"confirm":false}
 /// 200 {"Saved":{"tracks":["Test Track 1"],
 ///      "releases":[],"artists":[],"pages":["Test Page 1"],
-///      "skipped_artists":["Test Artist 2"]}}
+///      "skipped_artists":["Test Artist 2"],
+///      "files":["tracks/test-track-1.flac"]}}
 /// ```
 ///
 /// `skipped_artists` names the past-window artists that were *not*
@@ -39,10 +40,22 @@ pub struct PurgeResult {
     /// Past-window artists left alone because a surviving row still names
     /// them as their primary artist.
     pub skipped_artists: Vec<String>,
+    /// Upload files removed from (or, in a preview, to be removed from)
+    /// the uploads root, named `<dir>/<file>`: files the removed rows held
+    /// that no surviving row names, *plus* files no row names at all
+    /// (replaced uploads and leftovers of purges predating this service —
+    /// rules in [`crate::services::purge`]). A file-only purge is worth
+    /// running even when the row lists are empty. Empty when the server
+    /// has no uploads directory configured.
+    pub files: Vec<String>,
 }
 
 impl PurgeResult {
     /// Total rows removed (or previewed): the per-table lists added up.
+    /// Orphaned upload files are deliberately not counted — they ride in
+    /// `files`, and the card counts the two separately when it names the
+    /// button (a rows-free purge of unreferenced files is still worth
+    /// running).
     #[must_use]
     pub const fn total(&self) -> usize {
         self.tracks.len() + self.releases.len() + self.artists.len() + self.pages.len()

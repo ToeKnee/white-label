@@ -194,6 +194,39 @@ if [ -n "${DATABASE_URL:-}" ]; then
         UPDATE pages SET deleted_at = now() - interval '91 days'
             WHERE slug = 'e2e-purge-page';" \
         || echo "WARNING: could not seed the housekeeping fixture page (is psql installed?)"
+    # A purge fixture that *names upload files*: a release past the window
+    # with a primary image, and a track under it with an audio file (doomed
+    # through its release). The preview lists those names in its
+    # "Upload files" column (the files themselves are written in the uploads
+    # seed below). Aged on every run; no test clicks the confirm button, so
+    # the rows survive run after run.
+    psql "$DATABASE_URL" -c "INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at, deleted_at, primary_image)
+        SELECT 'E2E Purge Release', 'e2e-purge-release', 'Housekeeping purge fixture with an upload',
+               a.label_id, 'E2E-PURGE-1', a.id, now(), now() - interval '91 days',
+               '999999999-e2e-purge-release.jpg'
+        FROM artists a WHERE a.slug = 'e2e-tabs'
+        ON CONFLICT (name) DO UPDATE SET
+            slug = EXCLUDED.slug,
+            label_id = EXCLUDED.label_id,
+            catalogue_number = EXCLUDED.catalogue_number,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(releases.published_at, EXCLUDED.published_at),
+            deleted_at = EXCLUDED.deleted_at,
+            primary_image = EXCLUDED.primary_image;
+        INSERT INTO tracks (name, slug, description, lyrics, isrc_code, bpm, primary_artist_id, release_id, track_number, published_at, deleted_at, audio)
+        SELECT 'E2E Purge Track', 'e2e-purge-track', 'Housekeeping purge fixture with an audio upload',
+               '', 'E2EPURGE123', 100, r.primary_artist_id, r.id, 1,
+               now(), now() - interval '91 days', '999999999-e2e-purge-track.wav'
+        FROM releases r WHERE r.slug = 'e2e-purge-release'
+        ON CONFLICT (isrc_code) DO UPDATE SET
+            name = EXCLUDED.name,
+            slug = EXCLUDED.slug,
+            release_id = EXCLUDED.release_id,
+            primary_artist_id = EXCLUDED.primary_artist_id,
+            published_at = COALESCE(tracks.published_at, EXCLUDED.published_at),
+            deleted_at = EXCLUDED.deleted_at,
+            audio = EXCLUDED.audio;" \
+        || echo "WARNING: could not seed the purge upload fixtures (is psql installed?)"
 else
     echo "WARNING: DATABASE_URL not set; skipping the e2e-tabs seed"
 fi
@@ -204,6 +237,16 @@ echo "== seed the uploads directories (idempotent) =="
 # somewhere to write.
 if [ -n "${UPLOAD_PATH:-}" ]; then
     mkdir -p "$UPLOAD_PATH/tmp" "$UPLOAD_PATH/avatars" "$UPLOAD_PATH/artists" "$UPLOAD_PATH/releases" "$UPLOAD_PATH/tracks"
+    # The bytes the purge upload fixtures name. Contents irrelevant: the
+    # preview lists names straight from the database, and only a confirm
+    # click — which no test performs — would ever remove them.
+    printf 'E2E purge preview fixture, not a real image' > "$UPLOAD_PATH/releases/999999999-e2e-purge-release.jpg"
+    printf 'E2E purge preview fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999999-e2e-purge-track.wav"
+    # The unreferenced-file sweep fixture: a file no row (or seed) ever
+    # names, which the preview must always list and a confirmed purge
+    # would remove. Recreated every run, so an accidental manual purge
+    # costs nothing.
+    printf 'E2E replacement orphan, named by no row' > "$UPLOAD_PATH/artists/999999998-e2e-orphan.png"
     echo "uploads root ready: $UPLOAD_PATH"
 else
     echo "WARNING: UPLOAD_PATH not set; the profile upload client test will fail"
