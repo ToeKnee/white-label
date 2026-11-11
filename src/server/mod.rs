@@ -417,6 +417,10 @@ mod tests {
             !after.text().contains("<audio"),
             "the media lives in the bar alone: the SSR page carries no players"
         );
+        assert!(
+            !after.text().contains("No plays left") && !after.text().contains("plays left"),
+            "the play counts live in the browser, so the server always ships the plain Play button"
+        );
     }
 
     #[expect(

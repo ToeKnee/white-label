@@ -160,9 +160,25 @@ bar is closed each audio row offers `⏵ Play`, which seeds the bar with that
 track and the release's audio tracks as its queue; while the bar plays, rows
 offer `+ Add to Queue` instead — appending to the end never disturbs the
 loaded track, so a listener grows the queue from any release page (tracks
-can repeat). Rows and queue entries alike show the track's own thumbnail,
-falling back to the release's image and then the logo. The bar is the only
-media on the public site: without the wasm
+can repeat). Guests get a play allowance per track, set on the label
+(`labels.guest_plays`, editable on the label admin form as "Guest plays per
+track", five per browser by default, `0` meaning guests hear nothing; a
+release fetch carries the number to the client): a guest is a visitor with
+no signed-in session (the reactive sign-in/out answer overrides the page's
+own session load, and a failed load counts as the stricter guest side), and
+once a browser has spent a track's plays its row shows a disabled
+`No plays left` instead of either button, while a row with plays left says
+how many once the browser has spent one — transport also steps past
+exhausted tracks, and `+ Add to Queue` refuses one. The play counts belong
+to the browser (signed-in loads count too, so a later guest can't hear more
+than the browser already has); web clients keep them in `localStorage`
+under `white-label-heard-tracks` (a JSON map of slug to loads) across
+reloads, desktop keeps them in memory for the window's life. The rule is
+deliberately "a little harder", not impossible: clearing the browser's
+storage hands the plays back, and there is nothing to stop grabbing the
+`/uploads` URL straight. Rows and queue entries alike show the track's own
+thumbnail, falling back to the release's image and then the logo. The bar
+is the only media on the public site: without the wasm
 client — a browser without javascript, or a server serving no wasm bundle —
 the page shows the buttons and no players at all (the admin track editor's
 preview slot is its own thing, for verifying uploads). Desktop windows are
@@ -171,17 +187,23 @@ through `served_file_url`/`display_image_url`, so they point at the API
 origin.
 
 The gate pins both halves: the client spec proves Play opens the bar, that
-Add to Queue counts the place up while the tagged audio node stays put, that
-the tagged node survives two SPA navigations (and that Close returns the
-rows' Play buttons), and — on the `e2e-radio` seed (album A: one audio track,
-album B: two) — that Next at the end of the queue appends the artist's other
-tracks and a further Next stays put once the catalogue is all queued (with
-the radio releases' seeded `primary_image` as the bar's artwork, since the
-radio tracks have none of their own); the
+Add to Queue counts the place up while the tagged audio node stays put (that
+test signs in first — signed-in listening is exempt from the allowance
+entirely), that the tagged node survives two SPA navigations (and that
+after Close the guest's row offers Play again with a "4 plays left" note —
+five plays per track on the gate's label, one spent), that on a guest the
+counts survive a reload (the note follows), that five loads later the row
+reads `No plays left` until `localStorage.clear()` hands the plays back,
+and — on the `e2e-radio` seed (album A:
+one audio track, album B: two) — that Next at the end of the queue appends
+the artist's other tracks and a further Next stays put once the catalogue is
+all queued (with the radio releases' seeded `primary_image` as the bar's
+artwork, since the radio tracks have none of their own); the
 shell spec proves the no-client page offers the buttons with no media and no
 bar, and curl spot checks pin the endpoint's empty answer for `e2e-tabs`
-(its only playable track, excluded) and one album-B row's fallback thumbnail
-rendered server-side. The gate seed repairs
+(its only playable track, excluded), one album-B row's fallback thumbnail
+rendered server-side, and that the server never shows a row counting down
+or marked `No plays left` (the play counts live in the browser). The gate seed repairs
 `e2e-audio-track`'s audio column to `999999999-e2e-audio-track.wav` every run
 (writing the bytes too), so the public pins never see an audio-less fixture;
 the `e2e-radio` fixtures get the same treatment (their bytes: `999999996-` to

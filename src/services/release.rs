@@ -70,6 +70,9 @@ pub async fn get_next_scheduled_release_service(
                 release,
                 artists,
                 tracks,
+                // The countdown preview never plays, so the guest allowance
+                // is left at the default.
+                guest_plays: None,
             }))
         }
         Ok(None) => Ok(None),
@@ -202,10 +205,24 @@ pub async fn get_release_service(
             AppError::internal(e)
         })?;
 
+    // The label's guest-play allowance rides along (the public release page
+    // hands it to the global player). A label that cannot be read falls back
+    // to the default allowance.
+    let guest_plays = crate::models::record_label::RecordLabel::get_by_id(pool, release.label_id)
+        .await
+        .map_or_else(
+            |e| {
+                tracing::warn!("get_release_service: no label for guest plays: {e:?}");
+                crate::models::record_label::RecordLabel::DEFAULT_GUEST_PLAYS
+            },
+            |label| label.guest_plays,
+        );
+
     Ok(ReleaseResult {
         release,
         artists,
         tracks,
+        guest_plays: Some(guest_plays),
     })
 }
 
@@ -285,6 +302,9 @@ pub async fn create_release_service(
         release,
         artists,
         tracks,
+        // The editor round trips answer `None`: the guest allowance belongs
+        // to the public release fetch (only that page hosts the player).
+        guest_plays: None,
     })
 }
 
@@ -361,6 +381,7 @@ pub async fn update_release_service(
         release,
         artists,
         tracks,
+        guest_plays: None,
     })
 }
 
@@ -412,6 +433,7 @@ pub async fn delete_release_service(
                 tracing::error!("{err}");
                 AppError::internal(e)
             })?,
+        guest_plays: None,
     })
 }
 
@@ -465,6 +487,7 @@ pub async fn restore_release_service(
                 tracing::error!("{err}");
                 AppError::internal(e)
             })?,
+        guest_plays: None,
     })
 }
 

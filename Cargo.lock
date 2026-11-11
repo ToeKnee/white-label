@@ -7563,6 +7563,7 @@ dependencies = [
  "tower-sessions-sqlx-store",
  "tracing",
  "tracing-subscriber",
+ "web-sys",
 ]
 
 [[package]]

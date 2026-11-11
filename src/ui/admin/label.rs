@@ -168,6 +168,21 @@ fn EditLabelBody(
                         span { "Example {label.isrc_base} 25 00001" }
                     }
                 }
+                fieldset { class: "fieldset",
+                    legend { class: "fieldset-legend", "Guest plays per track" }
+                    input {
+                        r#type: "number",
+                        class: "w-full input",
+                        min: "0",
+                        max: "99",
+                        name: "guest_plays",
+                        value: label.guest_plays.to_string(),
+                    }
+                    p { class: "flex justify-between label",
+                        span { "How often one browser may hear each track before the buttons stop" }
+                        span { "Signed-in listeners replay freely" }
+                    }
+                }
                 button { class: "btn btn-primary", "Update" }
             }
         }
@@ -321,6 +336,8 @@ pub async fn update_label(
         // hand-crafted POST gets the steer the 303 handler would have given.
         return HttpError::unauthorized("Please log in to save.");
     };
+    // Read before the moves below: the other fields move into the service.
+    let guest_plays = fields.parsed_guest_plays();
     match services::record_label::update_record_label(
         &db.0,
         Some(session_user),
@@ -328,6 +345,7 @@ pub async fn update_label(
         fields.name,
         fields.description,
         fields.isrc_base,
+        guest_plays,
     )
     .await
     {

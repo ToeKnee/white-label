@@ -28,10 +28,23 @@ pub struct RecordLabel {
     pub description: String,
     /// The ISRC base of the label
     pub isrc_base: String,
+    /// How many plays one guest browser gets per track before its rows stop
+    /// offering them (signed-in listeners are exempt; see
+    /// `crate::ui::player`). `RecordLabel::DEFAULT_GUEST_PLAYS` matches the
+    /// column default, and is what unparsable form values fall back to;
+    /// `0` means guests hear nothing.
+    pub guest_plays: i32,
     /// The date and time the label was created in the database
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// The date and time the label was last updated
     pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl RecordLabel {
+    /// The allowance a label that has never set one starts on — the same 5
+    /// the migration gives the column. Shared with the release page, which
+    /// falls back to it when a fetch carries no label value.
+    pub const DEFAULT_GUEST_PLAYS: i32 = 5;
 }
 
 impl Validate for RecordLabel {
@@ -93,6 +106,7 @@ impl RecordLabel {
             slug: row.get("slug"),
             description: row.get("description"),
             isrc_base: row.get("isrc_base"),
+            guest_plays: row.get("guest_plays"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
         })
@@ -133,6 +147,7 @@ impl RecordLabel {
             slug: row.get("slug"),
             description: row.get("description"),
             isrc_base: row.get("isrc_base"),
+            guest_plays: row.get("guest_plays"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
         })
@@ -173,6 +188,7 @@ impl RecordLabel {
             slug: row.get("slug"),
             description: row.get("description"),
             isrc_base: row.get("isrc_base"),
+            guest_plays: row.get("guest_plays"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
         })
@@ -193,11 +209,12 @@ impl RecordLabel {
         self.slug = slugify(&self.name);
         self.validate(pool).await?;
 
-        let row = sqlx::query("UPDATE labels SET name = $1, slug=$2, description = $3, isrc_base = $4, updated_at = NOW() WHERE id = $5 RETURNING *")
+        let row = sqlx::query("UPDATE labels SET name = $1, slug=$2, description = $3, isrc_base = $4, guest_plays = $5, updated_at = NOW() WHERE id = $6 RETURNING *")
             .bind(self.name)
             .bind(self.slug)
             .bind(self.description)
             .bind(self.isrc_base)
+            .bind(self.guest_plays)
             .bind(self.id)
             .fetch_one(pool)
             .await;
@@ -216,6 +233,7 @@ impl RecordLabel {
             slug: row.get("slug"),
             description: row.get("description"),
             isrc_base: row.get("isrc_base"),
+            guest_plays: row.get("guest_plays"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
         })
@@ -352,6 +370,7 @@ mod tests {
             slug: "test-label".to_string(),
             description: "This is a test label".to_string(),
             isrc_base: "UK ABC".to_string(),
+            guest_plays: RecordLabel::DEFAULT_GUEST_PLAYS,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
@@ -361,6 +380,10 @@ mod tests {
         assert_eq!(record_label.slug, "test-label".to_string());
         assert_eq!(record_label.description, "This is a test label".to_string());
         assert_eq!(record_label.isrc_base, "UK ABC".to_string());
+        assert_eq!(
+            record_label.guest_plays, 5,
+            "the default allowance matches the column default"
+        );
     }
 
     #[sqlx::test]
@@ -371,6 +394,7 @@ mod tests {
             slug: "test-record-label".to_string(),
             description: "This is a test record label".to_string(),
             isrc_base: "UK ABC".to_string(),
+            guest_plays: RecordLabel::DEFAULT_GUEST_PLAYS,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
@@ -388,6 +412,7 @@ mod tests {
             slug: "test-record-label".to_string(),
             description: "This is a test record label".to_string(),
             isrc_base: "UK ABC".to_string(),
+            guest_plays: RecordLabel::DEFAULT_GUEST_PLAYS,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
@@ -410,6 +435,7 @@ mod tests {
             slug: "test-record-label".to_string(),
             description: "This is a test record label".to_string(),
             isrc_base: "UK ABC".to_string(),
+            guest_plays: RecordLabel::DEFAULT_GUEST_PLAYS,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
@@ -432,6 +458,7 @@ mod tests {
             slug,
             description: "This is a test record label".to_string(),
             isrc_base: "UK ABC".to_string(),
+            guest_plays: RecordLabel::DEFAULT_GUEST_PLAYS,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
@@ -539,6 +566,7 @@ mod tests {
         record_label.name = "Updated Label".to_string();
         record_label.description = "This is an updated label".to_string();
         record_label.isrc_base = "UK XYZ".to_string();
+        record_label.guest_plays = 2;
         let updated_label = record_label.update(&pool).await.unwrap();
         assert_eq!(updated_label.id, 1);
         assert_eq!(updated_label.name, "Updated Label".to_string());
@@ -548,6 +576,10 @@ mod tests {
             "This is an updated label".to_string()
         );
         assert_eq!(updated_label.isrc_base, "UK XYZ".to_string());
+        assert_eq!(
+            updated_label.guest_plays, 2,
+            "the allowance follows the edit"
+        );
     }
 
     #[cfg(feature = "server")]

@@ -18,4 +18,9 @@ pub struct ReleaseResult {
     pub artists: Vec<Artist>,
     /// A vector of tracks with artists associated with the release.
     pub tracks: Vec<TrackWithArtists>,
+    /// The release's label guest-play allowance (`None`: the default), so
+    /// the public release page can tell the global player how many plays a
+    /// guest browser gets per track. Only the release fetch the public page
+    /// uses fills it; the editor round trips carry `None`.
+    pub guest_plays: Option<i32>,
 }

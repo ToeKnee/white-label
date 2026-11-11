@@ -631,9 +631,14 @@ test("Add to Queue grows the live queue without disturbing playback", async ({ p
   // Play`: a click appends its track to the end of the queue (here the
   // playing track itself, repeated twice), and the loaded track — the
   // tagged audio node — is untouched while the bar's place counts up.
+  // The queueing listener signs in first: signed-in listening is exempt
+  // from the guest play allowance entirely (the allowance is under test
+  // elsewhere).
+  requireAdmin();
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
+  await loginAs(page, "e2e-admin");
   await page.goto(`${base}/artists/e2e-tabs/e2e-audio-release`);
   await expect(h1(page)).toHaveText("E2E Audio Release");
   await clientIsLive(page);
@@ -686,7 +691,8 @@ test("the global player keeps its track through SPA navigation", async ({ page }
   await page.getByRole("button", { name: "Play E2E Audio Track" }).click();
 
   // The bar took over: track and place show, and it is the only media on
-  // the page; the row's button became the loaded track's `+ Add to Queue`.
+  // the page; the row's button became `+ Add to Queue` — the bar plays,
+  // and the guest's browser still has plays of the track to spare.
   await expect(page.locator("#global-player")).toBeVisible();
   await expect(page.locator("#global-player")).toContainText("E2E Audio Track");
   await expect(page.locator("#global-player")).toContainText("1 of 1");
@@ -697,7 +703,8 @@ test("the global player keeps its track through SPA navigation", async ({ page }
   // has no album art of its own.
   await expect(page.locator("#global-player img")).toHaveCount(1);
   await expect(page.locator("#global-player img")).toHaveAttribute("src", /(\/uploads\/|Logo\.svg)/);
-  await expect(page.getByRole("button", { name: "Add E2E Audio Track to queue" })).toHaveClass(/btn-active/);
+  await expect(page.getByRole("button", { name: "Play E2E Audio Track" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add E2E Audio Track to queue" })).toBeVisible();
 
   // Tag the bar's audio node, then prove *that node* (not just "an audio")
   // survives two SPA navigations: home via the brand link, then the artist
@@ -723,8 +730,10 @@ test("the global player keeps its track through SPA navigation", async ({ page }
   await expect(page.locator('#global-player audio[data-wl-probe="kept"]')).toHaveCount(1);
 
   // Close puts the bar away; navigating back to the release (still inside
-  // the same document) finds the row offering `⏵ Play` again — the rows
-  // never carry media of their own.
+  // the same document) finds the row offering `⏵ Play` again — the label
+  // allows five plays per track, and this browser has spent one — with the
+  // row's note naming what is left. The rows never carry media of their
+  // own.
   await page.getByRole("button", { name: "Close the player" }).click();
   await expect(page.locator("#global-player")).toHaveCount(0);
   await expect(page.locator("audio")).toHaveCount(0, "the artist page has no track rows");
@@ -732,6 +741,8 @@ test("the global player keeps its track through SPA navigation", async ({ page }
   await page.locator('a[href="/artists/e2e-tabs/e2e-audio-release"]').click();
   await expect(h1(page)).toHaveText("E2E Audio Release");
   await expect(page.getByRole("button", { name: "Play E2E Audio Track" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "No plays left for E2E Audio Track" })).toHaveCount(0);
+  await expect(page.getByText("4 plays left", { exact: true })).toBeVisible();
   await expect(page.locator("audio")).toHaveCount(0);
   await expect(page.locator("#global-player")).toHaveCount(0);
   expect(documentLoads, "the whole walk was one document").toBe(loadsBeforeNavigating);
@@ -787,6 +798,70 @@ test("the queue auto-appends the artist's other tracks when it runs out", async 
   await expect(title).toHaveText(loaded);
   await expect(page.locator("#global-player")).toContainText("3 of 3");
   await expect(page.locator("audio")).toHaveCount(1, "still only the bar's media");
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
+test("a guest gets a label-sized play allowance per track, remembered across reloads", async ({ page }) => {
+  // The Ideas.md ask, on the `e2e-radio` fixtures (never mutated by the
+  // upload specs): the gate's label carries the default five-play
+  // allowance, so each Play spends one of a track's five for this
+  // browser — the row's note counts down — and the sixth load finds the
+  // disabled `No plays left`. The counts live in localStorage, which is
+  // what survives the reload. Clearing the browser's storage hands the
+  // plays back — the rule is "a little harder", not impossible.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`${base}/artists/e2e-radio/e2e-radio-album-a`);
+  await expect(h1(page)).toHaveText("E2E Radio Album A");
+  await clientIsLive(page);
+
+  // A server-shipped row says nothing about plays: the counts belong to
+  // the browser, and this one has spent none yet.
+  await expect(page.getByText("plays left")).toHaveCount(0, "a fresh slate says nothing");
+
+  // The first Play spends one of five: the button becomes the bar's
+  // `+ Add to Queue`, and the row's note counts down.
+  await page.getByRole("button", { name: "Play Radio Track A1" }).click();
+  await expect(page.locator("#global-player")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Radio Track A1 to queue" })).toBeVisible();
+  await expect(page.getByText("4 plays left", { exact: true })).toBeVisible();
+
+  // The counts reach localStorage, which is what makes the reload below
+  // mean something.
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("white-label-heard-tracks")))
+    .toContain("e2e-radio-track-a1");
+
+  // A reload keeps the counts (the bar starts closed, so the row offers
+  // Play again — note and all: the rule belongs to the browser, not to
+  // one page render).
+  await page.reload();
+  await expect(h1(page)).toHaveText("E2E Radio Album A");
+  await clientIsLive(page);
+  await expect(page.getByRole("button", { name: "Play Radio Track A1" })).toBeVisible();
+  await expect(page.getByText("4 plays left", { exact: true })).toBeVisible();
+
+  // Four more Play/Close pairs spend the rest of the allowance.
+  for (let spent = 2; spent <= 5; spent += 1) {
+    await page.getByRole("button", { name: "Play Radio Track A1" }).click();
+    await expect(page.locator("#global-player")).toBeVisible();
+    await page.getByRole("button", { name: "Close the player" }).click();
+    await expect(page.locator("#global-player")).toHaveCount(0);
+  }
+  await expect(page.getByRole("button", { name: "Play Radio Track A1" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "No plays left for Radio Track A1" })).toBeVisible();
+
+  // Clearing the browser's storage is the way around it, by design: the
+  // Play button returns, and the row stops counting down.
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await expect(h1(page)).toHaveText("E2E Radio Album A");
+  await clientIsLive(page);
+  await expect(page.getByRole("button", { name: "Play Radio Track A1" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "No plays left for Radio Track A1" })).toHaveCount(0);
+  await expect(page.getByText("plays left")).toHaveCount(0, "a fresh slate says nothing");
 
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });

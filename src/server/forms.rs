@@ -285,6 +285,8 @@ async fn update_label(
         return Redirect::to("/login");
     }
 
+    // Read before the move below: the other fields move into the service.
+    let guest_plays = args.parsed_guest_plays();
     match services::record_label::update_record_label(
         &pool,
         current_user.as_ref(),
@@ -292,6 +294,7 @@ async fn update_label(
         args.name,
         args.description,
         args.isrc_base,
+        guest_plays,
     )
     .await
     {

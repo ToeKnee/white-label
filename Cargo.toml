@@ -72,6 +72,8 @@ tracing-subscriber = { version = "0.3.19", features = [
     "fmt",
     "env-filter",
 ] }
+# Browser `localStorage` for the player's heard tracks (web client only).
+web-sys = { version = "0.3", features = ["Storage", "Window"], optional = true }
 
 [features]
 # The default build is the server, so plain `cargo test` covers the services,
@@ -106,6 +108,7 @@ web = [
     "dioxus/fullstack",
     "dioxus/router",
     "dep:tracing",
+    "dep:web-sys",
 ]
 # Desktop client (native) build: `crate::ui` again, in a webview window.
 # Server fns become `reqwest` calls (with a cookie jar) against the API

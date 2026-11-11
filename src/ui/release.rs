@@ -5,8 +5,15 @@
 //! player bar at the bottom of the page (and the release's tracks with audio
 //! as its queue), which keeps the sound going across navigation. While the
 //! bar plays, the rows offer `+ Add to Queue` instead (see
-//! [`crate::ui::player`]). All the media lives in the bar: without the wasm
-//! client the page shows the buttons but no players at all.
+//! [`crate::ui::player`]). A guest — this page has no signed-in session —
+//! gets each track up to the label's play allowance (kept on the label,
+//! five plays per track per browser by default): a track the browser has
+//! spent shows a disabled `No plays left` in place of both buttons, and a
+//! row with plays left says how many once the browser has spent any. The
+//! page hands the rule and the label's number to the player whenever its
+//! session answer or its release changes (see `guest_limits_apply`).
+//! All the media lives in the bar: without the wasm client the page shows the
+//! buttons but no players at all.
 //!
 //! Unlike the other public pages, a failed fetch here *redirects*: an
 //! unknown artist falls back to the artists index, an unknown release to
@@ -17,14 +24,19 @@
 
 use dioxus::prelude::*;
 
+use crate::models::auth::User;
+use crate::models::record_label::RecordLabel;
 use crate::models::track_with_artists::TrackWithArtists;
 use crate::ui::Route;
+use crate::ui::SessionHint;
 use crate::ui::assets::{display_image_url, served_file_url, track_art_url};
 use crate::ui::data::{get_artist, get_release};
 use crate::ui::markdown_html;
 use crate::ui::page_data;
 use crate::ui::player::{PlayableTrack, use_player};
 use crate::ui::use_page;
+use crate::ui::use_session_hint;
+use crate::ui::use_user;
 use crate::ui::utils::Loading;
 use crate::utils::shorten_string::shorten_string;
 
@@ -97,6 +109,25 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
     };
     let release = release_result.release.clone();
     let tracks = release_result.tracks;
+
+    // The play allowance's input, read once the release resolved so the
+    // effect can carry the label's number: the page's own session load plus
+    // any answer a reactive sign-in or sign-out just gave the chrome (the
+    // navbar's `UserMenu` follows the same order for that half). Like the
+    // fetches, these hooks only exist once the boundary stopped suspending,
+    // and the effect still runs long before any row's click can land.
+    let session_hint = use_session_hint();
+    let page_session = use_user()?;
+    let guest_plays = release_result.guest_plays;
+    let mut rule_handler = use_player();
+    use_effect(move || {
+        let signed_in = page_session().ok().flatten();
+        let enforce = guest_limits_apply(&session_hint(), signed_in.as_ref());
+        rule_handler.write().set_listening_limits(
+            enforce,
+            guest_plays.unwrap_or(RecordLabel::DEFAULT_GUEST_PLAYS),
+        );
+    });
 
     rsx! {
         document::Title { "{release.name}" }
@@ -173,8 +204,11 @@ fn TrackList(
 /// release's, else the logo), name, featured artists, shortened blurb, and —
 /// when the track has an audio file — a `⏵ Play` button (which hands the
 /// track, with this release's audio tracks as its queue, to the global bar),
-/// shown as `+ Add to Queue` while the bar plays. Both need the client; a
-/// browser without javascript sees the buttons but no media.
+/// shown as `+ Add to Queue` while the bar plays. A guest whose browser
+/// spent the label's plays of the track sees a disabled `No plays left`
+/// instead of either, and a guest with plays left hears how many (the
+/// player's rule, see [`crate::ui::player`]). All the buttons need the
+/// client; a browser without javascript sees the buttons but no media.
 #[component]
 fn Track(
     /// The track to display
@@ -192,6 +226,18 @@ fn Track(
     let player = use_player();
     let bar_is_open = player().is_active();
     let is_loaded = player().is_playing(&track.track.slug);
+    // A guest whose browser spent the label's plays of this track gets a
+    // disabled `No plays left` instead of Play or Add to Queue.
+    let out_of_plays = player().out_of_plays(&track.track.slug);
+    // A row with plays left mentions the count once the browser has spent
+    // at least one: before any spend nothing (the full allowance is not
+    // worth saying), and the server — which never sees the browser's
+    // counts — always sees the full allowance, so the plain page stays
+    // plain.
+    let plays_hint = match player().plays_left(&track.track.slug) {
+        Some(left) if left > 0 && left < player().guest_allowance() => Some(plays_note(left)),
+        _ => None,
+    };
 
     // A row is in the queue exactly when it has audio; `None` rows get no
     // button at all.
@@ -239,9 +285,20 @@ fn Track(
                 // is closed) starts the track in the bar with this release's
                 // audio tracks as the queue; while the bar plays the button
                 // becomes `+ Add to Queue`, which appends this row's track
-                // to the live queue without disturbing the loaded one.
+                // to the live queue without disturbing the loaded one. A
+                // guest who spent the label's plays of it gets a disabled
+                // `No plays left` instead, and until then a row says how
+                // many plays are left once the browser has spent one (see
+                // [`crate::ui::player`]).
                 if let Some(position) = queue_position {
-                    if bar_is_open {
+                    if out_of_plays {
+                        button {
+                            class: "btn btn-ghost btn-disabled",
+                            disabled: true,
+                            aria_label: "No plays left for {track.track.name}",
+                            "No plays left"
+                        }
+                    } else if bar_is_open {
                         // The loaded row keeps the button too: adding the
                         // playing track replays it later, on purpose.
                         if let Some(entry) = own_entry {
@@ -267,6 +324,9 @@ fn Track(
                             // in the theme's colour, not an emoji.
                             "⏵\u{FE0E} Play"
                         }
+                    }
+                    if let Some(note) = plays_hint {
+                        span { class: "text-xs opacity-70", "{note}" }
                     }
                 }
             }
@@ -317,6 +377,44 @@ fn playable_queue(
         .collect()
 }
 
+/// Whether the guest play allowance applies to this release page: the
+/// reactive auth answer wins over the page's own session load (the same
+/// weighing the navbar menu does), and a load failure counts as a guest
+/// (the stricter side).
+///
+/// ```text
+/// guest_limits_apply(&SessionHint::Unknown, None)          == true  // guest
+/// guest_limits_apply(&SessionHint::Unknown, Some(&user))   == false // signed in
+/// guest_limits_apply(&SessionHint::SignedOut, Some(&user)) == true  // just logged out
+/// ```
+fn guest_limits_apply(hint: &SessionHint, page_session: Option<&User>) -> bool {
+    match hint {
+        SessionHint::SignedIn(_) => false,
+        SessionHint::SignedOut => true,
+        // Nothing reactive has happened: the session this page loaded (or,
+        // in a client build with no page load to carry it, the one this
+        // component fetched) decides.
+        SessionHint::Unknown => !page_session.is_some_and(User::is_authenticated),
+    }
+}
+
+/// A guest row's note about the plays a track has left: singular for one,
+/// plain for the rest. Rows only show one once the browser has spent at
+/// least one play but still has some; a row out of plays carries a
+/// disabled `No plays left` button instead (see [`crate::ui::player`]).
+///
+/// ```text
+/// plays_note(1) == "1 play left"
+/// plays_note(4) == "4 plays left"
+/// ```
+fn plays_note(left: usize) -> String {
+    if left == 1 {
+        "1 play left".to_string()
+    } else {
+        format!("{left} plays left")
+    }
+}
+
 /// Names of artists who contributed to the track, excluding the primary
 /// artist (the `FeaturedTrackArtists` component's logic; extracted as a pure
 /// function so the empty case and the join are testable). Shared with the
@@ -335,10 +433,14 @@ pub(crate) fn featured_artist_names(track: &TrackWithArtists) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{audio_source, featured_artist_names, playable_queue};
+    use super::{
+        audio_source, featured_artist_names, guest_limits_apply, playable_queue, plays_note,
+    };
     use crate::models::artist::Artist;
+    use crate::models::auth::User;
     use crate::models::track::Track;
     use crate::models::track_with_artists::TrackWithArtists;
+    use crate::ui::SessionHint;
 
     fn track_with_artists(primary_id: i64, artist_ids: &[i64]) -> TrackWithArtists {
         let artists = artist_ids
@@ -356,6 +458,61 @@ mod tests {
             },
             artists,
         }
+    }
+
+    #[test]
+    fn guests_get_the_play_allowance_rule_and_members_do_not() {
+        // A page with no session answer: the visitor is a guest, so the bar
+        // enforces the label's play allowance.
+        assert!(guest_limits_apply(&SessionHint::Unknown, None));
+
+        // The page loaded a signed-in session: rules off, replay freely.
+        // (Guest `User::default` carries the `-1` sentinel, so `id: 1` is a
+        // real account.)
+        let member = User {
+            id: 1,
+            ..User::default()
+        };
+        assert!(
+            !guest_limits_apply(&SessionHint::Unknown, Some(&member)),
+            "a signed-in page session turns the rule off"
+        );
+    }
+
+    #[test]
+    fn the_reactive_auth_answer_overrides_the_page_session() {
+        // The same pair the navbar menu weighs: a sign-in that never
+        // reloaded this page still turns the rule off, and a sign-out turns
+        // it back on (the desktop case where this page's own load is stale).
+        let member = User {
+            id: 1,
+            ..User::default()
+        };
+        assert!(
+            !guest_limits_apply(&SessionHint::SignedIn(Box::new(member.clone())), None),
+            "the just-signed-in answer wins over a stale guest load"
+        );
+        assert!(
+            guest_limits_apply(&SessionHint::SignedOut, Some(&member)),
+            "the just-signed-out answer wins over a stale signed-in load"
+        );
+    }
+
+    #[test]
+    fn a_failed_session_load_keeps_the_rule_on() {
+        // `use_user` answers `None` both for guests and for load failures:
+        // the stricter side is the safe shape for the rule.
+        assert!(
+            guest_limits_apply(&SessionHint::Unknown, None),
+            "a missing or failed session leaves the listener treated as a guest"
+        );
+    }
+
+    #[test]
+    fn the_plays_note_reads_naturally() {
+        assert_eq!(plays_note(1), "1 play left", "one reads as singular");
+        assert_eq!(plays_note(2), "2 plays left");
+        assert_eq!(plays_note(4), "4 plays left");
     }
 
     #[test]

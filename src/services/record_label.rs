@@ -20,6 +20,8 @@ use crate::models::record_label::RecordLabel;
 /// name: String - The new label name
 /// description: String - The new description (markdown)
 /// `isrc_base`: `String` - The new ISRC prefix
+/// `guest_plays`: `i32` - The new guest play allowance (already parsed and
+/// clamped by [`crate::forms::record_label::LabelFields::parsed_guest_plays`])
 ///
 /// # Errors
 /// `Unauthorized` when there is no session user, `Forbidden` without the
@@ -33,6 +35,7 @@ pub async fn update_record_label(
     name: String,
     description: String,
     isrc_base: String,
+    guest_plays: i32,
 ) -> Result<RecordLabel, AppError> {
     let current_user = user.ok_or_else(|| {
         tracing::error!("update_record_label: no session user");
@@ -53,6 +56,7 @@ pub async fn update_record_label(
     record_label.name = name;
     record_label.description = description;
     record_label.isrc_base = isrc_base;
+    record_label.guest_plays = guest_plays;
     record_label.update(pool).await.map_err(|e| {
         tracing::error!("update_record_label: Error while updating label: {e}");
         AppError::Internal("Could not update label, try again later".into())
@@ -68,9 +72,10 @@ mod tests {
 
     #[sqlx::test]
     async fn update_requires_a_session_user(pool: PgPool) {
-        let error = update_record_label(&pool, None, 1, "x".into(), String::new(), String::new())
-            .await
-            .expect_err("guests must not update labels");
+        let error =
+            update_record_label(&pool, None, 1, "x".into(), String::new(), String::new(), 5)
+                .await
+                .expect_err("guests must not update labels");
         assert_eq!(
             error,
             AppError::Unauthorized("You must be logged in to update a label".into())
@@ -96,6 +101,7 @@ mod tests {
                 "x".into(),
                 String::new(),
                 String::new(),
+                5,
             )
             .await
             .expect_err("non-owners must not update labels");
@@ -109,6 +115,10 @@ mod tests {
     #[sqlx::test]
     async fn update_renames_the_label(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
+        assert_eq!(
+            label.guest_plays, 5,
+            "a fresh label starts on the column default"
+        );
         let owner = create_test_user_with_permissions(&pool, 1, vec!["label_owner"])
             .await
             .expect("label_owner user");
@@ -120,6 +130,7 @@ mod tests {
             "Renamed Label".into(),
             "new story".into(),
             "US ABC 1".into(),
+            3,
         )
         .await
         .expect("label_owner update");
@@ -127,6 +138,7 @@ mod tests {
         assert_eq!(updated.name, "Renamed Label");
         assert_eq!(updated.description, "new story");
         assert_eq!(updated.isrc_base, "US ABC 1");
+        assert_eq!(updated.guest_plays, 3, "the guest allowance saves too");
         // `update` re-slugifies from the name.
         assert_eq!(updated.slug, "renamed-label");
     }
@@ -143,6 +155,7 @@ mod tests {
             "x".into(),
             String::new(),
             String::new(),
+            5,
         )
         .await
         .expect_err("unknown id must fail");

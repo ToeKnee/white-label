@@ -477,6 +477,11 @@ pin "$OUT/continuation.json" '"tracks":\[\]'
 curl -sS -o "$OUT/radio_release.html" -w "radio release status=%{http_code}\n" \
   "$base/artists/e2e-radio/e2e-radio-album-b"
 pin "$OUT/radio_release.html" 'src="/uploads/releases/999999992-e2e-radio-album-b.jpg" alt="Radio Track B1"'
+# The play counts live in the browser, so the server always ships the plain
+# Play button: a server-rendered row never shows `No plays left` and never
+# counts down.
+no_pin "$OUT/radio_release.html" 'No plays left'
+no_pin "$OUT/radio_release.html" 'plays left'
 # The upload widget needs a session, so a guest never sees its markup.
 no_pin "$OUT/guest_profile.html" 'file_to_upload'
 curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \
