@@ -230,9 +230,9 @@ if [ -n "${DATABASE_URL:-}" ]; then
             label_id = EXCLUDED.label_id,
             published_at = COALESCE(artists.published_at, EXCLUDED.published_at),
             deleted_at = NULL;
-        INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at)
+        INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at, primary_image)
         SELECT 'E2E Radio Album A', 'e2e-radio-album-a', 'Auto-append fixture: the played album',
-               a.label_id, 'E2E-RADIO-A', a.id, now()
+               a.label_id, 'E2E-RADIO-A', a.id, now(), '999999993-e2e-radio-album-a.jpg'
         FROM artists a WHERE a.slug = 'e2e-radio'
         ON CONFLICT (name) DO UPDATE SET
             slug = EXCLUDED.slug,
@@ -240,10 +240,11 @@ if [ -n "${DATABASE_URL:-}" ]; then
             catalogue_number = EXCLUDED.catalogue_number,
             primary_artist_id = EXCLUDED.primary_artist_id,
             published_at = COALESCE(releases.published_at, EXCLUDED.published_at),
-            deleted_at = NULL;
-        INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at)
+            deleted_at = NULL,
+            primary_image = EXCLUDED.primary_image;
+        INSERT INTO releases (name, slug, description, label_id, catalogue_number, primary_artist_id, published_at, primary_image)
         SELECT 'E2E Radio Album B', 'e2e-radio-album-b', 'Auto-append fixture: the continuation album',
-               a.label_id, 'E2E-RADIO-B', a.id, now()
+               a.label_id, 'E2E-RADIO-B', a.id, now(), '999999992-e2e-radio-album-b.jpg'
         FROM artists a WHERE a.slug = 'e2e-radio'
         ON CONFLICT (name) DO UPDATE SET
             slug = EXCLUDED.slug,
@@ -251,7 +252,8 @@ if [ -n "${DATABASE_URL:-}" ]; then
             catalogue_number = EXCLUDED.catalogue_number,
             primary_artist_id = EXCLUDED.primary_artist_id,
             published_at = COALESCE(releases.published_at, EXCLUDED.published_at),
-            deleted_at = NULL;
+            deleted_at = NULL,
+            primary_image = EXCLUDED.primary_image;
         INSERT INTO tracks (name, slug, description, lyrics, isrc_code, bpm, primary_artist_id, release_id, track_number, published_at, audio)
         SELECT 'Radio Track A1', 'e2e-radio-track-a1', 'Auto-append fixture track',
                '', 'E2ERADIOA1', 120, r.primary_artist_id, r.id, 1, now(),
@@ -370,6 +372,11 @@ if [ -n "${UPLOAD_PATH:-}" ]; then
     printf 'E2E auto-append pin fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999996-e2e-radio-a1.wav"
     printf 'E2E auto-append pin fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999995-e2e-radio-b1.wav"
     printf 'E2E auto-append pin fixture, not a real wave' > "$UPLOAD_PATH/tracks/999999994-e2e-radio-b2.wav"
+    # The album art the radio fixture releases name: the auto-append pins
+    # watch the bar fall back to it (the radio tracks never get an image of
+    # their own), so the bytes only need to exist for the `<img>` to load.
+    printf 'E2E album-art fallback pin fixture, not a real jpeg' > "$UPLOAD_PATH/releases/999999993-e2e-radio-album-a.jpg"
+    printf 'E2E album-art fallback pin fixture, not a real jpeg' > "$UPLOAD_PATH/releases/999999992-e2e-radio-album-b.jpg"
     # The unreferenced-file sweep fixture: a file no row (or seed) ever
     # names, which the preview must always list and a confirmed purge
     # would remove. Recreated every run, so an accidental manual purge
@@ -431,13 +438,17 @@ if [ "$admin_ok" -eq 1 ]; then
     pin "$OUT/artist_images.html" 'E2E Tabs Artist Images'
     pin "$OUT/artist_images.html" 'name="file_to_upload"'
     pin "$OUT/artist_images.html" 'accept=".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP"'
-    # The track editor carries the audio uploader: its own accept list, and the
-    # release slug the javascript-off form needs to come back to this page.
+    # The track editor carries both uploaders: the audio slot (its own accept
+    # list, and the release slug the javascript-off form needs to come back to
+    # this page) and the image slot, each naming its configuration so a
+    # javascript-off outcome redirects to the widget that produced it.
     curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/track_editor.html" -w "track editor status=%{http_code}\n" \
       "$base/admin/artist/e2e-tabs/release/e2e-audio-release/track/e2e-audio-track"
     pin "$OUT/track_editor.html" 'E2E Audio Track - E2E Audio Release - E2E Tabs Artist'
     pin "$OUT/track_editor.html" 'name="file_type" value="TrackAudio"'
+    pin "$OUT/track_editor.html" 'name="file_type" value="TrackImage"'
     pin "$OUT/track_editor.html" 'accept=".mp3,.MP3,.wav,.WAV,.flac,.FLAC,.ogg,.OGG"'
+    pin "$OUT/track_editor.html" 'accept=".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP"'
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.
@@ -460,6 +471,12 @@ pin "$OUT/guest_profile.html" 'action="/auth/login"'
 curl -sS -o "$OUT/continuation.json" -w "continuation status=%{http_code}\n" \
   "$base/api/get_continuation_tracks?artist_slug=e2e-tabs&exclude_slugs=e2e-audio-track"
 pin "$OUT/continuation.json" '"tracks":\[\]'
+# The public album B page: its rows show the track artwork chain — the radio
+# tracks have none of their own, and the release's seeded album art (bytes
+# written in the uploads seed above) is the next link, rendered server-side.
+curl -sS -o "$OUT/radio_release.html" -w "radio release status=%{http_code}\n" \
+  "$base/artists/e2e-radio/e2e-radio-album-b"
+pin "$OUT/radio_release.html" 'src="/uploads/releases/999999992-e2e-radio-album-b.jpg" alt="Radio Track B1"'
 # The upload widget needs a session, so a guest never sees its markup.
 no_pin "$OUT/guest_profile.html" 'file_to_upload'
 curl -sS -o /dev/null -w "bad login status=%{http_code}\n" \

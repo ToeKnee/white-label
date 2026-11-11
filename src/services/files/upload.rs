@@ -71,6 +71,7 @@ pub async fn finalise_upload(
         UploadConfiguration::Avatar => store_avatar(pool, file_name, slug, uploader).await,
         UploadConfiguration::Release => store_release_primary_image(pool, file_name, slug).await,
         UploadConfiguration::TrackAudio => store_track_audio(pool, file_name, slug).await,
+        UploadConfiguration::TrackImage => store_track_primary_image(pool, file_name, slug).await,
     };
     if let Err(error) = attach {
         tracing::error!("uploaded file not attached to {upload_config}: {error}");
@@ -168,6 +169,29 @@ async fn store_track_audio(pool: &PgPool, file_name: &str, slug: &str) -> Result
         .map_err(|error| error.to_string())
 }
 
+/// Point a track's `primary_image` at the uploaded file, writing one column.
+///
+/// The same guard as [`store_artist_primary_image`]: a whole-model save would
+/// re-derive `slug` from `name` and silently rename the track.
+async fn store_track_primary_image(
+    pool: &PgPool,
+    file_name: &str,
+    slug: &str,
+) -> Result<(), String> {
+    let track = Track::find_by_slug(pool, slug.to_string())
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("no track with slug {slug}"))?;
+
+    sqlx::query("UPDATE tracks SET primary_image = $1, updated_at = NOW() WHERE id = $2")
+        .bind(file_name)
+        .bind(track.id)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,6 +281,49 @@ mod tests {
     #[sqlx::test]
     async fn store_track_audio_reports_a_missing_track(pool: PgPool) {
         let error = store_track_audio(&pool, "1700000000-song.flac", "no-such-track")
+            .await
+            .expect_err("nothing to attach to");
+        assert!(
+            error.contains("no-such-track"),
+            "the message names the slug that was not found: {error}"
+        );
+    }
+
+    /// A hand-edited track slug must survive an image upload for the same
+    /// reason it survives an audio upload: the tail writes the image column
+    /// and nothing else.
+    #[sqlx::test]
+    async fn store_track_primary_image_keeps_the_columns_a_track_save_owns(pool: PgPool) {
+        let track = create_test_track(&pool, 2, None, None)
+            .await
+            .expect("test track");
+        // A slug the track's own name would never produce.
+        sqlx::query("UPDATE tracks SET slug = $1 WHERE id = $2")
+            .bind("hand-edited-image-slug")
+            .bind(track.id)
+            .execute(&pool)
+            .await
+            .expect("the slug to be edited");
+
+        store_track_primary_image(&pool, "1700000000-cover.png", "hand-edited-image-slug")
+            .await
+            .expect("the image to attach");
+
+        let stored = Track::find_by_slug(&pool, "hand-edited-image-slug".to_string())
+            .await
+            .expect("the stored track")
+            .expect("the slug still addresses a track");
+        assert_eq!(stored.id, track.id, "the row was not renamed away");
+        assert_eq!(
+            stored.primary_image.as_deref(),
+            Some("1700000000-cover.png"),
+            "the image column points at the upload"
+        );
+    }
+
+    #[sqlx::test]
+    async fn store_track_primary_image_reports_a_missing_track(pool: PgPool) {
+        let error = store_track_primary_image(&pool, "1700000000-cover.png", "no-such-track")
             .await
             .expect_err("nothing to attach to");
         assert!(

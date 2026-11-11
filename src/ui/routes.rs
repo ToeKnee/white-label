@@ -240,7 +240,8 @@ pub enum Route {
     },
     /// Edit a track. `updated`/`bad` carry the track form's codes (posts to
     /// `/admin/forms/track/*`; see `crate::server::forms`), `uploaded`/
-    /// `bad_upload` the audio upload form's (`/forms/upload`).
+    /// `bad_upload` either upload form's (`/forms/upload`); each code names
+    /// its slot (`TrackAudio` or `TrackImage`) since the editor hosts both.
     #[route("/release/:release_slug/track/:track_slug?:updated&:bad&:uploaded&:bad_upload")]
     EditTrack {
         /// The artist slug.
@@ -418,39 +419,39 @@ mod tests {
     #[test]
     fn upload_form_codes_parse() {
         assert_eq!(
-            parse("/admin/artist/jimi/images?uploaded=1"),
+            parse("/admin/artist/jimi/images?uploaded=Artist"),
             Route::EditArtistImages {
                 artist_slug: "jimi".into(),
-                uploaded: Some("1".into()),
+                uploaded: Some("Artist".into()),
                 bad_upload: None,
             }
         );
         assert_eq!(
-            parse("/admin/artist/jimi/images?bad_upload=bad_mime"),
+            parse("/admin/artist/jimi/images?bad_upload=Artist:bad_mime"),
             Route::EditArtistImages {
                 artist_slug: "jimi".into(),
                 uploaded: None,
-                bad_upload: Some("bad_mime".into()),
+                bad_upload: Some("Artist:bad_mime".into()),
             }
         );
         assert_eq!(
-            parse("/admin/artist/jimi/release/axis?uploaded=1"),
+            parse("/admin/artist/jimi/release/axis?uploaded=Release"),
             Route::EditRelease {
                 artist_slug: "jimi".into(),
                 release_slug: "axis".into(),
                 updated: None,
                 bad: None,
-                uploaded: Some("1".into()),
+                uploaded: Some("Release".into()),
                 bad_upload: None,
             }
         );
         assert_eq!(
-            parse("/profile?bad_upload=too_large"),
+            parse("/profile?bad_upload=Avatar:too_large"),
             Route::EditProfile {
                 saved: None,
                 bad: None,
                 uploaded: None,
-                bad_upload: Some("too_large".into()),
+                bad_upload: Some("Avatar:too_large".into()),
             }
         );
     }
@@ -687,19 +688,19 @@ mod tests {
         );
         // The audio upload's codes ride the same route.
         assert_eq!(
-            parse("/admin/artist/jimi/release/axis/track/castles?uploaded=1"),
+            parse("/admin/artist/jimi/release/axis/track/castles?uploaded=TrackImage"),
             Route::EditTrack {
                 artist_slug: "jimi".into(),
                 release_slug: "axis".into(),
                 track_slug: "castles".into(),
                 updated: None,
                 bad: None,
-                uploaded: Some("1".into()),
+                uploaded: Some("TrackImage".into()),
                 bad_upload: None,
             }
         );
         assert_eq!(
-            parse("/admin/artist/jimi/release/axis/track/castles?bad_upload=bad_mime"),
+            parse("/admin/artist/jimi/release/axis/track/castles?bad_upload=TrackAudio:bad_mime"),
             Route::EditTrack {
                 artist_slug: "jimi".into(),
                 release_slug: "axis".into(),
@@ -707,7 +708,7 @@ mod tests {
                 updated: None,
                 bad: None,
                 uploaded: None,
-                bad_upload: Some("bad_mime".into()),
+                bad_upload: Some("TrackAudio:bad_mime".into()),
             }
         );
         assert_eq!(

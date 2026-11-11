@@ -31,6 +31,8 @@ pub enum UploadConfiguration {
     Release,
     /// Upload configuration for a track's own audio file.
     TrackAudio,
+    /// Upload configuration for a track's own image.
+    TrackImage,
 }
 
 impl FromStr for UploadConfiguration {
@@ -42,6 +44,7 @@ impl FromStr for UploadConfiguration {
             "Avatar" => Ok(Self::Avatar),
             "Release" => Ok(Self::Release),
             "TrackAudio" => Ok(Self::TrackAudio),
+            "TrackImage" => Ok(Self::TrackImage),
             _ => bail!("Invalid upload configuration"),
         }
     }
@@ -88,7 +91,21 @@ impl UploadConfiguration {
                 size_limit: 100 * 1024 * 1024, // 100MB
                 rename: false,
             },
-            // Audio gets the largest limit of the four: a lossless three-minute
+            // Track images share the `tracks` directory with track audio; the
+            // extension and timestamp prefix keep them apart.
+            Self::TrackImage => UploadDetails {
+                mime_types: vec![
+                    "image/jpeg".to_string(),
+                    "image/png".to_string(),
+                    "image/gif".to_string(),
+                    "image/webp".to_string(),
+                ],
+                path: "tracks".to_string(),
+                permissions: vec!["admin".to_string(), "label_owner".to_string()],
+                size_limit: 100 * 1024 * 1024, // 100MB
+                rename: false,
+            },
+            // Audio gets the largest limit of the five: a lossless three-minute
             // track runs to tens of megabytes (a FLAC of a WAV of a CD master is
             // around 30MB), and 250MB leaves room for long or multitrack files.
             // The formats are the four every target browser can play natively;

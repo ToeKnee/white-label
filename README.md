@@ -136,7 +136,10 @@ Transport is glyph buttons (`⏮` `⏭` `⏏`, forced to text presentation —
 `style/tailwind.css`, or browsers paint them from a colour-emoji font that
 ignores the theme): previous/next walk the queue and hold at either end
 rather than wrapping, a finished track steps to the next, and when the queue
-itself runs out the bar tops it up (see below).
+itself runs out the bar tops it up (see below). Beside the loaded track the
+bar shows its artwork: the track's own image, else the album art of the
+release it sits on, else the site logo (`track_art_url` in
+`src/ui/assets.rs`, resolved when the queue entry is built).
 
 When the queue runs out — a `⏭` at its end, or a track ending there — the bar
 fetches a continuation: `GET /api/get_continuation_tracks` (`src/ui/data.rs`,
@@ -144,46 +147,55 @@ via `continuation_tracks_service` in `src/services/track.rs`) answers with up
 to five _random_ audio tracks led by the loaded track's artist, never one the
 queue already holds. Visibility is the public one (published, undeleted
 tracks on published, undeleted releases): the listener topping up a queue is
-not an editor previewing. Fetched tracks join the queue's end and the bar
-steps onto the first, so the music keeps going; an answer with nothing marks
-that queue (`PlayerState::mark_catalogue_exhausted`) and the bar stops asking
-until the next Play. A failed fetch just logs: the queue keeps what it had
-and the next end-of-queue try asks again.
+not an editor previewing. Each answer also carries the track's release name
+and the release's image column, so a fetched track without artwork of its
+own still gets the album art in the bar. Fetched tracks join the queue's end
+and the bar steps onto the first, so the music keeps going; an answer with
+nothing marks that queue (`PlayerState::mark_catalogue_exhausted`) and the
+bar stops asking until the next Play. A failed fetch just logs: the queue
+keeps what it had and the next end-of-queue try asks again.
 
 The public release page (`src/ui/release.rs`) is the play surface: while the
 bar is closed each audio row offers `⏵ Play`, which seeds the bar with that
 track and the release's audio tracks as its queue; while the bar plays, rows
 offer `+ Add to Queue` instead — appending to the end never disturbs the
 loaded track, so a listener grows the queue from any release page (tracks
-can repeat). The bar is the only media on the public site: without the wasm
+can repeat). Rows and queue entries alike show the track's own thumbnail,
+falling back to the release's image and then the logo. The bar is the only
+media on the public site: without the wasm
 client — a browser without javascript, or a server serving no wasm bundle —
 the page shows the buttons and no players at all (the admin track editor's
 preview slot is its own thing, for verifying uploads). Desktop windows are
-covered the same way: `PlayableTrack::audio_src` goes through
-`served_file_url`, so it points at the API origin.
+covered the same way: `PlayableTrack`'s `audio_src` and `image_src` go
+through `served_file_url`/`display_image_url`, so they point at the API
+origin.
 
 The gate pins both halves: the client spec proves Play opens the bar, that
 Add to Queue counts the place up while the tagged audio node stays put, that
 the tagged node survives two SPA navigations (and that Close returns the
 rows' Play buttons), and — on the `e2e-radio` seed (album A: one audio track,
 album B: two) — that Next at the end of the queue appends the artist's other
-tracks and a further Next stays put once the catalogue is all queued; the
+tracks and a further Next stays put once the catalogue is all queued (with
+the radio releases' seeded `primary_image` as the bar's artwork, since the
+radio tracks have none of their own); the
 shell spec proves the no-client page offers the buttons with no media and no
-bar, and a curl spot check pins the endpoint's empty answer for `e2e-tabs`
-(its only playable track, excluded). The gate seed repairs
+bar, and curl spot checks pin the endpoint's empty answer for `e2e-tabs`
+(its only playable track, excluded) and one album-B row's fallback thumbnail
+rendered server-side. The gate seed repairs
 `e2e-audio-track`'s audio column to `999999999-e2e-audio-track.wav` every run
 (writing the bytes too), so the public pins never see an audio-less fixture;
 the `e2e-radio` fixtures get the same treatment (their bytes: `999999996-` to
-`999999994-e2e-radio-*.wav`).
+`999999994-e2e-radio-*.wav` for the audio, `999999993-`/`999999992-e2e-radio-album-*.jpg`
+for the album art).
 
 ### Uploads with progress
 
 `src/ui/upload.rs` holds the picker widget and its two dioxus endpoints. It is
 rendered on the profile page (`/profile`, the signed-in user's avatar), the
 admin artist **Images** tab (`/admin/artist/<slug>/images`), the release editor
-(`EditRelease`) and the track editor (`EditTrack`, which uploads the track's own
-audio and plays it back with an `<audio controls>` element — the same file the
-public release page plays):
+(`EditRelease`) and the track editor (`EditTrack`, which hosts two upload
+widgets: one for the track's own image, one for its audio, previewed with an
+`<audio controls>` element — the same file the public release page plays):
 
 - `POST /api/upload?file_type=Avatar&slug=…&filename=…` — the request body is
   the file itself (dioxus sends a `FileStream` argument as the raw body, with
@@ -211,6 +223,9 @@ The track audio slot (`file_type=TrackAudio`) takes `audio/mpeg`, `audio/wav`,
 `audio/flac` and `audio/ogg` — the four every target browser plays natively.
 `.m4a`/`.aac` are left out on purpose: their `ftyp` box carries a brand field
 rather than a fixed signature, and Safari is the only browser that needs them.
+The track image slot (`file_type=TrackImage`) takes the same image types as the
+artist and release slots, and shares the `tracks/` directory with the audio;
+the extension and timestamp prefix keep them apart.
 
 The progress request is a task of its own on the client, never a step the upload
 waits for: Firefox does not resolve a stream response before its first byte, so
@@ -233,8 +248,8 @@ Two things a deployment has to know:
   `UPLOAD_PATH` and never creates them, so deployments must `mkdir -p` them
   (`run-dioxus-gate.sh` does).
 - Nothing in the transport caps a streamed body, so the per-configuration
-  limit (10 MB avatars, 100 MB artist/release images, 250 MB track audio) is
-  enforced while streaming (413, partial file removed). A reverse proxy still
+  limit (10 MB avatars, 100 MB artist/release/track images, 250 MB track audio)
+  is enforced while streaming (413, partial file removed). A reverse proxy still
   needs its own body limit raised to match — nginx's `client_max_body_size`
   defaults to 1 MB, which would reject these uploads before the app ever sees
   them.
@@ -248,8 +263,12 @@ track, `release_slug` also for a track, since those editors are addressed by
 more than one slug) — so with
 javascript off, or on the SSR-only server (which serves no wasm bundle), the
 click is a browser form post to `/forms/upload` (`server::upload_form`), which
-stores the file, attaches it to the row and 303s back with `?uploaded=1` or
-`?bad_upload=<code>`. A file input in a form with neither POST nor multipart is
+stores the file, attaches it to the row and 303s back with
+`?uploaded=<configuration>` or `?bad_upload=<configuration>:<code>`
+(e.g. `?uploaded=TrackImage`, `?bad_upload=TrackAudio:bad_mime`). The codes
+name the slot that produced them because a page can host two widgets (the
+track editor has an image slot and an audio slot) and each shows only its own
+outcome. A file input in a form with neither POST nor multipart is
 exactly what made uploads do nothing during development — the browser drops the
 file and says so in the console. The javascript-off path has no progress bar: the
 browser's own network UI is the feedback.

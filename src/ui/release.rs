@@ -19,7 +19,7 @@ use dioxus::prelude::*;
 
 use crate::models::track_with_artists::TrackWithArtists;
 use crate::ui::Route;
-use crate::ui::assets::{display_image_url, served_file_url};
+use crate::ui::assets::{display_image_url, served_file_url, track_art_url};
 use crate::ui::data::{get_artist, get_release};
 use crate::ui::markdown_html;
 use crate::ui::page_data;
@@ -116,6 +116,9 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
             TrackList {
                 tracks,
                 release_name: release.name.clone(),
+                // The album artwork rows and queue entries fall back to when a
+                // track has no image of its own.
+                release_image: release.primary_image.clone(),
                 artist_slug: tracklist_artist_slug,
             }
         }
@@ -126,6 +129,8 @@ fn ReleaseBody(artist_slug: String, release_slug: String) -> Element {
 /// audio also become the queue the global player steps through when a row's
 /// Play button is clicked, and each entry carries `artist_slug` so the bar
 /// knows whose catalogue to draw more tracks from when that queue runs out.
+/// Every row and every entry shows the track's own artwork, falling back to
+/// the release's (`release_image`) and then to the site logo.
 #[component]
 fn TrackList(
     /// The tracks to display
@@ -133,6 +138,9 @@ fn TrackList(
     /// The release's name, used as the bar's second line when a track has no
     /// featured artists to show instead.
     release_name: String,
+    /// The release's image column (stored file name, `None` when it has none):
+    /// the artwork fallback for tracks without one of their own.
+    release_image: Option<String>,
     /// The artist this release belongs to, by slug: every queue entry's
     /// catalogue, for the bar's auto-append.
     artist_slug: String,
@@ -140,7 +148,12 @@ fn TrackList(
     if tracks.is_empty() {
         return rsx! {};
     }
-    let queue = playable_queue(&tracks, &release_name, &artist_slug);
+    let queue = playable_queue(
+        &tracks,
+        &release_name,
+        release_image.as_deref(),
+        &artist_slug,
+    );
     rsx! {
         h2 { "Tracks" }
         ul { class: "list bg-base-100",
@@ -148,6 +161,7 @@ fn TrackList(
                 Track {
                     key: "{track.track.slug}",
                     track,
+                    release_image: release_image.clone(),
                     queue: queue.clone(),
                 }
             }
@@ -155,7 +169,8 @@ fn TrackList(
     }
 }
 
-/// One track row: thumbnail, name, featured artists, shortened blurb, and —
+/// One track row: artwork thumbnail (the track's own image, else this
+/// release's, else the logo), name, featured artists, shortened blurb, and —
 /// when the track has an audio file — a `⏵ Play` button (which hands the
 /// track, with this release's audio tracks as its queue, to the global bar),
 /// shown as `+ Add to Queue` while the bar plays. Both need the client; a
@@ -164,6 +179,9 @@ fn TrackList(
 fn Track(
     /// The track to display
     track: TrackWithArtists,
+    /// This release's image column: the thumbnail fallback when the track has
+    /// no image of its own.
+    release_image: Option<String>,
     /// This release's global-player queue (its tracks with audio), so the row
     /// can hand the bar the whole list and find its own place in it.
     queue: Vec<PlayableTrack>,
@@ -198,7 +216,10 @@ fn Track(
             div {
                 img {
                     class: "not-prose size-10",
-                    src: display_image_url(&track.track.primary_image_url()),
+                    src: track_art_url(
+                        track.track.primary_image.as_deref(),
+                        release_image.as_deref(),
+                    ),
                     alt: track.track.name,
                 }
             }
@@ -261,14 +282,17 @@ fn audio_source(track: &TrackWithArtists) -> Option<String> {
 }
 
 /// This release's global-player queue: the tracks with audio, in list order,
-/// each carrying what the bar shows plus this release's artist (the catalogue
-/// the bar tops up from). Featured artists (when any) form the bar's second
-/// line, otherwise the release's name does. Tracks without audio are left
-/// out, so previous/next step only through playable tracks.
+/// each carrying what the bar shows (including the artwork fallback: the
+/// track's own image, else the release's `release_image`) plus this release's
+/// artist (the catalogue the bar tops up from). Featured artists (when any)
+/// form the bar's second line, otherwise the release's name does. Tracks
+/// without audio are left out, so previous/next step only through playable
+/// tracks.
 #[must_use]
 fn playable_queue(
     tracks: &[TrackWithArtists],
     release_name: &str,
+    release_image: Option<&str>,
     artist_slug: &str,
 ) -> Vec<PlayableTrack> {
     tracks
@@ -285,6 +309,7 @@ fn playable_queue(
                 slug: track.track.slug.clone(),
                 title: track.track.name.clone(),
                 line,
+                image_src: track_art_url(track.track.primary_image.as_deref(), release_image),
                 audio_src,
                 artist_slug: artist_slug.to_string(),
             })
@@ -380,7 +405,12 @@ mod tests {
         first.track.audio = Some("1700000000-first.wav".to_string());
         let silent = track_with_artists(1, &[1]);
 
-        let queue = playable_queue(&[first, silent, with_audio], "Test Release", "test-artist");
+        let queue = playable_queue(
+            &[first, silent, with_audio],
+            "Test Release",
+            None,
+            "test-artist",
+        );
         assert_eq!(
             queue
                 .iter()
@@ -397,7 +427,7 @@ mod tests {
         // entry has to carry it.
         let mut with_audio = track_with_artists(1, &[1]);
         with_audio.track.audio = Some("1700000000-one.wav".to_string());
-        let queue = playable_queue(&[with_audio], "Test Release", "jimi");
+        let queue = playable_queue(&[with_audio], "Test Release", None, "jimi");
         assert_eq!(queue[0].artist_slug, "jimi");
     }
 
@@ -411,6 +441,7 @@ mod tests {
         let queue = playable_queue(
             &[featured_track, plain_track],
             "Test Release",
+            None,
             "test-artist",
         );
         assert_eq!(queue[0].line, "Featuring Artist 2, Artist 3");
@@ -421,8 +452,33 @@ mod tests {
     fn a_release_without_any_audio_has_an_empty_queue() {
         let tracks = vec![track_with_artists(1, &[1]), track_with_artists(1, &[1, 2])];
         assert!(
-            playable_queue(&tracks, "Test Release", "test-artist").is_empty(),
+            playable_queue(&tracks, "Test Release", None, "test-artist").is_empty(),
             "nothing playable, so nothing to queue"
         );
+    }
+
+    #[test]
+    fn queue_entries_carry_the_track_art_then_the_album_art() {
+        // The bar shows artwork for every entry: the track's own image when it
+        // has one, otherwise the release image handed down from the page.
+        let mut own_art = track_with_artists(1, &[1]);
+        own_art.track.audio = Some("1700000000-one.wav".to_string());
+        own_art.track.primary_image = Some("1700000000-one.png".to_string());
+        let mut album_art = track_with_artists(1, &[1]);
+        album_art.track.audio = Some("1700000000-two.wav".to_string());
+
+        let queue = playable_queue(
+            &[own_art, album_art],
+            "Test Release",
+            Some("1700000000-album.jpg"),
+            "test-artist",
+        );
+        assert_eq!(queue[0].image_src, "/uploads/tracks/1700000000-one.png");
+        assert_eq!(queue[1].image_src, "/uploads/releases/1700000000-album.jpg");
+
+        let mut bare_track = track_with_artists(1, &[1]);
+        bare_track.track.audio = Some("1700000000-two.wav".to_string());
+        let queue = playable_queue(&[bare_track], "Test Release", None, "test-artist");
+        assert_eq!(queue[0].image_src, "/Logo.svg", "neither, so the logo");
     }
 }

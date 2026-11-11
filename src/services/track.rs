@@ -160,6 +160,7 @@ pub async fn continuation_tracks_service(
         upcoming.push(UpcomingAudio {
             track: TrackWithArtists { track, artists },
             release_name: release.name,
+            release_image: release.primary_image,
         });
     }
 
@@ -685,6 +686,52 @@ mod tests {
         );
     }
 
+    /// The uploaded cover must survive the next form save for the same reason
+    /// the audio does: the service loads the whole row before it writes.
+    #[sqlx::test]
+    async fn update_track_service_keeps_the_stored_image(pool: PgPool) {
+        let user = create_test_user_with_permissions(&pool, 3, vec!["admin", "label_owner"])
+            .await
+            .unwrap();
+        let artist = create_test_artist(&pool, 3, None).await.unwrap();
+        let release = create_test_release(&pool, 3, Some(artist.clone()))
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 3, Some(release), Some(artist.clone()))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE tracks SET primary_image = $1 WHERE id = $2")
+            .bind("1700000000-cover.png")
+            .bind(track.id)
+            .execute(&pool)
+            .await
+            .expect("the image column to be set");
+
+        let form = UpdateTrackForm {
+            name: "Renamed Track".to_string(),
+            slug: track.slug.clone(),
+            description: track.description.clone(),
+            lyrics: track.lyrics.clone(),
+            primary_artist_id: artist.id,
+            release_id: track.release_id,
+            isrc_code: track.isrc_code.clone(),
+            bpm: track.bpm,
+            track_number: track.track_number,
+            published_at: track.published_at,
+            artist_ids: artist.id.to_string(),
+        };
+        let saved = update_track_service(&pool, Some(&user), form)
+            .await
+            .expect("the save");
+
+        assert_eq!(saved.track.name, "Renamed Track");
+        assert_eq!(
+            saved.track.primary_image.as_deref(),
+            Some("1700000000-cover.png"),
+            "editing a track must not strand its image file"
+        );
+    }
+
     #[sqlx::test]
     pub fn delete_track(pool: sqlx::PgPool) {
         let permissions = vec!["admin", "label_owner"];
@@ -913,6 +960,45 @@ mod tests {
                 .iter()
                 .all(|upcoming| upcoming.track.track.audio_url().is_some()),
             "everything offered is playable"
+        );
+    }
+
+    /// The bar falls back to album art when a fetched track has no image of
+    /// its own, so the batch carries the release's image column along; the
+    /// track's own column rides inside the track.
+    #[sqlx::test]
+    async fn continuation_carries_the_art_fallback(pool: PgPool) {
+        let record_label = create_test_record_label(&pool, 2).await.unwrap();
+        let artist = create_test_artist(&pool, 2, Some(record_label))
+            .await
+            .unwrap();
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .unwrap();
+        let track = create_test_track(&pool, 1, Some(release.clone()), Some(artist.clone()))
+            .await
+            .unwrap();
+        give_audio(&pool, &track, "1700000000-one.wav").await;
+        sqlx::query("UPDATE releases SET primary_image = $1 WHERE id = $2")
+            .bind("1700000000-album.jpg")
+            .bind(release.id)
+            .execute(&pool)
+            .await
+            .expect("stored album art");
+
+        let result = continuation_tracks_service(&pool, artist.slug.clone(), Vec::new())
+            .await
+            .unwrap();
+        assert_eq!(result.tracks.len(), 1, "only the fixture track");
+        let upcoming = &result.tracks[0];
+        assert_eq!(
+            upcoming.release_image.as_deref(),
+            Some("1700000000-album.jpg"),
+            "the release's art rides along for the fallback"
+        );
+        assert_eq!(
+            upcoming.track.track.primary_image, None,
+            "the track's own column stays None here, so the player picks the album art"
         );
     }
 

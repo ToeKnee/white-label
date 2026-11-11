@@ -16,7 +16,7 @@
 //! ```text
 //! POST /forms/upload   multipart/form-data
 //!   file_type=Artist  slug=test-artist-1  file_to_upload=<cover.png>
-//! 303 -> /admin/artist/test-artist-1/images?uploaded=1
+//! 303 -> /admin/artist/test-artist-1/images?uploaded=Artist
 //! ```
 
 use axum::Extension;
@@ -44,20 +44,24 @@ pub const PATH_UPLOAD_FORM: &str = "/forms/upload";
 /// Answers the widget's javascript-off form post.
 ///
 /// Field order is fixed by the widget's markup: `file_type` (`Artist`,
-/// `Avatar`, `Release` or `TrackAudio`), `slug`, then `artist_slug` and
-/// `release_slug` (only releases and tracks carry them), then the
-/// `file_to_upload` part. The bytes stream to `<root>/tmp/<name>` under the
-/// configuration's size limit, their first bytes have to match one of the
-/// configuration's image or audio types (the part's own content type is the
-/// browser's guess, taken from the file name), and then
-/// [`finalise_upload`] moves and attaches them — exactly as the streaming
-/// server fn does them.
+/// `Avatar`, `Release`, `TrackAudio` or `TrackImage`), `slug`, then
+/// `artist_slug` and `release_slug` (only releases and tracks carry them),
+/// then the `file_to_upload` part. The bytes stream to
+/// `<root>/tmp/<name>` under the configuration's size limit, their first
+/// bytes have to match one of the configuration's image or audio types (the
+/// part's own content type is the browser's guess, taken from the file name),
+/// and then [`finalise_upload`] moves and attaches them — exactly as the
+/// streaming server fn does them.
 ///
-/// Like the other form handlers the answer is a 303 to a literal page:
-/// `?uploaded=1` on success, `?bad_upload=<code>` on failure
+/// Like the other form handlers the answer is a 303 to a literal page, and
+/// it names the upload slot that produced it, because a page can host more
+/// than one widget (a track editor has an image slot and an audio slot) and
+/// each shows only its own outcome: `?uploaded=<configuration>` on success,
+/// `?bad_upload=<configuration>:<code>` on failure
 /// ([`crate::ui::upload::upload_message`] owns the code→text table). A
 /// failure before the page can be worked out (no multipart body, unknown
-/// configuration, non-canonical slug) comes back to `/admin`.
+/// configuration, non-canonical slug) comes back to `/admin` with a bare
+/// code — no page hosts a widget that could claim it.
 #[expect(
     clippy::too_many_lines,
     reason = "one straight-line validation pass over a multipart body; splitting a request that must be read in order spreads the borrow of `field` across functions"
@@ -140,16 +144,16 @@ pub(super) async fn upload_image(
         Ok(uploader) => uploader,
         Err(error) => {
             tracing::warn!("upload form rejected: {error}");
-            return failed_upload(&page, upload_code(&error));
+            return slot_failed_upload(&page, upload_config, upload_code(&error));
         }
     };
 
     let Some(mut field) = file_part else {
-        return failed_upload(&page, "missing_file");
+        return slot_failed_upload(&page, upload_config, "missing_file");
     };
     // An untouched file input submits a part with an empty name: not an upload.
     let Some(original_file_name) = field.file_name().filter(|name| !name.is_empty()) else {
-        return failed_upload(&page, "missing_file");
+        return slot_failed_upload(&page, upload_config, "missing_file");
     };
     let original_file_name = original_file_name.to_string();
     // `Field::content_type` is a parsed `Mime`; the configurations list
@@ -168,17 +172,17 @@ pub(super) async fn upload_image(
         .iter()
         .any(|allowed| allowed == claimed_type)
     {
-        return failed_upload(&page, "bad_mime");
+        return slot_failed_upload(&page, upload_config, "bad_mime");
     }
     let Ok(stored_name) =
         valid_file_name(&original_file_name, Some(slug.clone()), &details.path, true)
     else {
         tracing::warn!("upload form rejected the file name {original_file_name}");
-        return failed_upload(&page, "bad_file_name");
+        return slot_failed_upload(&page, upload_config, "bad_file_name");
     };
     let Some(root) = upload_root.root() else {
         tracing::error!("upload form arrived but no upload path is configured");
-        return failed_upload(&page, "server");
+        return slot_failed_upload(&page, upload_config, "server");
     };
 
     let tmp_path = format!("{root}/tmp/{stored_name}");
@@ -202,7 +206,7 @@ pub(super) async fn upload_image(
     .await;
     if let Err(code) = streamed {
         undo_upload();
-        return failed_upload(&page, code);
+        return slot_failed_upload(&page, upload_config, code);
     }
 
     // The part's content type is the browser's claim, which it takes from the
@@ -214,7 +218,7 @@ pub(super) async fn upload_image(
         Err(error) => {
             tracing::error!("cannot read back {tmp_path}: {error}");
             undo_upload();
-            return failed_upload(&page, "server");
+            return slot_failed_upload(&page, upload_config, "server");
         }
     };
     if !actual_type.is_some_and(|actual| details.mime_types.iter().any(|allowed| allowed == actual))
@@ -224,7 +228,7 @@ pub(super) async fn upload_image(
              which is not what its bytes are"
         );
         undo_upload();
-        return failed_upload(&page, "bad_image");
+        return slot_failed_upload(&page, upload_config, "bad_image");
     }
 
     match finalise_upload(
@@ -241,10 +245,10 @@ pub(super) async fn upload_image(
     )
     .await
     {
-        Ok(_) => Redirect::to(&format!("{page}?uploaded=1")).into_response(),
+        Ok(_) => Redirect::to(&format!("{page}?uploaded={upload_config}")).into_response(),
         Err(error) => {
             tracing::error!("upload {stored_name} could not be finished: {error}");
-            failed_upload(&page, "server")
+            slot_failed_upload(&page, upload_config, "server")
         }
     }
 }
@@ -302,9 +306,17 @@ async fn write_multipart_file(
     Ok(())
 }
 
-/// A failure answer, so every rejection branch reads the same way.
+/// A failure answer, so every rejection branch before the configuration is
+/// known reads the same way.
 fn failed_upload(page: &str, code: &str) -> Response {
     Redirect::to(&format!("{page}?bad_upload={code}")).into_response()
+}
+
+/// A failure answer once the configuration is known: the code carries the
+/// slot's name (`TrackImage:bad_mime`) so a page hosting two upload widgets
+/// shows the message on the one the upload came from.
+fn slot_failed_upload(page: &str, config: UploadConfiguration, code: &str) -> Response {
+    failed_upload(page, &format!("{config}:{code}"))
 }
 
 /// The editor page an upload belongs to, or `None` if the submitted slugs
@@ -327,8 +339,9 @@ fn upload_target(
             Some(format!("/admin/artist/{artist_slug}/release/{slug}"))
         }
         // A track editor is addressed by all three slugs, which is why the
-        // widget carries the release's as well as the artist's.
-        UploadConfiguration::TrackAudio
+        // widget carries the release's as well as the artist's. Both the
+        // audio and the image slot of the track editor are its track.
+        UploadConfiguration::TrackAudio | UploadConfiguration::TrackImage
             if canonical_slug(slug)
                 && canonical_slug(artist_slug)
                 && canonical_slug(release_slug) =>
@@ -482,7 +495,7 @@ mod tests {
         response.assert_status(axum::http::StatusCode::SEE_OTHER);
         assert_eq!(
             location(&response),
-            "/admin/artist/test-artist-1/images?uploaded=1"
+            "/admin/artist/test-artist-1/images?uploaded=Artist"
         );
 
         // The file moved out of tmp/ and the artist row names it, so the
@@ -565,7 +578,7 @@ mod tests {
         response.assert_status(axum::http::StatusCode::SEE_OTHER);
         assert_eq!(
             location(&response),
-            "/admin/artist/test-artist-1/images?bad_upload=bad_mime"
+            "/admin/artist/test-artist-1/images?bad_upload=Artist:bad_mime"
         );
         assert!(
             std::fs::read_dir(upload_dir.path().join("artists"))
@@ -600,7 +613,7 @@ mod tests {
         response.assert_status(axum::http::StatusCode::SEE_OTHER);
         assert_eq!(
             location(&response),
-            "/admin/artist/test-artist-1/images?bad_upload=bad_image"
+            "/admin/artist/test-artist-1/images?bad_upload=Artist:bad_image"
         );
         assert!(
             std::fs::read_dir(upload_dir.path().join("artists"))
@@ -623,7 +636,7 @@ mod tests {
     }
 
     /// `signed_in_server` plus a release and a track under `test-artist-1`, and
-    /// the `tracks` directory the audio tail writes into.
+    /// the `tracks` directory both track slots write into.
     #[expect(
         clippy::future_not_send,
         reason = "awaits the same !Send axum-test helper as `signed_in_server`; callers are `#[sqlx::test]` bodies on one thread"
@@ -673,7 +686,7 @@ mod tests {
         response.assert_status(axum::http::StatusCode::SEE_OTHER);
         assert_eq!(
             location(&response),
-            "/admin/artist/test-artist-1/release/test-release-1/track/test-track-1?uploaded=1"
+            "/admin/artist/test-artist-1/release/test-release-1/track/test-track-1?uploaded=TrackAudio"
         );
 
         let track = Track::find_by_slug(&pool, "test-track-1".to_string())
@@ -731,7 +744,7 @@ mod tests {
         assert_eq!(
             location(&response),
             "/admin/artist/test-artist-1/release/test-release-1/track/test-track-1\
-             ?bad_upload=bad_mime"
+             ?bad_upload=TrackAudio:bad_mime"
         );
         assert!(
             std::fs::read_dir(upload_dir.path().join("tracks"))
@@ -745,6 +758,106 @@ mod tests {
             .expect("the stored track")
             .expect("the track row");
         assert_eq!(track.audio, None, "and the row is left alone");
+    }
+
+    /// A track's cover image goes through the same form and lands in the same
+    /// `tracks` directory as its audio; the image column, not the audio one,
+    /// ends up naming it.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future in a `#[sqlx::test]` body"
+    )]
+    #[sqlx::test]
+    async fn upload_form_stores_track_image_and_points_at_its_editor(pool: PgPool) {
+        let upload_dir = tempfile::tempdir().expect("upload dir");
+        let server = audio_server(&pool, upload_dir.path()).await;
+
+        let response = post_form(
+            &server,
+            &form_body(
+                &[
+                    ("file_type", "TrackImage"),
+                    ("slug", "test-track-1"),
+                    ("artist_slug", "test-artist-1"),
+                    ("release_slug", "test-release-1"),
+                ],
+                Some(("image/png", "cover.png", PNG_BODY)),
+            ),
+        )
+        .await;
+
+        response.assert_status(axum::http::StatusCode::SEE_OTHER);
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/release/test-release-1/track/test-track-1?uploaded=TrackImage"
+        );
+
+        let track = Track::find_by_slug(&pool, "test-track-1".to_string())
+            .await
+            .expect("the stored track")
+            .expect("the track the upload addressed");
+        let stored = track
+            .primary_image
+            .as_deref()
+            .expect("the image column points at the upload");
+        assert!(
+            stored.ends_with("-test-track-1.png"),
+            "the image is named after its track: {stored}"
+        );
+        let stored_path = upload_dir.path().join("tracks").join(stored);
+        assert_eq!(
+            std::fs::read(stored_path).expect("the stored file"),
+            PNG_BODY,
+            "the bytes landed in the tracks directory"
+        );
+        assert_eq!(track.audio, None, "the audio column stays alone");
+    }
+
+    /// The image slot takes pictures, and audio bytes are caught at the claim
+    /// check: neither the part's type nor its `.flac` extension is one the slot
+    /// takes, so the upload comes back with the slot's name in the code and
+    /// nothing stored.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future in a `#[sqlx::test]` body"
+    )]
+    #[sqlx::test]
+    async fn upload_form_rejects_audio_for_the_image_slot(pool: PgPool) {
+        let upload_dir = tempfile::tempdir().expect("upload dir");
+        let server = audio_server(&pool, upload_dir.path()).await;
+
+        let response = post_form(
+            &server,
+            &form_body(
+                &[
+                    ("file_type", "TrackImage"),
+                    ("slug", "test-track-1"),
+                    ("artist_slug", "test-artist-1"),
+                    ("release_slug", "test-release-1"),
+                ],
+                Some(("audio/flac", "castles.flac", FLAC_BODY)),
+            ),
+        )
+        .await;
+
+        response.assert_status(axum::http::StatusCode::SEE_OTHER);
+        assert_eq!(
+            location(&response),
+            "/admin/artist/test-artist-1/release/test-release-1/track/test-track-1\
+             ?bad_upload=TrackImage:bad_mime"
+        );
+        assert!(
+            std::fs::read_dir(upload_dir.path().join("tracks"))
+                .expect("tracks dir readable")
+                .next()
+                .is_none(),
+            "a rejected image upload stores nothing"
+        );
+        let track = Track::find_by_slug(&pool, "test-track-1".to_string())
+            .await
+            .expect("the stored track")
+            .expect("the track row");
+        assert_eq!(track.primary_image, None, "and the row is left alone");
     }
 
     #[test]
@@ -767,11 +880,22 @@ mod tests {
             .as_deref(),
             Some("/admin/artist/test-artist-1/release/test-release-1")
         );
-        // A track editor is addressed by three slugs, so its audio upload has
-        // to carry all three to come back to the page it came from.
+        // A track editor is addressed by three slugs, so both its uploads have
+        // to carry all three to come back to the page they came from.
         assert_eq!(
             upload_target(
                 UploadConfiguration::TrackAudio,
+                "test-track-1",
+                "test-artist-1",
+                "test-release-1"
+            )
+            .as_deref(),
+            Some("/admin/artist/test-artist-1/release/test-release-1/track/test-track-1")
+        );
+        // The image slot of the same editor comes back to the same page.
+        assert_eq!(
+            upload_target(
+                UploadConfiguration::TrackImage,
                 "test-track-1",
                 "test-artist-1",
                 "test-release-1"
@@ -785,6 +909,15 @@ mod tests {
         assert!(
             upload_target(
                 UploadConfiguration::TrackAudio,
+                "test-track-1",
+                "test-artist-1",
+                ""
+            )
+            .is_none()
+        );
+        assert!(
+            upload_target(
+                UploadConfiguration::TrackImage,
                 "test-track-1",
                 "test-artist-1",
                 ""

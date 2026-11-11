@@ -53,6 +53,23 @@ pub fn display_image_url(image_url: &str) -> String {
     }
 }
 
+/// The artwork for a track, wherever it is shown: the release page's rows,
+/// the admin track list, the global player's bar.
+///
+/// The track's own image, or the image of the release it sits on when the
+/// track has none, or the site logo when neither exists. The arguments are
+/// the two `primary_image` *columns* (stored file names), not URLs: tracks
+/// upload into `uploads/tracks`, releases into `uploads/releases`, so the
+/// helper picks the directory from whichever name it falls through to.
+#[must_use]
+pub fn track_art_url(track_image: Option<&str>, release_image: Option<&str>) -> String {
+    match (track_image, release_image) {
+        (Some(file), _) => display_image_url(&format!("/uploads/tracks/{file}")),
+        (None, Some(file)) => display_image_url(&format!("/uploads/releases/{file}")),
+        (None, None) => display_image_url("/Logo.svg"),
+    }
+}
+
 /// The API origin for this build, with any trailing slash removed. Empty for
 /// targets whose page origin *is* the server (web, SSR).
 // One signature covers both targets; only the native one reads anything, so
@@ -94,7 +111,7 @@ fn absolute(origin: &str, path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{absolute, bundled_path, display_image_url};
+    use super::{absolute, bundled_path, display_image_url, track_art_url};
 
     #[test]
     fn bundled_assets_stay_at_the_root_for_web_and_ssr() {
@@ -150,5 +167,23 @@ mod tests {
             "/uploads/releases/1700000000-axis.jpg"
         );
         assert_eq!(display_image_url("/Logo.svg"), "/Logo.svg");
+    }
+
+    #[test]
+    fn track_art_prefers_its_own_image_then_the_release_art() {
+        // The track's own cover, in the directory the track image slot uploads
+        // to ...
+        assert_eq!(
+            track_art_url(Some("1700000000-castles.png"), Some("1700000000-axis.jpg"),),
+            "/uploads/tracks/1700000000-castles.png"
+        );
+        // ... falls back to the album art it sits on only when the track has
+        // none,
+        assert_eq!(
+            track_art_url(None, Some("1700000000-axis.jpg")),
+            "/uploads/releases/1700000000-axis.jpg"
+        );
+        // and finally to the logo.
+        assert_eq!(track_art_url(None, None), "/Logo.svg");
     }
 }

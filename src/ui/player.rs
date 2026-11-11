@@ -6,7 +6,10 @@
 //! [`GlobalPlayer`](crate::ui::player::GlobalPlayer), is rendered by `AppShell`
 //! as page chrome rather than inside a page, which is what keeps the sound
 //! going: navigating swaps the `Outlet`'s contents, and the bar's `<audio>`
-//! element is never torn down while a track stays loaded.
+//! element is never torn down while a track stays loaded. The bar also shows
+//! the loaded track's artwork — its own image, else the album art of the
+//! release it sits on, else the site logo (see
+//! [`crate::ui::assets::track_art_url`]).
 //!
 //! While the bar plays
 //! ([`PlayerState::is_active`](crate::ui::player::PlayerState::is_active))
@@ -33,7 +36,7 @@
 use dioxus::prelude::*;
 
 use crate::api_types::track::UpcomingAudio;
-use crate::ui::assets::served_file_url;
+use crate::ui::assets::{served_file_url, track_art_url};
 use crate::ui::data::get_continuation_tracks;
 use crate::ui::release::featured_artist_names;
 
@@ -49,6 +52,10 @@ pub struct PlayableTrack {
     pub title: String,
     /// The bar's second line: featuring artists, or the release it came from.
     pub line: String,
+    /// The loaded track's artwork: its own image, else the album art of the
+    /// release it sits on, else the site logo, already made absolute where the
+    /// platform needs it (see [`crate::ui::assets::track_art_url`]).
+    pub image_src: String,
     /// Where the audio lives, already made absolute where the platform needs it
     /// (see [`crate::ui::assets::served_file_url`]).
     pub audio_src: String,
@@ -197,8 +204,9 @@ impl PlayerState {
 
 /// Map one fetched continuation track onto a queue entry, with the same shape
 /// a release row's entry has (see [`crate::ui::release`]'s queue): the audio
-/// made absolute for this platform, and featuring artists or the release it
-/// came from as the bar's second line.
+/// made absolute for this platform, featuring artists or the release it came
+/// from as the bar's second line, and the artwork fallback (the track's own
+/// image, else the fetched release's).
 #[must_use]
 fn playable_from_upcoming(upcoming: &UpcomingAudio, artist_slug: &str) -> Option<PlayableTrack> {
     let audio_src = upcoming
@@ -216,6 +224,10 @@ fn playable_from_upcoming(upcoming: &UpcomingAudio, artist_slug: &str) -> Option
         slug: upcoming.track.track.slug.clone(),
         title: upcoming.track.track.name.clone(),
         line,
+        image_src: track_art_url(
+            upcoming.track.track.primary_image.as_deref(),
+            upcoming.release_image.as_deref(),
+        ),
         audio_src,
         artist_slug: artist_slug.to_string(),
     })
@@ -301,6 +313,14 @@ pub fn GlobalPlayer() -> Element {
             class: "sticky bottom-0 z-40 border-t bg-base-200 text-base-content",
             div {
                 class: "container mx-auto flex flex-wrap items-center gap-2 p-2 not-prose",
+                // The loaded track's artwork, resolved when the entry was
+                // built (own image, else album art, else the logo), so the
+                // bar shows something for every queue it is handed.
+                img {
+                    class: "size-10 rounded",
+                    src: current.image_src.clone(),
+                    alt: current.title.clone(),
+                }
                 div { class: "min-w-40 flex-1",
                     div { class: "font-semibold", "{current.title}" }
                     div { class: "text-xs opacity-70",
@@ -375,7 +395,10 @@ pub fn GlobalPlayer() -> Element {
 
 #[cfg(test)]
 mod tests {
-    use super::{PlayableTrack, PlayerState};
+    use super::{PlayableTrack, PlayerState, playable_from_upcoming};
+    use crate::api_types::track::UpcomingAudio;
+    use crate::models::track::Track;
+    use crate::models::track_with_artists::TrackWithArtists;
 
     fn queue(names: &[&str]) -> Vec<PlayableTrack> {
         names
@@ -384,10 +407,51 @@ mod tests {
                 slug: format!("slug-{name}"),
                 title: (*name).to_string(),
                 line: "the release".to_string(),
+                image_src: format!("/uploads/tracks/{name}.png"),
                 audio_src: format!("/uploads/tracks/{name}.wav"),
                 artist_slug: "test-artist".to_string(),
             })
             .collect()
+    }
+
+    /// One fetched continuation track, with whichever artwork the test is
+    /// about; the bar only queues audio tracks, so the file is always set.
+    fn upcoming(track_image: Option<&str>, release_image: Option<&str>) -> UpcomingAudio {
+        UpcomingAudio {
+            track: TrackWithArtists {
+                track: Track {
+                    slug: "upcoming-one".to_string(),
+                    name: "Upcoming One".to_string(),
+                    audio: Some("1700000000-one.wav".to_string()),
+                    primary_image: track_image.map(str::to_string),
+                    ..Track::default()
+                },
+                artists: Vec::new(),
+            },
+            release_name: "Upcoming Release".to_string(),
+            release_image: release_image.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn fetched_tracks_get_their_own_art_then_the_album_art() {
+        // The service carries the release's image along, so a fetched track
+        // without one still gets artwork in the bar.
+        let own = playable_from_upcoming(
+            &upcoming(Some("1700000000-one.png"), Some("1700000000-album.jpg")),
+            "test-artist",
+        )
+        .expect("a track with audio queues");
+        assert_eq!(own.image_src, "/uploads/tracks/1700000000-one.png");
+
+        let album =
+            playable_from_upcoming(&upcoming(None, Some("1700000000-album.jpg")), "test-artist")
+                .expect("a track with audio queues");
+        assert_eq!(album.image_src, "/uploads/releases/1700000000-album.jpg");
+
+        let bare = playable_from_upcoming(&upcoming(None, None), "test-artist")
+            .expect("a track with audio queues");
+        assert_eq!(bare.image_src, "/Logo.svg", "and the logo at the end");
     }
 
     #[test]

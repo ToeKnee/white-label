@@ -1328,4 +1328,30 @@ mod tests {
             "a save must not drop the audio file"
         );
     }
+
+    /// The same guarantee for the image column: a track that gets its own
+    /// uploaded cover must not lose it the next time its form is saved.
+    #[sqlx::test]
+    async fn test_update_keeps_a_stored_image_file(pool: PgPool) {
+        let track = create_test_track(&pool, 2, None, None).await.unwrap();
+        sqlx::query("UPDATE tracks SET primary_image = $1 WHERE id = $2")
+            .bind("1700000000-cover.png")
+            .bind(track.id)
+            .execute(&pool)
+            .await
+            .expect("the image column to be set");
+
+        let mut loaded = Track::get_by_slug(&pool, track.slug.clone())
+            .await
+            .expect("the stored track");
+        loaded.name = "Renamed Track".to_string();
+        let saved = loaded.update(&pool).await.expect("the save");
+
+        assert_eq!(saved.name, "Renamed Track");
+        assert_eq!(
+            saved.primary_image.as_deref(),
+            Some("1700000000-cover.png"),
+            "a save must not drop the image file"
+        );
+    }
 }

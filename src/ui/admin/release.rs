@@ -583,6 +583,8 @@ fn EditReleaseBody(
         .iter()
         .map(|track_with_artists| track_with_artists.track.clone())
         .collect::<Vec<Track>>();
+    // The same fetch's release row: its artwork is the sidebar rows' fallback.
+    let sidebar_release_image = release.primary_image.clone();
     let selected_ids = result.artists.iter().map(|a| a.id).collect::<Vec<i64>>();
     let primary_artist_id = release.primary_artist_id;
     let current_slug = release.slug.clone();
@@ -725,6 +727,7 @@ fn EditReleaseBody(
                     artist_slug: artist_slug.clone(),
                     release_slug,
                     tracks: sidebar_tracks,
+                    release_image: sidebar_release_image,
                 }
             }
         }

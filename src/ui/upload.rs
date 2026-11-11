@@ -352,8 +352,10 @@ pub async fn file_progress(filename: String) -> core::result::Result<TextStream,
 /// `prevent_default`) streams the file through the server fn and draws the
 /// progress bar. The javascript-off one posts the same form as
 /// `multipart/form-data` to `server::upload_form`, which 303s back to this page
-/// with `?uploaded=1` or `?bad_upload=<code>`; those codes come in as props and
-/// render through [`upload_message`].
+/// with `?uploaded=<configuration>` or `?bad_upload=<configuration>:<code>`;
+/// a page can host two widgets (a track editor has an image slot and an audio
+/// slot), so both query codes name the slot and each widget shows only its
+/// own outcome, through [`upload_message`] for the failure texts.
 #[component]
 pub fn FileUploadWithProgress(
     /// Which slot to upload to: chooses the directory, mime types, size limit
@@ -370,11 +372,14 @@ pub fn FileUploadWithProgress(
     /// for a track: its editor lives under the release.
     #[props(optional)]
     release_slug: Option<String>,
-    /// This page's `?uploaded=1` code, set by a javascript-off upload.
+    /// This page's `?uploaded=<configuration>` code, set by a javascript-off
+    /// upload. The success alert shows only when the code names this widget's
+    /// slot.
     #[props(optional)]
     uploaded: Option<String>,
-    /// This page's `?bad_upload=<code>` code, set by a failed javascript-off
-    /// upload.
+    /// This page's `?bad_upload=<configuration>:<code>` code, set by a failed
+    /// javascript-off upload. The failure alert shows only when the code names
+    /// this widget's slot.
     #[props(optional)]
     bad_upload: Option<String>,
     /// Runs after a file is stored, with the name it was stored under. The
@@ -508,12 +513,14 @@ pub fn FileUploadWithProgress(
         }
         // A javascript-off upload has no client state to hold its outcome, so
         // the handler carried it in the page's query codes instead. The
-        // reactive path never sets those, so the two cannot both alert.
+        // reactive path never sets those, so the two cannot both alert, and
+        // each code names its slot, so a sibling widget on the same page
+        // stays quiet.
         if no_reactive_outcome {
-            if uploaded.is_some() {
+            if uploaded_names_this_slot(uploaded.as_deref(), config) {
                 Success { message: upload_success_message(config), show: true }
             }
-            if let Some(message) = upload_message(bad_upload.as_deref()) {
+            if let Some(message) = slot_upload_message(bad_upload.as_deref(), config) {
                 InlineError { message }
             }
         }
@@ -541,6 +548,25 @@ fn picked_file(evt: &FormEvent) -> Option<FileData> {
         Some(FormValue::File(file)) => file.filter(|file| !file.name().is_empty()),
         _ => None,
     }
+}
+
+/// Whether a javascript-off `?uploaded=<configuration>` names this widget's
+/// slot. A track editor hosts two widgets, and only the one the upload came
+/// from may claim the success.
+fn uploaded_names_this_slot(uploaded: Option<&str>, config: UploadConfiguration) -> bool {
+    uploaded == Some(config.to_string().as_str())
+}
+
+/// The failure message for this widget's slot. The handler names the slot in
+/// the code (`TrackImage:bad_mime`); a bare code (a failure before any slot
+/// was known, which goes back to `/admin`) and another slot's code belong to
+/// no widget here.
+fn slot_upload_message(
+    bad_upload: Option<&str>,
+    config: UploadConfiguration,
+) -> Option<&'static str> {
+    let code = bad_upload?.strip_prefix(format!("{config}:").as_str())?;
+    upload_message(Some(code))
 }
 
 /// The on-screen message for the javascript-off upload form's fixed error
@@ -1550,6 +1576,11 @@ mod tests {
             stored_file_url(UploadConfiguration::TrackAudio, "123-castles.flac"),
             "/uploads/tracks/123-castles.flac"
         );
+        // Track images share the tracks directory; the extension keeps them apart.
+        assert_eq!(
+            stored_file_url(UploadConfiguration::TrackImage, "123-castles.png"),
+            "/uploads/tracks/123-castles.png"
+        );
     }
 
     #[test]
@@ -1562,6 +1593,81 @@ mod tests {
             upload_success_message(UploadConfiguration::Artist),
             "Image uploaded."
         );
+    }
+
+    /// A track editor hosts two widgets, so each query code has to name its
+    /// slot: an image success must not make the audio widget claim it, and a
+    /// failure against one slot must not show on the other.
+    #[test]
+    fn a_javascript_off_outcome_alerts_only_its_own_slot() {
+        // Success: only the named configuration alerts.
+        assert!(uploaded_names_this_slot(
+            Some("TrackImage"),
+            UploadConfiguration::TrackImage
+        ));
+        assert!(!uploaded_names_this_slot(
+            Some("TrackAudio"),
+            UploadConfiguration::TrackImage
+        ));
+        assert!(!uploaded_names_this_slot(
+            Some("TrackImage"),
+            UploadConfiguration::TrackAudio
+        ));
+        // A stale or hand-made code that names no slot alerts nowhere.
+        assert!(!uploaded_names_this_slot(
+            Some("1"),
+            UploadConfiguration::Artist
+        ));
+        assert!(!uploaded_names_this_slot(None, UploadConfiguration::Artist));
+
+        // Failure: the code must carry this slot's name and a known code.
+        assert_eq!(
+            slot_upload_message(Some("TrackImage:bad_mime"), UploadConfiguration::TrackImage),
+            Some("Invalid mime type.")
+        );
+        assert_eq!(
+            slot_upload_message(Some("TrackAudio:bad_mime"), UploadConfiguration::TrackImage),
+            None,
+            "the audio slot's failure does not belong to the image widget"
+        );
+        assert_eq!(
+            slot_upload_message(Some("bad_mime"), UploadConfiguration::TrackImage),
+            None,
+            "a bare code (no slot known) belongs to no widget"
+        );
+        assert_eq!(
+            slot_upload_message(Some("TrackImage:made_up"), UploadConfiguration::TrackImage),
+            None
+        );
+        assert_eq!(
+            slot_upload_message(None, UploadConfiguration::TrackImage),
+            None
+        );
+    }
+
+    /// The track image uploader is the audio one's sibling on the same page:
+    /// the same three slugs, but the image accept list and its own slot name.
+    #[test]
+    fn the_track_image_uploader_carries_its_editors_slugs() {
+        let html = dioxus::ssr::render_element(rsx! {
+            FileUploadWithProgress {
+                config: UploadConfiguration::TrackImage,
+                slug: "test-track-1".to_string(),
+                artist_slug: Some("test-artist-1".to_string()),
+                release_slug: Some("test-release-1".to_string()),
+            }
+        });
+        for expected in [
+            r#"name="file_type" value="TrackImage""#,
+            r#"value="test-track-1""#,
+            r#"name="artist_slug""#,
+            r#"value="test-artist-1""#,
+            r#"name="release_slug""#,
+            r#"value="test-release-1""#,
+            r#"accept=".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP""#,
+        ] {
+            assert!(html.contains(expected), "expected {expected} in: {html}");
+        }
     }
 
     /// The widget renders its controls on the server, including the

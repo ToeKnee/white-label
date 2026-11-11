@@ -24,14 +24,18 @@
 //!   existing `get_release` result (whose `tracks` field already carries
 //!   them); the `/tracks` page fetches that same endpoint, and a dedicated
 //!   `get_track` fetch serves the track editor.
-//! - Track images show in the list (`primary_image_url`) but the editors
-//!   offer no way to upload one.
+//! - Track images show in the list — the track's own image, else the release's,
+//!   else the logo (see [`crate::ui::assets::track_art_url`]) — and the editor
+//!   uploads one through the shared widget (`UploadConfiguration::TrackImage`),
+//!   next to the audio slot.
 //! - A track's **audio** is uploaded through the shared widget
 //!   (`UploadConfiguration::TrackAudio`, see `crate::ui::upload`) and previewed
 //!   here with an `<audio>` element; the public release page
 //!   (`crate::ui::release`) plays the same file. The upload's javascript-off
 //!   path needs the artist and release slugs as well as the track's, because
-//!   its editor is addressed by all three.
+//!   its editor is addressed by all three; each javascript-off outcome names
+//!   its slot in the page's query codes, so the image and audio widgets only
+//!   ever alert about their own uploads.
 //! - A reactive rename leaves the *URL* on the old slug (the javascript-off
 //!   path 303s to the new one). Saving again, deleting and restoring all
 //!   follow the new slug, but reloading the old URL gets the tracks list.
@@ -44,7 +48,7 @@ use crate::api_types::track::TrackResult;
 use crate::config::upload::UploadConfiguration;
 use crate::forms::track::{TrackCreateFields, TrackSlugFields, TrackUpdateFields};
 use crate::models::track::Track;
-use crate::ui::assets::{display_image_url, served_file_url};
+use crate::ui::assets::{display_image_url, served_file_url, track_art_url};
 use crate::ui::data::{get_artist, get_release, get_track};
 use crate::ui::page_data;
 use crate::ui::reactive::{
@@ -119,8 +123,15 @@ fn TracksBody(artist_slug: String, release_slug: String) -> Element {
             show_deleted(),
         ))
     })?;
-    let tracks = match tracks_release_resource() {
-        Ok(result) => result.tracks.iter().map(|twa| twa.track.clone()).collect(),
+    let (tracks, release_image) = match tracks_release_resource() {
+        Ok(result) => (
+            result
+                .tracks
+                .iter()
+                .map(|twa| twa.track.clone())
+                .collect::<Vec<Track>>(),
+            result.release.primary_image,
+        ),
         Err(error) => {
             tracing::error!(
                 "Error while getting release for the tracks list (artist {artist_slug}, release {release_slug}): {error}"
@@ -135,12 +146,18 @@ fn TracksBody(artist_slug: String, release_slug: String) -> Element {
     };
 
     rsx! {
-        TrackList { artist_slug, release_slug, tracks }
+        TrackList {
+            artist_slug,
+            release_slug,
+            tracks,
+            release_image,
+        }
     }
 }
 
 /// The tracks table with its "Add" link, shared by the `/tracks` page and
-/// the release editor's sidebar.
+/// the release editor's sidebar. Rows show each track's own artwork, falling
+/// back to the release's (`release_image`) and then to the site logo.
 #[component]
 pub fn TrackList(
     /// The artist the rows link back through.
@@ -149,6 +166,9 @@ pub fn TrackList(
     release_slug: String,
     /// The tracks to list.
     tracks: Vec<Track>,
+    /// The release's image column (stored file name, `None` when it has none):
+    /// the row artwork fallback for tracks without one of their own.
+    release_image: Option<String>,
 ) -> Element {
     let add_route = Route::CreateTrack {
         artist_slug: artist_slug.clone(),
@@ -174,6 +194,7 @@ pub fn TrackList(
                         for track in tracks {
                             TrackRow {
                                 track,
+                                release_image: release_image.clone(),
                                 artist_slug: artist_slug.clone(),
                                 release_slug: release_slug.clone(),
                             }
@@ -199,7 +220,14 @@ pub fn TrackList(
 
 /// One track row.
 #[component]
-fn TrackRow(track: Track, artist_slug: String, release_slug: String) -> Element {
+fn TrackRow(
+    track: Track,
+    /// This release's image column: the artwork fallback when the track has no
+    /// image of its own.
+    release_image: Option<String>,
+    artist_slug: String,
+    release_slug: String,
+) -> Element {
     let isrc = track.isrc_code.clone().unwrap_or_default();
     let edit_route = Route::EditTrack {
         artist_slug,
@@ -219,7 +247,10 @@ fn TrackRow(track: Track, artist_slug: String, release_slug: String) -> Element 
                         div { class: "w-12 rounded-full not-prose",
                             img {
                                 class: "m-0",
-                                src: display_image_url(&track.primary_image_url()),
+                                src: track_art_url(
+                                    track.primary_image.as_deref(),
+                                    release_image.as_deref(),
+                                ),
                                 alt: track.name,
                             }
                         }
@@ -636,6 +667,15 @@ fn EditTrackBody(
     let shown_audio = uploaded_audio().map_or(stored_audio_url, |stored| {
         Some(stored_file_url(UploadConfiguration::TrackAudio, &stored))
     });
+    // The same for the track's own image. Read the URL and alt text before the
+    // form takes the row apart field by field (the uploader's `<img>` needs
+    // both).
+    let current_image_url = display_image_url(&track.primary_image_url());
+    let image_alt = track.name.clone();
+    let mut uploaded_image = use_signal(|| None::<String>);
+    let shown_image = uploaded_image().map_or(current_image_url, |stored| {
+        stored_file_url(UploadConfiguration::TrackImage, &stored)
+    });
 
     rsx! {
         document::Title { "{name_for_header} - {release_name} - {artist_name}" }
@@ -743,8 +783,23 @@ fn EditTrackBody(
                 }
             }
         }
-        // The audio uploader sits after the field form: it brings its own
-        // `<form>` and forms may not nest (module docs).
+        // The image and audio uploaders sit after the field form: each brings
+        // its own `<form>` and forms may not nest (module docs). Both query
+        // codes go to both widgets; each shows only the outcome naming its
+        // own slot.
+        div { class: "divider", "Image" }
+        FileUploadWithProgress {
+            config: UploadConfiguration::TrackImage,
+            slug: current_slug.clone(),
+            // The javascript-off handler has to name the page to come back to,
+            // and this editor is addressed by artist, release and track.
+            artist_slug: Some(artist_slug.clone()),
+            release_slug: Some(release_slug.clone()),
+            uploaded: uploaded.clone(),
+            bad_upload: bad_upload.clone(),
+            on_uploaded: move |stored_name: String| uploaded_image.set(Some(stored_name)),
+        }
+        img { src: shown_image, alt: image_alt }
         div { class: "divider", "Audio" }
         FileUploadWithProgress {
             config: UploadConfiguration::TrackAudio,

@@ -378,7 +378,8 @@ test("an upload works without javascript, as a multipart form post", async ({ pa
 
   // This server serves no wasm bundle, so clicking Upload is exactly
   // what a javascript-off browser does — a multipart POST to /forms/upload,
-  // which stores the file and 303s back to the images tab with ?uploaded=1.
+  // which stores the file and 303s back to the images tab naming its slot
+  // (?uploaded=Artist).
   await page.goto(`${base}/admin/artist/e2e-tabs/images`);
   await expect(h1(page)).toHaveText("E2E Tabs Artist Images");
   const stamp = Date.now();
@@ -389,7 +390,7 @@ test("an upload works without javascript, as a multipart form post", async ({ pa
   });
   await page.getByRole("button", { name: "Upload" }).click();
 
-  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\?uploaded=1$/);
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\?uploaded=Artist$/);
   await expect(page.getByText("Image uploaded.")).toBeVisible();
   // The tab stays active despite the query codes, and the page now shows the
   // stored file (the handler attached it to the row before redirecting).
@@ -402,25 +403,27 @@ test("a track's audio uploads without javascript and gets a player", async ({ pa
   await loginAs(page, "e2e-admin");
 
   // The gate seeds `e2e-audio-release`/`e2e-audio-track` under `e2e-tabs`, and
-  // the track editor carries the audio uploader. With no wasm bundle on this
+  // the track editor carries both uploaders. With no wasm bundle on this
   // server, Upload is exactly what a javascript-off browser does: a multipart
   // POST to /forms/upload, which attaches the file and 303s back here.
   await page.goto(`${base}/admin/artist/e2e-tabs/release/e2e-audio-release/track/e2e-audio-track`);
   await expect(h1(page)).toHaveText("E2E Audio Track - E2E Audio Release - E2E Tabs Artist");
-  // The audio slot's own accept list, which the config drives.
-  await expect(page.locator('input[name="file_to_upload"]')).toHaveAttribute(
+  // The track editor hosts two widgets, so the audio slot's own accept list
+  // (which the config drives) is what identifies its form.
+  const audioForm = page.locator('form:has(input[name="file_type"][value="TrackAudio"])');
+  await expect(audioForm.locator('input[name="file_to_upload"]')).toHaveAttribute(
     "accept",
     ".mp3,.MP3,.wav,.WAV,.flac,.FLAC,.ogg,.OGG",
   );
 
-  await page.setInputFiles('input[name="file_to_upload"]', {
+  await page.setInputFiles('input[name="file_to_upload"][accept*=".wav"]', {
     name: "e2e-audio.wav",
     mimeType: "audio/wav",
     buffer: emptyWav(),
   });
-  await page.getByRole("button", { name: "Upload" }).click();
+  await audioForm.getByRole("button", { name: "Upload" }).click();
 
-  await expect(page).toHaveURL(/\/track\/e2e-audio-track\?uploaded=1$/);
+  await expect(page).toHaveURL(/\/track\/e2e-audio-track\?uploaded=TrackAudio$/);
   // The slot names what it takes, unlike the image tabs.
   await expect(page.getByText("Audio uploaded.")).toBeVisible();
   // The handler attached the file before redirecting, so the page now serves a
@@ -428,17 +431,49 @@ test("a track's audio uploads without javascript and gets a player", async ({ pa
   await expect(page.locator('audio[src^="/uploads/tracks/"]')).toHaveCount(1);
 });
 
+test("a track's image uploads without javascript onto its own slot", async ({ page }) => {
+  requireAdmin();
+  await loginAs(page, "e2e-admin");
+
+  // The other uploader on the same page: the image slot takes pictures, lands
+  // in the tracks directory (the extension tells it from the audio), and the
+  // redirect names it, so the audio widget next door stays quiet.
+  await page.goto(`${base}/admin/artist/e2e-tabs/release/e2e-audio-release/track/e2e-audio-track`);
+  await expect(h1(page)).toHaveText("E2E Audio Track - E2E Audio Release - E2E Tabs Artist");
+  const imageForm = page.locator('form:has(input[name="file_type"][value="TrackImage"])');
+  await expect(imageForm.locator('input[name="file_to_upload"]')).toHaveAttribute(
+    "accept",
+    ".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP",
+  );
+
+  const stamp = Date.now();
+  await page.setInputFiles('input[name="file_to_upload"][accept*=".png"]', {
+    name: `e2e-cover-${stamp}.png`,
+    mimeType: "image/png",
+    buffer: Buffer.from(PNG_1X1_BASE64, "base64"),
+  });
+  await imageForm.getByRole("button", { name: "Upload" }).click();
+
+  await expect(page).toHaveURL(/\/track\/e2e-audio-track\?uploaded=TrackImage$/);
+  await expect(page.getByText("Image uploaded.")).toBeVisible();
+  await expect(page.getByText("Audio uploaded.")).toHaveCount(0);
+  // The handler attached the image to the track row before redirecting, so the
+  // editor now shows it from the tracks directory.
+  await expect(page.locator('img[src^="/uploads/tracks/"]')).toHaveCount(1);
+});
+
 test("an upload with nothing chosen comes back with an error code", async ({ page }) => {
   requireAdmin();
   await loginAs(page, "e2e-admin");
 
   // An untouched file input is not an upload: the browser sends an empty part
-  // and the handler sends the user back with a code (`ui::upload`'s
-  // upload_message turns it into the alert). Which code depends on what the
-  // browser puts in the empty part, so the URL is the assertion here.
+  // and the handler sends the user back with a code that names the slot
+  // (`ui::upload`'s upload_message turns the code into the alert). Which code
+  // depends on what the browser puts in the empty part, so the slot prefix is
+  // the assertion here.
   await page.goto(`${base}/admin/artist/e2e-tabs/images`);
   await page.getByRole("button", { name: "Upload" }).click();
-  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\?bad_upload=/);
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-tabs\/images\?bad_upload=Artist:/);
 });
 
 test("the admin dashboard renders cards and the side menu", async ({ page }) => {

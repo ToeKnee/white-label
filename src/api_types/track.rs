@@ -20,6 +20,10 @@ pub struct UpcomingAudio {
     pub track: TrackWithArtists,
     /// The release the track sits on.
     pub release_name: String,
+    /// The release's image column (stored file name, `None` when the release
+    /// has none): the artwork the player bar falls back to when the track has
+    /// no image of its own.
+    pub release_image: Option<String>,
 }
 
 /// A batch of tracks to top the global player's queue up with (see

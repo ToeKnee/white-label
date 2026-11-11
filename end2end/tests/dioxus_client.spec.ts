@@ -562,8 +562,11 @@ test("the track editor uploads audio and plays it without a reload", async ({ pa
 
   const picked = { name: "e2e-audio.wav", mimeType: "audio/wav", buffer: WAV_BYTES };
   const loadsBeforeUpload = documentLoads;
-  await page.setInputFiles('input[name="file_to_upload"]', picked);
-  await page.getByRole("button", { name: "Upload" }).click();
+  // The editor now hosts two uploaders, so the audio slot's own form is what
+  // gets the file and the click.
+  const audioForm = page.locator('form:has(input[name="file_type"][value="TrackAudio"])');
+  await page.setInputFiles('input[name="file_to_upload"][accept*=".wav"]', picked);
+  await audioForm.getByRole("button", { name: "Upload" }).click();
 
   // The alert names the stored file (`<timestamp>-<track slug>.wav`: audio is
   // named after the track, like an artist image after the artist) and the
@@ -573,6 +576,51 @@ test("the track editor uploads audio and plays it without a reload", async ({ pa
   await expect(page.locator('audio[src^="/uploads/tracks/"]')).toHaveCount(1, {
     timeout: 15000,
   });
+  expect(documentLoads, "an upload is a fetch, not a form post").toBe(loadsBeforeUpload);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
+test("the track editor uploads its cover image without a reload", async ({ page }) => {
+  // The image slot on the same editor as the audio test above: its upload
+  // lands in the tracks directory (like the audio, told apart by the
+  // extension) and swaps into the editor's `<img>` on the live document.
+  requireAdmin();
+
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await loginAs(page, "e2e-admin");
+
+  await page.goto(`${base}/admin/artist/e2e-tabs/release/e2e-audio-release/track/e2e-audio-track`);
+  await expect(h1(page)).toHaveText("E2E Audio Track - E2E Audio Release - E2E Tabs Artist");
+  await clientIsLive(page);
+
+  const shown = page.getByAltText("E2E Audio Track");
+  const before = await shown.getAttribute("src");
+
+  const picked = {
+    name: "e2e-cover.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(PNG_1X1_BASE64, "base64"),
+  };
+  const loadsBeforeUpload = documentLoads;
+  const imageForm = page.locator('form:has(input[name="file_type"][value="TrackImage"])');
+  await page.setInputFiles('input[name="file_to_upload"][accept*=".png"]', picked);
+  await imageForm.getByRole("button", { name: "Upload" }).click();
+
+  // The alert names the stored file (`<timestamp>-<track slug>.png`), and only
+  // the image widget alerts: a success on one slot must not show on the other.
+  await expect(page.locator(".alert-success")).toContainText(/Uploaded .+-e2e-audio-track\.png/, { timeout: 30000 });
+  await expect(page.locator(".alert-success")).toHaveCount(1);
+  await expect(shown).toHaveAttribute("src", /\/uploads\/tracks\/\d+-e2e-audio-track\.png$/, {
+    timeout: 15000,
+  });
+  expect(await shown.getAttribute("src"), "the shown image should change").not.toBe(before);
   expect(documentLoads, "an upload is a fetch, not a form post").toBe(loadsBeforeUpload);
 
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
@@ -644,6 +692,11 @@ test("the global player keeps its track through SPA navigation", async ({ page }
   await expect(page.locator("#global-player")).toContainText("1 of 1");
   await expect(page.locator("audio")).toHaveCount(1, "only the bar makes sound");
   await expect(page.locator("#global-player audio")).toHaveAttribute("src", /^\/uploads\/tracks\//);
+  // The bar always shows artwork: this fixture row's own cover (an earlier
+  // run's upload may have left one) or the logo, since `e2e-audio-release`
+  // has no album art of its own.
+  await expect(page.locator("#global-player img")).toHaveCount(1);
+  await expect(page.locator("#global-player img")).toHaveAttribute("src", /(\/uploads\/|Logo\.svg)/);
   await expect(page.getByRole("button", { name: "Add E2E Audio Track to queue" })).toHaveClass(/btn-active/);
 
   // Tag the bar's audio node, then prove *that node* (not just "an audio")
@@ -712,6 +765,15 @@ test("the queue auto-appends the artist's other tracks when it runs out", async 
   await expect(page.locator("#global-player")).toContainText("of 3");
   await expect(page.locator("#global-player")).toContainText(/Radio Track B[12]/);
   await expect(page.locator("#global-player")).toContainText("E2E Radio Album B");
+
+  // The bar's artwork, once a fetched B track is loaded: the radio tracks
+  // have no image of their own, so the entry fell back to the album art the
+  // continuation service carried along (the gate seeds both radio releases'
+  // `primary_image` and their bytes).
+  await expect(page.locator("#global-player img")).toHaveAttribute(
+    "src",
+    /\/uploads\/releases\/999999992-e2e-radio-album-b\.jpg$/,
+  );
 
   // Another `⏭` reaches the end of the fetched batch.
   await page.getByRole("button", { name: "Next track" }).click();
