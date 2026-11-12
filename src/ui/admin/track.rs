@@ -644,6 +644,21 @@ fn EditTrackBody(
     // (so the next save, the Delete button and the Restore button all target
     // that row), and a soft-delete swaps Delete for Restore without a page
     // load.
+    // The play counters come from the original fetch, not from a save
+    // answer: the save round trips deliberately leave `play_stats` empty,
+    // because edits never move the counters.
+    let play_line = fetched.play_stats.as_ref().map_or_else(
+        || "No plays counted yet.".to_string(),
+        // The label owner reading these counters never feeds them: the
+        // report service drops `label_owner` sessions' plays, so this is
+        // what everyone else's listening added up to.
+        |stats| {
+            format!(
+                "This track's plays so far: {} complete, {} partial, {} skipped.",
+                stats.complete_plays, stats.partial_plays, stats.skips
+            )
+        },
+    );
     let result = saved.unwrap_or(fetched);
     let reactive_message = refused_code(edit.value())
         .and_then(|code| track_message(Some(code.as_str())).map(str::to_string))
@@ -689,10 +704,13 @@ fn EditTrackBody(
                 InlineError { message: message.to_string() }
             }
             if let Some(message) = reactive_message {
-                // Same fixed-code table the `?bad=` redirect path uses.
+                // Same fixed-code table the `?bad=` query path uses.
                 InlineError { message }
             }
         }
+
+        // The audience counters for this track, straight from the fetch.
+        p { class: "text-sm opacity-70", "{play_line}" }
 
         form { method: "post", action: "/admin/forms/track/update",
             onsubmit: move |evt| {

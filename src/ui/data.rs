@@ -24,6 +24,7 @@ use crate::api_types::artist::ArtistResult;
 use crate::api_types::links::LinksResult;
 use crate::api_types::menu::AdminMenu;
 use crate::api_types::page::PageResult;
+use crate::api_types::play_stats::{PlayCounted, PlayReport};
 use crate::api_types::purge::PurgeResult;
 use crate::api_types::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
 use crate::api_types::release::{ReleaseResult, ReleasesResult};
@@ -262,6 +263,27 @@ pub async fn get_continuation_tracks(
         .collect();
     match services::track::continuation_tracks_service(&db.0, artist_slug, excluded).await {
         Ok(result) => Ok(result),
+        Err(error) => to_http_error(&error),
+    }
+}
+
+/// Report one finished play to its track's counters (the global player's
+/// statistics: complete past 90% of the track, partial past 10%, skip
+/// before that — see [`crate::ui::player`]). Guests count; a `label_owner`
+/// session's plays do not (the service drops those reports with
+/// `counted: false`, not an error). The client-side bar is the only
+/// reporter (web builds), and the answer is small because nobody renders
+/// it — the bar just logs the difference.
+///
+/// # Errors
+/// 404 when the slug matches no track, 500 on database failure.
+#[post("/api/track_play",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn report_track_play(report: PlayReport) -> core::result::Result<PlayCounted, HttpError> {
+    match services::track_play_stats::report_play_service(&db.0, user.0.as_ref(), report).await {
+        Ok(answer) => Ok(answer),
         Err(error) => to_http_error(&error),
     }
 }

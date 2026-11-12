@@ -10,6 +10,7 @@ pub mod social_media;
 #[cfg(test)]
 pub mod test_helpers;
 pub mod track;
+pub mod track_play_stats;
 pub mod track_with_artists;
 pub mod traits;
 pub mod visibility;

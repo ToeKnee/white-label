@@ -50,16 +50,38 @@
 //! `localStorage` under `white-label-heard-tracks` (a JSON map of track
 //! slug to loads), so reloads keep them; desktop keeps them in memory for
 //! the life of the window.
+//!
+//! Every play the web bar loads is reported to the server's per-track
+//! counters once (web builds only): when the file ends, when the listener
+//! steps past it, when the bar closes, or when the page hides (a `pagehide`
+//! beacon catches reloads and tab closes). The report says how the play
+//! ended, measured from the bar's own media: a track that reached its 90%
+//! mark is complete, one that reached 10% but not 90% is partial, and
+//! anything under that (or unmeasurable) is a skip. `crate::services::
+//! track_play_stats` counts them; a `label_owner`'s own plays are
+//! deliberately not counted. One report per load: whoever reports first
+//! marks the load (see
+//! [`PlayerState::pending_play_slug`](crate::ui::player::PlayerState::pending_play_slug))
+//! and the other reporters stand down.
 
 use std::collections::BTreeMap;
 
 use dioxus::prelude::*;
 
+#[cfg(feature = "web")]
+use crate::api_types::play_stats::PlayReport;
 use crate::api_types::track::UpcomingAudio;
 use crate::models::record_label::RecordLabel;
+use crate::models::track_play_stats::PlayKind;
 use crate::ui::assets::{served_file_url, track_art_url};
 use crate::ui::data::get_continuation_tracks;
+#[cfg(feature = "web")]
+use crate::ui::data::report_track_play;
 use crate::ui::release::featured_artist_names;
+#[cfg(feature = "web")]
+use wasm_bindgen::JsCast;
+#[cfg(feature = "web")]
+use wasm_bindgen::prelude::Closure;
 
 /// A track the global player can play: everything its bar needs to show and
 /// load, as plain data so it can sit in a context signal and travel in a queue.
@@ -111,6 +133,11 @@ pub struct PlayerState {
     /// page's effect reports the session and the label's number, which runs
     /// before any click can land.
     unlimited: bool,
+    /// True once the loaded play has been reported to the server's counters:
+    /// whoever reports first marks the load, so one play is never counted
+    /// twice. Every fresh load — a Play, a step onto a new track, a
+    /// reopened bar — waits for its own report again.
+    open_play_counted: bool,
 }
 
 impl Default for PlayerState {
@@ -125,6 +152,7 @@ impl Default for PlayerState {
             plays: BTreeMap::new(),
             guest_plays: 0,
             unlimited: false,
+            open_play_counted: false,
         };
         // One allowance conversion (in `set_listening_limits`), not two.
         state.set_listening_limits(true, RecordLabel::DEFAULT_GUEST_PLAYS);
@@ -182,6 +210,7 @@ impl PlayerState {
         // A fresh queue gets a fresh look at the artist's catalogue, even
         // when it replays the release that ran out.
         self.catalogue_exhausted = false;
+        self.open_play_counted = false;
         self.count_current_play();
     }
 
@@ -200,6 +229,7 @@ impl PlayerState {
             index += 1;
             if !self.out_of_plays(&self.queue[index].slug) {
                 self.position = Some(index);
+                self.open_play_counted = false;
                 self.count_current_play();
                 return true;
             }
@@ -220,6 +250,7 @@ impl PlayerState {
             index -= 1;
             if !self.out_of_plays(&self.queue[index].slug) {
                 self.position = Some(index);
+                self.open_play_counted = false;
                 self.count_current_play();
                 return true;
             }
@@ -234,6 +265,7 @@ impl PlayerState {
         self.queue.clear();
         self.position = None;
         self.catalogue_exhausted = false;
+        self.open_play_counted = false;
     }
 
     /// Append `track` to the end of the live queue — what a row's
@@ -355,6 +387,25 @@ impl PlayerState {
         }
     }
 
+    /// The loaded play's slug while this browser has not reported it to the
+    /// server's counters yet, or `None` once it has been reported (or while
+    /// nothing is loaded). The bar's reporters — end, close, step, pagehide
+    /// — all ask here first so one play is only ever reported once.
+    #[must_use]
+    pub fn pending_play_slug(&self) -> Option<String> {
+        if self.open_play_counted {
+            None
+        } else {
+            self.current().map(|track| track.slug.clone())
+        }
+    }
+
+    /// Note that the loaded play has been reported, standing the other
+    /// reporters down for it until the next load.
+    pub const fn mark_open_play_reported(&mut self) {
+        self.open_play_counted = true;
+    }
+
     /// How often this browser loaded `slug`, or 0 if it never did.
     fn used(&self, slug: &str) -> usize {
         self.plays.get(slug).copied().unwrap_or(0)
@@ -442,6 +493,130 @@ async fn continue_queue(
             tracing::warn!("could not top up the player queue: {error}");
         }
     }
+}
+
+/// Classify a finished play by the fraction of the track the listener got:
+/// reaching the 90% mark is complete, reaching 10% (but not 90%) partial,
+/// and anything under 10% — or nothing measurable at all (a NaN or zero
+/// duration from media that never loaded) — a skip. The web bar measures
+/// this from its own `<audio>` (see [`loaded_play_kind`]).
+#[cfg(any(feature = "web", test))]
+#[must_use]
+fn classify_play(fraction_done: f64) -> PlayKind {
+    if !fraction_done.is_finite() || fraction_done <= 0.0 {
+        PlayKind::Skip
+    } else if fraction_done >= 0.9 {
+        PlayKind::Complete
+    } else if fraction_done >= 0.1 {
+        PlayKind::Partial
+    } else {
+        PlayKind::Skip
+    }
+}
+
+/// The id of the bar's `<audio>` element, so the reporters can ask the media
+/// itself how much of the loaded play the listener heard.
+const BAR_AUDIO_ID: &str = "global-player-audio";
+
+/// The play-report endpoint's path, for the pagehide beacon: the click
+/// handlers send through [`crate::ui::data::report_track_play`] itself, but
+/// a beacon only takes a URL.
+#[cfg(feature = "web")]
+const REPORT_ENDPOINT: &str = "/api/track_play";
+
+/// The bar's `<audio>` element (by [`BAR_AUDIO_ID`]), or `None` while the
+/// bar is not showing one.
+#[cfg(feature = "web")]
+fn bar_audio() -> Option<web_sys::HtmlAudioElement> {
+    web_sys::window()?
+        .document()?
+        .get_element_by_id(BAR_AUDIO_ID)?
+        .dyn_ref::<web_sys::HtmlAudioElement>()
+        .cloned()
+}
+
+/// Classify the loaded play from the bar's own media: how far the play got,
+/// divided by how long the file is. A play that never started measuring (no
+/// element, or a file with no known duration) is a skip: nothing of note
+/// was heard.
+#[cfg(feature = "web")]
+fn loaded_play_kind() -> PlayKind {
+    let Some(audio) = bar_audio() else {
+        return PlayKind::Skip;
+    };
+    let duration = audio.duration();
+    if !duration.is_finite() || duration <= 0.0 {
+        return PlayKind::Skip;
+    }
+    classify_play(audio.current_time() / duration)
+}
+
+/// Send one report and log the answer. The counters belong to the label's
+/// editors, not to the bar, so the client never shows them: a play the
+/// server deliberately kept out (`counted: false` — a `label_owner`
+/// previewing their own catalogue) is a debug, and a failed send a warn.
+#[cfg(feature = "web")]
+async fn send_play_report(slug: String, kind: PlayKind) {
+    let report = PlayReport {
+        track_slug: slug,
+        kind,
+    };
+    match report_track_play(report).await {
+        Ok(answer) if !answer.counted => {
+            tracing::debug!("the server kept a label owner's play out of the counters");
+        }
+        Ok(_) => {}
+        Err(error) => {
+            tracing::warn!("could not report a play: {error}");
+        }
+    }
+}
+
+/// Report the loaded play exactly once: a load that was already reported is
+/// skipped; otherwise the kind is decided (an ending event passes
+/// [`PlayKind::Complete`], close asks the bar's media), the load is marked
+/// so no other reporter follows it, and the report is sent.
+#[cfg(feature = "web")]
+fn report_loaded_play(mut handler: Signal<PlayerState>, kind: Option<PlayKind>) {
+    let Some(slug) = handler.read().pending_play_slug() else {
+        return;
+    };
+    let kind = kind.unwrap_or_else(loaded_play_kind);
+    handler.write().mark_open_play_reported();
+    spawn(send_play_report(slug, kind));
+}
+
+/// Outside the web client there is nothing to measure or report (the
+/// counters only learn of web plays — see the module docs), so the same
+/// calls are no-ops and the bar's rsx needs no cfg attributes of its own.
+#[cfg(not(feature = "web"))]
+const fn report_loaded_play(_handler: Signal<PlayerState>, _kind: Option<PlayKind>) {}
+
+/// `⏭`/`⏮`: step the bar and report the play it steps away from first. The
+/// slug and the play's progress are read **before** the move (the step
+/// swaps the media element the measurement comes from), and no mark is
+/// needed — after a successful move the fresh load carries its own pending
+/// play, so a second report for the old one is structurally impossible. A
+/// move that fails (either end of the queue, where the track stays loaded)
+/// reports nothing: the play has not stopped, and its end, close or
+/// pagehide reporter will cover it. `moved` comes straight back for the
+/// caller's end-of-queue continuation.
+#[cfg(feature = "web")]
+fn step_and_report(mut handler: Signal<PlayerState>, step: fn(&mut PlayerState) -> bool) -> bool {
+    let pending = handler.read().pending_play_slug();
+    let kind = loaded_play_kind();
+    let moved = step(&mut handler.write());
+    if let Some(slug) = pending.filter(|_| moved) {
+        spawn(send_play_report(slug, kind));
+    }
+    moved
+}
+
+/// Away from the web client there is nothing to report, so the step is just
+/// the step.
+#[cfg(not(feature = "web"))]
+fn step_and_report(mut handler: Signal<PlayerState>, step: fn(&mut PlayerState) -> bool) -> bool {
+    step(&mut handler.write())
 }
 
 /// The [`PlayerState`] context that [`crate::ui::shell::App`] provides.
@@ -538,6 +713,57 @@ pub fn GlobalPlayer() -> Element {
             let counts = player.read().play_counts();
             save_play_counts(&counts);
         });
+
+        // A play still open when the page goes away (a reload, a tab close)
+        // still owes the counters its report, and no click handler is left
+        // to send one: register a `pagehide` beacon once. The bar is page
+        // chrome (mounted for the whole visit, never unmounted), and the
+        // signal is only read inside the callback — the effect itself never
+        // reads it, so it never re-runs and never registers twice.
+        use_effect(move || {
+            let Some(window) = web_sys::window() else {
+                return;
+            };
+            let beacon_handler = player;
+            let beacon_window = window.clone();
+            let beacon = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                let Some(slug) = beacon_handler.read().pending_play_slug() else {
+                    return;
+                };
+                let kind = loaded_play_kind();
+                let report = PlayReport {
+                    track_slug: slug,
+                    kind,
+                };
+                // The endpoint takes the report under its argument name,
+                // the same shape the macro's own client half sends; a
+                // beacon (which skips the client half entirely) has to
+                // carry it too.
+                let payload = serde_json::json!({ "report": report });
+                let Ok(mut body) = serde_json::to_vec(&payload) else {
+                    tracing::warn!("could not encode the pagehide play report");
+                    return;
+                };
+                match beacon_window
+                    .navigator()
+                    .send_beacon_with_opt_u8_array(REPORT_ENDPOINT, Some(&mut body))
+                {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        tracing::warn!("the browser refused to send the play report beacon");
+                    }
+                    Err(error) => {
+                        tracing::warn!("the play report beacon failed: {error:?}");
+                    }
+                }
+            }));
+            if let Err(error) =
+                window.add_event_listener_with_callback("pagehide", beacon.as_ref().unchecked_ref())
+            {
+                tracing::warn!("could not register the play report beacon: {error:?}");
+            }
+            beacon.forget();
+        });
     }
 
     let Some(current) = player().current().cloned() else {
@@ -547,8 +773,8 @@ pub fn GlobalPlayer() -> Element {
 
     // One handle per handler: signals are handles, so each closure can move its
     // own copy and mutate the same context state.
-    let mut back_handler = player;
-    let mut forward_handler = player;
+    let back_handler = player;
+    let forward_handler = player;
     let mut close_handler = player;
     let mut ended_handler = player;
     // The queue's artist, for the continuation fetches the forward button and
@@ -584,11 +810,16 @@ pub fn GlobalPlayer() -> Element {
                 // the artist's tracks and steps onto the first one fetched.
                 audio {
                     key: "{current.slug}",
+                    id: BAR_AUDIO_ID,
                     class: "w-full min-w-48 max-w-md",
                     controls: true,
                     autoplay: true,
                     src: current.audio_src,
                     onended: move |_| {
+                        // A file that ends by itself is a complete play by
+                        // definition, reported before the queue step swaps
+                        // the measured media out from under it.
+                        report_loaded_play(ended_handler, Some(PlayKind::Complete));
                         let moved = ended_handler.write().next_track();
                         if !moved && !ended_handler.read().is_catalogue_exhausted() {
                             let exclude = ended_handler.read().queued_slugs().join(",");
@@ -607,7 +838,7 @@ pub fn GlobalPlayer() -> Element {
                     class: "btn btn-ghost btn-sm player-glyph",
                     aria_label: "Previous track",
                     onclick: move |_| {
-                        back_handler.write().previous_track();
+                        step_and_report(back_handler, PlayerState::previous_track);
                     },
                     "⏮\u{FE0E}"
                 }
@@ -617,8 +848,9 @@ pub fn GlobalPlayer() -> Element {
                     onclick: move |_| {
                         // The same end-of-queue continuation as `onended`:
                         // a `⏭` pressed at the end is asking for more music,
-                        // not for the bar to sit still.
-                        let moved = forward_handler.write().next_track();
+                        // not for the bar to sit still. `step_and_report`
+                        // reports the play this button steps away from.
+                        let moved = step_and_report(forward_handler, PlayerState::next_track);
                         if !moved && !forward_handler.read().is_catalogue_exhausted() {
                             let exclude = forward_handler.read().queued_slugs().join(",");
                             spawn(continue_queue(
@@ -634,6 +866,9 @@ pub fn GlobalPlayer() -> Element {
                     class: "btn btn-ghost btn-sm player-glyph",
                     aria_label: "Close the player",
                     onclick: move |_| {
+                        // Whatever was heard goes to the counters before
+                        // the bar — and the media it measures — goes away.
+                        report_loaded_play(close_handler, None);
                         close_handler.write().close();
                     },
                     "⏏\u{FE0E}"
@@ -645,9 +880,10 @@ pub fn GlobalPlayer() -> Element {
 
 #[cfg(test)]
 mod tests {
-    use super::{PlayableTrack, PlayerState, playable_from_upcoming};
+    use super::{PlayableTrack, PlayerState, classify_play, playable_from_upcoming};
     use crate::api_types::track::UpcomingAudio;
     use crate::models::track::Track;
+    use crate::models::track_play_stats::PlayKind;
     use crate::models::track_with_artists::TrackWithArtists;
     use std::collections::BTreeMap;
 
@@ -1219,6 +1455,92 @@ mod tests {
             fresh.plays_left("slug-one"),
             Some(3),
             "against this window's own allowance"
+        );
+    }
+
+    #[test]
+    fn classify_play_cuts_at_the_ninety_and_ten_percent_marks() {
+        // The Ideas list's three bands, with their own boundaries.
+        assert_eq!(classify_play(1.0), PlayKind::Complete, "the whole file");
+        assert_eq!(
+            classify_play(0.9),
+            PlayKind::Complete,
+            "the 90% mark itself"
+        );
+        assert_eq!(classify_play(0.89), PlayKind::Partial, "just short of it");
+        assert_eq!(classify_play(0.5), PlayKind::Partial, "half of it");
+        assert_eq!(classify_play(0.1), PlayKind::Partial, "the 10% mark itself");
+        assert_eq!(classify_play(0.05), PlayKind::Skip, "barely started");
+        assert_eq!(classify_play(0.0), PlayKind::Skip, "never started");
+        assert_eq!(classify_play(-1.0), PlayKind::Skip, "and nonsense");
+        assert_eq!(
+            classify_play(f64::NAN),
+            PlayKind::Skip,
+            "unmeasurable media"
+        );
+        assert_eq!(
+            classify_play(f64::INFINITY),
+            PlayKind::Skip,
+            "as is a wild duration"
+        );
+    }
+
+    #[test]
+    fn a_loaded_play_waits_for_exactly_one_report() {
+        let mut player = PlayerState::default();
+        assert_eq!(
+            player.pending_play_slug(),
+            None,
+            "a closed bar owes no report"
+        );
+
+        player.play(queue(&["one", "two"]), 0);
+        assert_eq!(player.pending_play_slug().as_deref(), Some("slug-one"));
+        player.mark_open_play_reported();
+        assert_eq!(player.pending_play_slug(), None, "one report per load");
+
+        // Stepping on (or back off) is a fresh load: the new track waits for
+        // its own report, and the reported one can never be reported again.
+        assert!(player.next_track());
+        assert_eq!(
+            player.pending_play_slug().as_deref(),
+            Some("slug-two"),
+            "the step onto track two waits again"
+        );
+        player.mark_open_play_reported();
+        assert!(player.previous_track());
+        assert_eq!(
+            player.pending_play_slug().as_deref(),
+            Some("slug-one"),
+            "and so does the step back onto track one"
+        );
+
+        player.close();
+        assert_eq!(
+            player.pending_play_slug(),
+            None,
+            "closing takes the pending play with it"
+        );
+    }
+
+    #[test]
+    fn every_way_a_load_starts_clears_the_reported_mark() {
+        // A bar that stays open while its report is marked (the step buttons
+        // mark nothing themselves) must still owe a report for each new
+        // load: `play` reseeding the queue, and a step onto the next track.
+        let mut player = PlayerState::default();
+        player.play(queue(&["one", "two", "three"]), 0);
+        player.mark_open_play_reported();
+
+        assert!(player.next_track());
+        assert_eq!(player.pending_play_slug().as_deref(), Some("slug-two"));
+        player.mark_open_play_reported();
+
+        player.play(queue(&["one", "two", "three"]), 0);
+        assert_eq!(
+            player.pending_play_slug().as_deref(),
+            Some("slug-one"),
+            "a fresh Play waits again"
         );
     }
 }

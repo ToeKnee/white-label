@@ -210,6 +210,42 @@ the `e2e-radio` fixtures get the same treatment (their bytes: `999999996-` to
 `999999994-e2e-radio-*.wav` for the audio, `999999993-`/`999999992-e2e-radio-album-*.jpg`
 for the album art).
 
+Every play the web bar loads is reported to the server once, where per-track
+counters accumulate in `track_play_stats` (one row per track: `complete_plays`,
+`partial_plays`, `skips`; the foreign key cascades, so deleting a track takes
+its counters). The reporters are the bar's own moments: a file ending (a
+complete play), a `⏮`/`⏭` that steps away from a loaded one (classified from
+how far the bar's `<audio>` — the bar's `#global-player-audio` — had got, read
+before the step swaps the element out), closing the bar, and `pagehide` (a
+`navigator.sendBeacon`, which catches reloads and tab closes when no handler
+can run). Whoever reports first marks the load
+(`PlayerState::mark_open_play_reported`), so the four can never stack onto one
+play. The classification cuts at the Ideas list's marks: reaching 90% of the
+duration is complete, 10%-90% partial, under 10% — or unmeasurable (media that
+never loaded) — a skip. Reports go to `POST /api/track_play` (`report_track_play`
+in `src/ui/data.rs`, rules in `report_play_service`): guests and ordinary
+signed-in listeners are counted, a `label_owner`'s plays deliberately are not
+(the answer is `counted: false`, not an error — they preview their own
+catalogue constantly and the counters are meant to measure the audience), and
+an unknown slug answers 404 so a broken client stays visible. The counters show
+on the track editor ("This track's plays so far: …" / "No plays counted yet",
+carried by `get_track`'s `TrackResult.play_stats`, never by the save round
+trips — edits don't move them), not on public pages. Reporting is web-only for
+now: desktop builds compile the bar without it. The counters are an audience
+measurement, not a lock: the endpoint is open by design (anything the bar can
+send, a script can forge), and the browser-side guest allowance above is what
+actually gates listening. The gate pins this end to end: the client spec plays
+and closes `e2e-radio-track-a1` as the owner (the close report answers
+`counted: false`) and again as a signed-out guest (the same report answers
+`counted: true`, and the editor's total clears its earlier baseline — the
+radio fixture files are byte stubs that never decode, so every measured play
+there is a skip; the complete/partial thresholds ride on `classify_play`'s unit
+tests and the cascade/delete behaviour on the model's own `#[sqlx::test]`s),
+while `track_play_twin_counts_listeners_not_label_owners` pins the endpoint on
+a clean database: the guest report counted (right column only), the owner
+preview dropped and the counters unmoved, the editor page rendering the filled
+counters line, a plain signed-in listener counted, and an unknown slug a 404.
+
 ### Uploads with progress
 
 `src/ui/upload.rs` holds the picker widget and its two dioxus endpoints. It is

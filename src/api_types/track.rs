@@ -1,6 +1,9 @@
 //! Response types for the track endpoints.
 
-use crate::models::{artist::Artist, track::Track, track_with_artists::TrackWithArtists};
+use crate::models::{
+    artist::Artist, track::Track, track_play_stats::TrackPlayStats,
+    track_with_artists::TrackWithArtists,
+};
 
 /// The result of fetching a single track along with its associated artists and releases.
 #[derive(serde::Deserialize, serde::Serialize, Clone, Default, Debug)]
@@ -9,6 +12,11 @@ pub struct TrackResult {
     pub track: Track,
     /// A vector of artists associated with the track.
     pub artists: Vec<Artist>,
+    /// The track's stored play counters, or `None` when not one counted play
+    /// has landed for it yet (the track editor shows this). Only the single
+    /// track fetch fills it; the save/delete/restore round trips leave it
+    /// `None` because those edits never move the counters.
+    pub play_stats: Option<TrackPlayStats>,
 }
 
 /// One track the global player can queue next, with the name of the release

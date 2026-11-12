@@ -6,7 +6,7 @@ use sqlx::PgPool;
 use super::authentication_helpers::user_with_permissions;
 use crate::forms::track::{CreateTrackForm, UpdateTrackForm};
 use crate::models::{
-    artist::Artist, auth::User, release::Release, track::Track,
+    artist::Artist, auth::User, release::Release, track::Track, track_play_stats::TrackPlayStats,
     track_with_artists::TrackWithArtists,
 };
 
@@ -104,7 +104,25 @@ pub async fn get_track_service(
         AppError::internal(e)
     })?;
 
-    Ok(TrackResult { track, artists })
+    // The play counters ride along for the track editor's play line. A
+    // counters read that fails must not sink the editor: log and carry on
+    // without them.
+    let play_stats = match TrackPlayStats::get_by_track_id(pool, track.id).await {
+        Ok(play_stats) => play_stats,
+        Err(e) => {
+            tracing::warn!(
+                "get_track_service: no play counters for track {}: {e:?}",
+                track.id
+            );
+            None
+        }
+    };
+
+    Ok(TrackResult {
+        track,
+        artists,
+        play_stats,
+    })
 }
 
 /// How many tracks one continuation batch offers the global player.
@@ -227,7 +245,11 @@ pub async fn create_track_service(
         AppError::internal(e)
     })?;
 
-    Ok(TrackResult { track, artists })
+    Ok(TrackResult {
+        track,
+        artists,
+        play_stats: None,
+    })
 }
 
 /// Update a track
@@ -289,7 +311,11 @@ pub async fn update_track_service(
         AppError::internal(e)
     })?;
 
-    Ok(TrackResult { track, artists })
+    Ok(TrackResult {
+        track,
+        artists,
+        play_stats: None,
+    })
 }
 
 /// Soft delete a track
@@ -329,10 +355,11 @@ pub async fn delete_track_service(
             tracing::error!("{err}");
             AppError::internal(e)
         })?,
+        play_stats: None,
     })
 }
 
-/// Restore a soft deleted track
+/// Restore a deleted track
 ///
 /// # Arguments
 /// pool: `PgPool` - The database connection pool
@@ -371,6 +398,7 @@ pub async fn restore_track_service(
             tracing::error!("{err}");
             AppError::internal(e)
         })?,
+        play_stats: None,
     })
 }
 

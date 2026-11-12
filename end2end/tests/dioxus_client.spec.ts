@@ -866,6 +866,90 @@ test("a guest gets a label-sized play allowance per track, remembered across rel
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });
 
+test("a guest play reaches the server's counters; the owner's is not counted", async ({ page }) => {
+  // The Ideas.md ask, on the `e2e-radio` fixtures: the bar reports each
+  // play it stops to the `/api/track_play` twin, and the track editor
+  // shows the counters. The reports here come from closing the bar (the
+  // fixture files are byte stubs, never decodable media — nothing plays,
+  // nothing has ever, so the measured play is always a skip; the
+  // complete/partial thresholds ride on `classify_play`'s unit tests and
+  // the endpoint's wire tests). Only lower-bound arithmetic at the end:
+  // the same spec runs in parallel on two browsers against these fixtures,
+  // so absolute counters are racy (the guest allowance itself is the
+  // previous spec's subject, kept in localStorage rather than the DB).
+  requireAdmin();
+
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  const editorUrl = `${base}/admin/artist/e2e-radio/release/e2e-radio-album-a/track/e2e-radio-track-a1`;
+  const statsLine = page.getByText(/This track's plays so far|No plays counted yet/);
+  // The counters as one total: a fresh track says "No plays counted yet".
+  const totals = async (): Promise<number> => {
+    const match = (await statsLine.innerText()).match(/(\d+) complete, (\d+) partial, (\d+) skipped/);
+    return match ? Number(match[1]) + Number(match[2]) + Number(match[3]) : 0;
+  };
+  // Press Close with the report response already being awaited: closing a
+  // play this bar never measured (a byte-stub file never loads) must post
+  // a skip report, and the answer is what the Ideas list's two rules look
+  // like over the wire.
+  const closeAndAnswer = async () => {
+    const report = page.waitForResponse((response) => response.url().includes("/api/track_play"), {
+      timeout: 30000,
+    });
+    await page.getByRole("button", { name: "Close the player" }).click();
+    await expect(page.locator("#global-player")).toHaveCount(0);
+    const response = await report;
+    expect(response.status(), "the play report endpoint").toBe(200);
+    return response.json();
+  };
+
+  // Baseline, read by the owner…
+  await loginAs(page, "e2e-admin");
+  await page.goto(editorUrl);
+  await expect(statsLine).toBeVisible();
+  const before = await totals();
+
+  // …who is also the owner's-exclusion case: the owner plays and closes on
+  // the release page, and the endpoint answers counted:false (their
+  // previewing of their own catalogue is deliberately kept out).
+  await page.goto(`${base}/artists/e2e-radio/e2e-radio-album-a`);
+  await clientIsLive(page);
+  await page.getByRole("button", { name: "Play Radio Track A1" }).click();
+  await expect(page.locator("#global-player")).toContainText("E2E Radio Album A");
+  expect(await closeAndAnswer(), "the owner's play is not counted").toEqual({ counted: false });
+
+  // Sign out (the reactive logout twin), and replay the same Play/Close
+  // pair as a guest: the same close report now counts.
+  await page.locator(".navbar summary").click();
+  await page.getByRole("link", { name: "Log out" }).click();
+  await expect(h1(page)).toHaveText("Log out", { timeout: 15000 });
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page.locator(".navbar").getByRole("link", { name: "Login" })).toBeVisible({
+    timeout: 15000,
+  });
+
+  await page.goto(`${base}/artists/e2e-radio/e2e-radio-album-a`);
+  await clientIsLive(page);
+  await page.getByRole("button", { name: "Play Radio Track A1" }).click();
+  await expect(page.locator("#global-player")).toContainText("E2E Radio Album A");
+  expect(await closeAndAnswer(), "the guest's play is counted").toEqual({ counted: true });
+
+  // Back into the editor as the owner: the counters cleared the baseline
+  // by at least the one guest report (parallel specs may add more).
+  await loginAs(page, "e2e-admin");
+  await page.goto(editorUrl);
+  await expect(statsLine).toBeVisible();
+  await expect
+    .poll(totals, {
+      message: `the counters should clear the baseline of ${before} by at least one`,
+      timeout: 15000,
+    })
+    .toBeGreaterThan(before);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
 test("the markdown editor's preview renders live while typing", async ({ page }) => {
   // The reported gap: on Firefox the preview never updated as the admin typed
   // (it only showed the server-saved text). The `MarkdownField` preview now

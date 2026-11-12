@@ -72,8 +72,16 @@ tracing-subscriber = { version = "0.3.19", features = [
     "fmt",
     "env-filter",
 ] }
-# Browser `localStorage` for the player's heard tracks (web client only).
-web-sys = { version = "0.3", features = ["Storage", "Window"], optional = true }
+# JS interop for the browser calls the web client makes (closures, casts).
+wasm-bindgen = { version = "0.2", optional = true }
+# Browser APIs the web client uses: `localStorage` for the player's heard
+# tracks, and the bar's `<audio>` and `navigator.sendBeacon` for its play
+# reports (web client only).
+web-sys = {
+    version = "0.3",
+    features = ["Document", "HtmlAudioElement", "Navigator", "Storage", "Window"],
+    optional = true,
+}
 
 [features]
 # The default build is the server, so plain `cargo test` covers the services,
@@ -108,6 +116,7 @@ web = [
     "dioxus/fullstack",
     "dioxus/router",
     "dep:tracing",
+    "dep:wasm-bindgen",
     "dep:web-sys",
 ]
 # Desktop client (native) build: `crate::ui` again, in a webview window.

@@ -2295,6 +2295,9 @@ mod tests {
                 "value=\"USRC17607839\"",
                 "value=\"120\"",
                 "btn btn-error",
+                // The audience counters ship in the editor; a fresh track
+                // has none, and the line says so.
+                "No plays counted yet.",
             ],
         );
 
@@ -2395,6 +2398,112 @@ mod tests {
             body.contains("btn btn-error"),
             "the restored row offers Delete again:\n{body}"
         );
+    }
+
+    /// The global player's play-report endpoint `POST /api/track_play`:
+    /// guests and signed-in non-owners are counted, a `label_owner`'s own
+    /// previews deliberately are not, and an unknown slug is a 404 rather
+    /// than a silently dropped report.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn track_play_twin_counts_listeners_not_label_owners(pool: PgPool) {
+        use crate::models::track_play_stats::TrackPlayStats;
+
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .expect("release fixture");
+        let track = create_test_track(&pool, 1, Some(release), Some(artist))
+            .await
+            .expect("track fixture");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+        create_test_user(&pool, 2)
+            .await
+            .expect("plain user fixture");
+
+        // The endpoint has no permission gate (a guest's plays count), and
+        // the dioxus client sends the server-fn args as named parameters:
+        // `{"report": …}` — the shape the player's pagehide beacon copies.
+        let server = api_server(pool.clone()).await;
+        let counted = server
+            .post("/api/track_play")
+            .json(&serde_json::json!({
+                "report": { "track_slug": "test-track-1", "kind": "complete" }
+            }))
+            .await;
+        counted.assert_status_ok();
+        assert_eq!(counted.text(), r#"{"counted":true}"#);
+        let stats = TrackPlayStats::get_by_track_id(&pool, track.id)
+            .await
+            .expect("readable")
+            .expect("a counted play leaves a row");
+        assert_eq!(stats.complete_plays, 1);
+        assert_eq!(stats.skips, 0, "only the kind's own column moves");
+
+        // The editor an owner opens now renders the counters it has: the
+        // same fetch that answered the report shows them, not just the
+        // "No plays counted yet" line a fresh track gets.
+        login_as(&server, 1).await;
+        let editor = server
+            .get("/admin/artist/test-artist-1/release/test-release-1/track/test-track-1")
+            .await
+            .text();
+        assert!(
+            editor.contains("plays so far: 1 complete, 0 partial, 0 skipped."),
+            "the editor should show the counted plays (text nodes escape the apostrophe):\n{editor}"
+        );
+
+        // A `label_owner` session answers counted:false rather than an
+        // error, and nothing lands in the counters.
+        let preview = server
+            .post("/api/track_play")
+            .json(&serde_json::json!({
+                "report": { "track_slug": "test-track-1", "kind": "skip" }
+            }))
+            .await;
+        preview.assert_status_ok();
+        assert_eq!(preview.text(), r#"{"counted":false}"#);
+        let stats = TrackPlayStats::get_by_track_id(&pool, track.id)
+            .await
+            .expect("readable")
+            .expect("the row stays");
+        assert_eq!(stats.skips, 0, "the owner's skip never landed");
+
+        // A plain signed-in listener (no permissions) is counted like a
+        // guest: it is the owner's own previewing that stands out.
+        login_as(&server, 2).await;
+        let counted = server
+            .post("/api/track_play")
+            .json(&serde_json::json!({
+                "report": { "track_slug": "test-track-1", "kind": "partial" }
+            }))
+            .await;
+        counted.assert_status_ok();
+        assert_eq!(counted.text(), r#"{"counted":true}"#);
+        let stats = TrackPlayStats::get_by_track_id(&pool, track.id)
+            .await
+            .expect("readable")
+            .expect("the partial landed");
+        assert_eq!(stats.partial_plays, 1);
+
+        // An unknown slug is a 404, so a broken client stays visible.
+        let ghost = server
+            .post("/api/track_play")
+            .json(&serde_json::json!({
+                "report": { "track_slug": "no-such-track", "kind": "complete" }
+            }))
+            .await;
+        assert_eq!(ghost.status_code(), StatusCode::NOT_FOUND);
     }
 
     #[expect(
