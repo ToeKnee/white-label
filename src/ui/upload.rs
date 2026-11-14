@@ -764,10 +764,6 @@ fn upload_outcome(result: core::result::Result<String, HttpError>) -> UploadOutc
 #[cfg(test)]
 #[cfg(feature = "server")]
 mod tests {
-    // The axum-test round trips below await !Send auto-futures; `#[sqlx::test]`
-    // runs each body with block_on on one thread, so `Send` is not needed.
-    #![expect(clippy::future_not_send)]
-
     use sqlx::PgPool;
 
     use super::*;

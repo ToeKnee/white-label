@@ -934,9 +934,14 @@ fn release_message(code: Option<&str>) -> Option<&'static str> {
 ///
 /// All three saves share one action so the page has a single answer to read —
 /// which of three action signals fired most recently is otherwise guesswork.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "the update form is the variant the editor reaches for most, and the action's argument moves straight into the twin, so boxing it to shrink the two slug variants by a few hundred bytes would only add a dereference"
+// The lint's size gap only crosses its threshold on 64-bit pointers; 32-bit
+// targets (wasm today, mobile later) would leave the expectation unfulfilled.
+#[cfg_attr(
+    target_pointer_width = "64",
+    expect(
+        clippy::large_enum_variant,
+        reason = "the update form is the variant the editor reaches for most, and the action's argument moves straight into the twin, so boxing it to shrink the two slug variants by a few hundred bytes would only add a dereference"
+    )
 )]
 enum ReleaseEdit {
     Update(ReleaseUpdateFields),

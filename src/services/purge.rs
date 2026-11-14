@@ -331,7 +331,10 @@ async fn sorted_names<'e, E>(
 where
     E: sqlx::Executor<'e, Database = Postgres>,
 {
-    let mut names = sqlx::query_scalar::<_, String>(sql)
+    // Audited for sqlx's injection guard: every caller hands a query built
+    // from const `&'static str` fragments (the `PAST_WINDOW`/`ARTIST_REFS`
+    // pieces); the only value is the bound `cutoff`.
+    let mut names = sqlx::query_scalar::<_, String>(sqlx::AssertSqlSafe(sql))
         .bind(cutoff)
         .fetch_all(exec)
         .await?;
@@ -353,7 +356,10 @@ async fn orphan_uploads<'e, E>(
 where
     E: sqlx::Executor<'e, Database = Postgres>,
 {
-    let rows = sqlx::query(&orphan_uploads_sql())
+    // Audited for sqlx's injection guard: `orphan_uploads_sql` is assembled
+    // from const `&'static str` fragments; the only value is the bound
+    // `cutoff`.
+    let rows = sqlx::query(sqlx::AssertSqlSafe(orphan_uploads_sql()))
         .bind(cutoff)
         .fetch_all(exec)
         .await?;

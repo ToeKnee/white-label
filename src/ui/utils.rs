@@ -236,6 +236,7 @@ pub fn permission_or_redirect(user: Option<&User>, permission: &str, to: Route) 
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
     use dioxus::prelude::*;
     use dioxus::ssr::render_element;

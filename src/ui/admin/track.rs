@@ -653,7 +653,7 @@ fn EditTrackBody(
     let selected_ids = result.artists.iter().map(|a| a.id).collect::<Vec<i64>>();
     let current_slug = track.slug.clone();
     let isrc_value = track.isrc_code.clone().unwrap_or_default();
-    let bpm_value = track.bpm.map(|bpm| bpm.to_string()).unwrap_or_default();
+    let bpm_value = track.bpm.map_or_default(|bpm| bpm.to_string());
     let track_number_value = track.track_number.to_string();
     let name_for_header = track.name.clone();
     let release_name = release.name;
@@ -939,9 +939,14 @@ fn track_message(code: Option<&str>) -> Option<&'static str> {
 ///
 /// All three saves share one action so the page has a single answer to read —
 /// which of three action signals fired most recently is otherwise guesswork.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "the update form is the variant the editor reaches for most, and the action's argument moves straight into the twin, so boxing it to shrink the two slug variants by a few hundred bytes would only add a dereference"
+// The lint's size gap only crosses its threshold on 64-bit pointers; 32-bit
+// targets (wasm today, mobile later) would leave the expectation unfulfilled.
+#[cfg_attr(
+    target_pointer_width = "64",
+    expect(
+        clippy::large_enum_variant,
+        reason = "the update form is the variant the editor reaches for most, and the action's argument moves straight into the twin, so boxing it to shrink the two slug variants by a few hundred bytes would only add a dereference"
+    )
 )]
 enum TrackEdit {
     Update(TrackUpdateFields),

@@ -253,6 +253,7 @@ mod tests {
         assert_eq!(service.url, "https:://example.com".to_string());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_create_music_service(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -270,6 +271,7 @@ mod tests {
         assert_eq!(service.url, "https://spotify.com/artist".to_string());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_list_music_services_by_artist(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -298,6 +300,7 @@ mod tests {
         assert!(services.contains(&service2));
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_update_music_service(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -322,6 +325,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_delete_music_service(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();

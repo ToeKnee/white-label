@@ -356,6 +356,9 @@ mod tests {
     use super::*;
     use crate::config::upload::UploadConfiguration;
 
+    // `first_bytes` opens files from disk, which only the server build links
+    // (the web and desktop clients never read the uploads tree).
+    #[cfg(feature = "server")]
     #[test]
     fn the_first_bytes_come_back_whatever_the_file_holds() {
         let file = tempfile::NamedTempFile::new().expect("temp file");

@@ -451,10 +451,6 @@ mod tests {
 
     /// A signed-in `admin` + `label_owner` server plus the `test-artist-1`
     /// fixture and an uploads root with the directories the tail expects.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; every caller is a `#[sqlx::test]` body running via block_on on one thread"
-    )]
     async fn signed_in_server(
         pool: &PgPool,
         upload_root: &std::path::Path,
@@ -474,10 +470,6 @@ mod tests {
         server
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn upload_form_stores_the_file_and_points_at_the_editor(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("upload dir");
@@ -525,10 +517,6 @@ mod tests {
         assert_eq!(artist.primary_image.as_deref(), Some(stored_name.as_str()));
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn upload_form_without_a_session_goes_to_login(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("upload dir");
@@ -557,10 +545,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn upload_form_rejects_a_mime_the_configuration_disallows(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("upload dir");
@@ -592,10 +576,6 @@ mod tests {
     /// A part may arrive claiming `image/png` while holding anything at all: a
     /// browser takes that claim from the file's name, so the bytes have to be
     /// checked before the file is moved into place.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn upload_form_rejects_bytes_that_are_not_an_image(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("upload dir");
@@ -637,10 +617,6 @@ mod tests {
 
     /// `signed_in_server` plus a release and a track under `test-artist-1`, and
     /// the `tracks` directory both track slots write into.
-    #[expect(
-        clippy::future_not_send,
-        reason = "awaits the same !Send axum-test helper as `signed_in_server`; callers are `#[sqlx::test]` bodies on one thread"
-    )]
     async fn audio_server(pool: &PgPool, upload_root: &std::path::Path) -> axum_test::TestServer {
         let server = signed_in_server(pool, upload_root).await;
         std::fs::create_dir_all(upload_root.join("tracks")).expect("uploads subdirectory");
@@ -660,10 +636,6 @@ mod tests {
     /// declared type here is `audio/x-flac`, a legacy spelling a browser's own
     /// mime table really does answer with: the extension carries the claim, and
     /// the `fLaC` bytes decide what is stored.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future in a `#[sqlx::test]` body"
-    )]
     #[sqlx::test]
     async fn upload_form_stores_track_audio_and_points_at_its_editor(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("upload dir");
@@ -717,10 +689,6 @@ mod tests {
     /// The audio slot takes audio, and a picture is caught at the claim check:
     /// neither the part's own type nor its `.png` extension is one the slot
     /// takes, so the upload comes back with a code and nothing stored.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future in a `#[sqlx::test]` body"
-    )]
     #[sqlx::test]
     async fn upload_form_rejects_a_picture_for_the_audio_slot(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("upload dir");
@@ -763,10 +731,6 @@ mod tests {
     /// A track's cover image goes through the same form and lands in the same
     /// `tracks` directory as its audio; the image column, not the audio one,
     /// ends up naming it.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future in a `#[sqlx::test]` body"
-    )]
     #[sqlx::test]
     async fn upload_form_stores_track_image_and_points_at_its_editor(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("upload dir");
@@ -817,10 +781,6 @@ mod tests {
     /// check: neither the part's type nor its `.flac` extension is one the slot
     /// takes, so the upload comes back with the slot's name in the code and
     /// nothing stored.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future in a `#[sqlx::test]` body"
-    )]
     #[sqlx::test]
     async fn upload_form_rejects_audio_for_the_image_slot(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("upload dir");

@@ -287,7 +287,10 @@ impl StatsScope {
              GROUP BY s.day \
              ORDER BY s.day ASC"
         );
-        sqlx::query_as::<_, DayTotals>(&query)
+        // Audited for sqlx's injection guard: the interpolated `filter` is a
+        // const `&'static str` fragment (see [`StatsScope::filter`]); the
+        // scope id and `since` are bind parameters.
+        sqlx::query_as::<_, DayTotals>(sqlx::AssertSqlSafe(query.as_str()))
             .bind(match self {
                 Self::Label(id) | Self::Artist(id) | Self::Release(id) => *id,
             })
@@ -331,7 +334,11 @@ impl StatsScope {
              GROUP BY t.id, pa.slug, pa.name, r.slug, r.name, t.slug, t.name \
              ORDER BY {order}"
         );
-        sqlx::query_as::<_, TrackTotals>(&query)
+        // Audited for sqlx's injection guard: the interpolated `filter` and
+        // `order` are const `&'static str` fragments (see
+        // [`StatsScope::filter`] and [`PlaySort::order_clause`]); the scope
+        // id and `since` are bind parameters.
+        sqlx::query_as::<_, TrackTotals>(sqlx::AssertSqlSafe(query.as_str()))
             .bind(match self {
                 Self::Label(id) | Self::Artist(id) | Self::Release(id) => *id,
             })
@@ -347,7 +354,9 @@ impl StatsScope {
 
 #[cfg(test)]
 mod tests {
-    use super::{DayTotals, PlayKind, PlaySort, StatsScope, TrackPlayStats, TrackTotals};
+    use super::PlaySort;
+    #[cfg(feature = "server")]
+    use super::{DayTotals, PlayKind, StatsScope, TrackPlayStats, TrackTotals};
     #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
@@ -361,6 +370,7 @@ mod tests {
         chrono::Utc::now().date_naive()
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_record_play_counts_one_row_per_day(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None)
@@ -406,6 +416,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_stats_go_with_the_track(pool: PgPool) {
         // The foreign key is `ON DELETE CASCADE`: a hard-deleted track takes
@@ -430,6 +441,7 @@ mod tests {
         assert_eq!(counters_left, 0, "the counters went with the rows");
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_day_series_spans_the_range(pool: PgPool) {
         // A row for a day record_play cannot produce (the upsert always
@@ -501,6 +513,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_scopes_see_live_rows_only(pool: PgPool) {
         // One label, one artist, two releases. The counted track shares its
@@ -592,6 +605,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_artist_scope_covers_primary_and_featured(pool: PgPool) {
         /// The track names, in the order the table's rows arrive.
@@ -737,6 +751,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_track_totals_follow_the_sort(pool: PgPool) {
         // Four tracks on one release, heard four different ways: each column

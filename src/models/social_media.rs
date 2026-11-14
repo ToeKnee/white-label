@@ -241,6 +241,7 @@ mod tests {
         assert_eq!(service.url, "https://example.com".to_string());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_create_social_media_service(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -258,6 +259,7 @@ mod tests {
         assert_eq!(service.url, "https://facebook.com/artist".to_string());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_list_social_media_by_artist(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -286,6 +288,7 @@ mod tests {
         assert!(services.contains(&service2));
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_update_social_media_service(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -310,6 +313,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_delete_social_media_service(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();

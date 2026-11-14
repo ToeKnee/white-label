@@ -358,11 +358,7 @@ impl Track {
             Err(e) => {
                 tracing::error!("{e}");
                 Err(anyhow::anyhow!(
-                    "Could not find track {} for release with id {} and artist with id {} and record label with id {}.",
-                    slug,
-                    release_id,
-                    artist_id,
-                    record_label_id,
+                    "Could not find track {slug} for release with id {release_id} and artist with id {artist_id} and record label with id {record_label_id}.",
                 ))
             }
         }
@@ -583,6 +579,7 @@ mod tests {
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
     };
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_success(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -616,6 +613,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_name_is_empty(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -650,6 +648,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_name_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -685,6 +684,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_slug_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -720,6 +720,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_slug_unique(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -736,6 +737,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_primary_artist_does_not_exist(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -767,6 +769,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_release_does_not_exist(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -798,6 +801,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_isrc_code_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -833,6 +837,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_isrc_code_unique(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -851,6 +856,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_track_number_unique_for_release(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -872,6 +878,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_create(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -897,6 +904,7 @@ mod tests {
         assert_eq!(track.description, "This is a test track".to_string());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_create_with_validation_error(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -924,6 +932,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -932,6 +941,7 @@ mod tests {
         assert_eq!(track, track_by_slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug_not_found(pool: PgPool) {
         let track = Track::get_by_slug(&pool, "missing".to_string()).await;
@@ -943,6 +953,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug_no_tracks(pool: PgPool) {
         let track = Track::get_by_release_and_artist_and_record_label_and_slug(
@@ -962,6 +973,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug(pool: PgPool) {
         let test_track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -980,6 +992,7 @@ mod tests {
         assert_eq!(track.slug, test_track.slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug_deleted_track_include_hidden(
         pool: PgPool,
@@ -1000,6 +1013,7 @@ mod tests {
         assert_eq!(track.id, deleted_track.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug_deleted_track(pool: PgPool) {
         let deleted_track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1021,6 +1035,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug_unpublished_track_include_hidden(
         pool: PgPool,
@@ -1043,6 +1058,7 @@ mod tests {
         assert_eq!(track.slug, unpublished_track.slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug_unpublished_track(
         pool: PgPool,
@@ -1067,6 +1083,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug_future_track_include_hidden(
         pool: PgPool,
@@ -1089,6 +1106,7 @@ mod tests {
         assert_eq!(track.slug, future_track.slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_release_and_artist_and_record_label_and_slug_future_track(pool: PgPool) {
         let mut future_track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1111,6 +1129,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1135,6 +1154,7 @@ mod tests {
         assert_ne!(updated_track.updated_at, track.updated_at);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update_validation_error(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1149,6 +1169,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_delete(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1156,6 +1177,7 @@ mod tests {
         assert!(result.deleted_at.is_some());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_delete_not_found(pool: PgPool) {
         let track = Track::default();
@@ -1168,6 +1190,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_set_artists(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1188,6 +1211,7 @@ mod tests {
         assert_eq!(artists[1].id, artist2.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_set_artists_not_found(pool: PgPool) {
         let track = Track::default();
@@ -1200,6 +1224,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_set_artists_no_artists(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1212,6 +1237,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_set_artists_replace(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1242,6 +1268,7 @@ mod tests {
     }
 
     /// Test `get_artists`
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_artists(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1267,6 +1294,7 @@ mod tests {
         assert_eq!(artists[1].id, artist2.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_primary_image_url(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1274,6 +1302,7 @@ mod tests {
         assert_eq!(url, "/Logo.svg");
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_primary_image_url_with_custom_image(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1283,6 +1312,7 @@ mod tests {
         assert_eq!(url, "/uploads/tracks/custom-image.jpg");
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_audio_url_is_absent_without_a_file(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1305,6 +1335,7 @@ mod tests {
     /// A whole-row save (what `update_track_service` does after loading the
     /// track) must carry the stored audio file along with it, or editing a
     /// track's name would silently strand the upload.
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update_keeps_a_stored_audio_file(pool: PgPool) {
         let track = create_test_track(&pool, 1, None, None).await.unwrap();
@@ -1331,6 +1362,7 @@ mod tests {
 
     /// The same guarantee for the image column: a track that gets its own
     /// uploaded cover must not lose it the next time its form is saved.
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update_keeps_a_stored_image_file(pool: PgPool) {
         let track = create_test_track(&pool, 2, None, None).await.unwrap();

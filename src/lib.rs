@@ -35,5 +35,10 @@ pub mod session_store;
 /// All three build from this module; server-only parts inside it (the server
 /// fns' bodies) are gated by the fullstack macros.
 #[cfg(any(feature = "server", feature = "web", feature = "desktop"))]
+#[expect(
+    clippy::empty_enums,
+    unreachable_code,
+    reason = "macro-generated, not user code: Dioxus's `#[component]` Props derive builds a state-transition enum that is empty for props-free components, and the `Routable` derive ends a route's call with an uninhabited match arm"
+)]
 pub mod ui;
 pub mod utils;

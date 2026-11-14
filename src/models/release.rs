@@ -224,7 +224,7 @@ impl Release {
             Ok(release) => Ok(release),
             Err(e) => {
                 tracing::error!("{e}");
-                Err(anyhow::anyhow!("Could not find release with id {}.", id))
+                Err(anyhow::anyhow!("Could not find release with id {id}."))
             }
         }
     }
@@ -244,7 +244,7 @@ impl Release {
     pub async fn get_by_slug(pool: &PgPool, slug: String) -> anyhow::Result<Self> {
         Self::find_by_slug(pool, slug.clone())
             .await?
-            .ok_or_else(|| anyhow::anyhow!("Could not find release with slug {}.", slug))
+            .ok_or_else(|| anyhow::anyhow!("Could not find release with slug {slug}."))
     }
 
     /// Look up a release by slug, `Ok(None)` when no row matches — lets
@@ -260,7 +260,7 @@ impl Release {
             .await
             .map_err(|e| {
                 tracing::error!("{e}");
-                anyhow::anyhow!("Could not find release with slug {}.", slug)
+                anyhow::anyhow!("Could not find release with slug {slug}.")
             })
     }
 
@@ -315,10 +315,7 @@ impl Release {
             Err(e) => {
                 tracing::error!("{e}");
                 Err(anyhow::anyhow!(
-                    "Could not find release {} for artist with id {} and record label with id {}.",
-                    slug,
-                    artist_id,
-                    record_label_id,
+                    "Could not find release {slug} for artist with id {artist_id} and record label with id {record_label_id}.",
                 ))
             }
         }
@@ -343,13 +340,16 @@ impl Release {
         artist_id: Option<i64>,
         record_label_id: i64,
     ) -> anyhow::Result<Option<Self>> {
-        let mut query = "SELECT * FROM releases WHERE release_date > NOW() AND published_at IS NOT NULL AND label_id = $1".to_string();
-        if artist_id.is_some() {
-            query.push_str(" AND primary_artist_id = $2");
-        }
-        query.push_str(" ORDER BY release_date ASC LIMIT 1");
+        // Two full literal queries, picked by whether the artist filter
+        // applies, so the SQL stays a compile-time constant for sqlx's
+        // injection guard; the ids below are bind parameters.
+        let query = if artist_id.is_some() {
+            "SELECT * FROM releases WHERE release_date > NOW() AND published_at IS NOT NULL AND label_id = $1 AND primary_artist_id = $2 ORDER BY release_date ASC LIMIT 1"
+        } else {
+            "SELECT * FROM releases WHERE release_date > NOW() AND published_at IS NOT NULL AND label_id = $1 ORDER BY release_date ASC LIMIT 1"
+        };
 
-        let mut query_builder = sqlx::query_as::<_, Self>(&query).bind(record_label_id);
+        let mut query_builder = sqlx::query_as::<_, Self>(query).bind(record_label_id);
         if let Some(artist_id) = artist_id {
             query_builder = query_builder.bind(artist_id);
         }
@@ -426,9 +426,7 @@ impl Release {
             Err(e) => {
                 tracing::error!("{e}");
                 Err(anyhow::anyhow!(
-                    "Could not find releases for artist with id {} and record label with id {}.",
-                    artist_id,
-                    record_label_id
+                    "Could not find releases for artist with id {artist_id} and record label with id {record_label_id}."
                 ))
             }
         }
@@ -643,7 +641,7 @@ impl Release {
 
             tracks_with_artists.push(TrackWithArtists {
                 track: track.clone(),
-                artists: artists.clone(),
+                artists,
             });
         }
 
@@ -653,12 +651,14 @@ impl Release {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "server")]
     use super::*;
     #[cfg(feature = "server")]
     use crate::models::test_helpers::{
         create_test_artist, create_test_record_label, create_test_release, create_test_track,
     };
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_success(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -686,6 +686,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_name_is_empty(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -714,6 +715,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_name_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -743,6 +745,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_slug_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -772,6 +775,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_slug_unique(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -788,6 +792,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_primary_artist_does_not_exist(pool: PgPool) {
         let release = Release {
@@ -815,6 +820,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_catalogue_number_length(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -845,6 +851,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_catalogue_number_unique(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -862,6 +869,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_record_label_exists(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -891,6 +899,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_create(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -914,6 +923,7 @@ mod tests {
         assert_eq!(release.description, "This is a test release".to_string());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_create_with_validation_error(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -939,6 +949,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -949,6 +960,7 @@ mod tests {
         assert_eq!(release, release_by_slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug_not_found(pool: PgPool) {
         let release = Release::get_by_slug(&pool, "missing".to_string()).await;
@@ -960,6 +972,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_and_slug_no_releases(pool: PgPool) {
         let release =
@@ -974,6 +987,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_and_slug(pool: PgPool) {
         let test_release = create_test_release(&pool, 1, None).await.unwrap();
@@ -991,6 +1005,7 @@ mod tests {
         assert_eq!(release.slug, test_release.slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_and_slug_deleted_release_include_hidden(
         pool: PgPool,
@@ -1010,6 +1025,7 @@ mod tests {
         assert_eq!(release.id, deleted_release.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_and_slug_deleted_release(pool: PgPool) {
         let deleted_release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1030,6 +1046,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_and_slug_unpublished_release_include_hidden(
         pool: PgPool,
@@ -1051,6 +1068,7 @@ mod tests {
         assert_eq!(release.slug, unpublished_release.slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_and_slug_unpublished_release(pool: PgPool) {
         let mut unpublished_release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1072,6 +1090,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_and_slug_future_release_include_hidden(
         pool: PgPool,
@@ -1093,6 +1112,7 @@ mod tests {
         assert_eq!(release.slug, future_release.slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_artist_and_record_label_and_slug_future_release(pool: PgPool) {
         let mut future_release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1114,6 +1134,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_next_scheduled_release_no_releases(pool: PgPool) {
         let release = Release::get_next_scheduled_release(&pool, None, 1)
@@ -1122,6 +1143,7 @@ mod tests {
         assert!(release.is_none());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_next_scheduled_release_with_releases(pool: PgPool) {
         let mut release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1136,6 +1158,7 @@ mod tests {
         assert_eq!(next_release.unwrap().id, release.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_next_scheduled_release_with_artist(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -1160,6 +1183,7 @@ mod tests {
         assert_eq!(next_release.unwrap().id, release.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_by_artist_and_record_label_no_releases(pool: PgPool) {
         let releases = Release::list_by_artist_and_record_label(&pool, 1, 1, Visibility::Deleted)
@@ -1169,6 +1193,7 @@ mod tests {
         assert_eq!(releases.len(), 0);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_by_artist_and_record_label_with_releases(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1180,6 +1205,7 @@ mod tests {
         assert_eq!(releases[0].id, release.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_by_artist_and_record_label_with_unpublished_releases(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -1218,6 +1244,7 @@ mod tests {
         assert_eq!(releases[0].id, published_release.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_by_artist_and_record_label_with_unpublished_releases_show_all(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -1267,6 +1294,7 @@ mod tests {
         assert_eq!(releases[3].id, deleted_release.id);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_by_artist_and_record_label_hidden_excludes_deleted(pool: PgPool) {
         let artist = create_test_artist(&pool, 1, None).await.unwrap();
@@ -1321,6 +1349,7 @@ mod tests {
         assert!(releases.iter().any(|r| r.id == published_release.id));
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_by_artist_and_record_label_wrong_artist(pool: PgPool) {
         create_test_release(&pool, 1, None).await.unwrap();
@@ -1331,6 +1360,7 @@ mod tests {
         assert_eq!(releases.len(), 0);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_by_artist_and_record_label_wrong_label(pool: PgPool) {
         create_test_release(&pool, 1, None).await.unwrap();
@@ -1341,6 +1371,7 @@ mod tests {
         assert_eq!(releases.len(), 0);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1365,6 +1396,7 @@ mod tests {
         assert_ne!(updated_release.updated_at, release.updated_at);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update_validation_error(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1379,6 +1411,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_delete(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1386,6 +1419,7 @@ mod tests {
         assert!(result.deleted_at.is_some());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_delete_not_found(pool: PgPool) {
         let release = Release::default();
@@ -1398,6 +1432,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_set_artists(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1416,6 +1451,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_set_artists_not_found(pool: PgPool) {
         let release = Release::default();
@@ -1428,6 +1464,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_set_artists_no_artists(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1440,6 +1477,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_set_artists_replace(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1470,6 +1508,7 @@ mod tests {
     }
 
     /// Test `get_artists`
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_artists(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1496,6 +1535,7 @@ mod tests {
     }
 
     /// Test `get_tracks`
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_tracks(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -1530,6 +1570,7 @@ mod tests {
     /// The visibility ladder for `get_tracks`: `Published` keeps future,
     /// unpublished and deleted rows away; `Hidden` lets the unpublished
     /// and future ones in; `Deleted` shows everything.
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_tracks_visibility_ladder(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -1580,6 +1621,7 @@ mod tests {
         assert_eq!(tracks.len(), 4);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_primary_image_url(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();
@@ -1587,6 +1629,7 @@ mod tests {
         assert_eq!(url, "/Logo.svg");
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_primary_image_url_with_custom_image(pool: PgPool) {
         let release = create_test_release(&pool, 1, None).await.unwrap();

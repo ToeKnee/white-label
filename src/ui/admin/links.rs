@@ -305,7 +305,7 @@ fn MusicServiceCards(
             bundled_asset(&format!("/images/music_services/{name}.svg")),
             name.to_case(Case::Title),
             name.to_case(Case::Snake),
-            saved.map(|service| service.url.clone()).unwrap_or_default(),
+            saved.map_or_default(|service| service.url.clone()),
         )
     });
 
@@ -371,7 +371,7 @@ fn SocialMediaCards(
             bundled_asset(&format!("/images/social_media_services/{name}.svg")),
             name.to_case(Case::Title),
             name.to_case(Case::Snake),
-            saved.map(|service| service.url.clone()).unwrap_or_default(),
+            saved.map_or_default(|service| service.url.clone()),
         )
     });
 

@@ -559,7 +559,7 @@ form handlers and server fns) and the whole `src/ui` suite build under the
 default `server` feature, so one command covers everything:
 
 ```bash
-cargo test            # 503 lib tests + doc tests, src/server/ and src/ui/ included
+cargo test            # 602 lib tests + doc tests, src/server/ and src/ui/ included
 cargo test -- server::   # just the router/form-handler tests
 cargo test -- ui::       # just the route-table + UI component tests
 ```
@@ -607,7 +607,12 @@ as `--cargo-args --locked`. A lockfile that is stale or missing should fail
 the build rather than silently re-resolve. Dependency updates mean
 regenerating the lockfile in its own commit and rerunning the gate. Keep
 the `dx` CLI and the `dioxus` crates on the same 0.7.x (0.7.10 at the
-moment); re-evaluate when 0.8 goes stable.
+moment); re-evaluate when 0.8 goes stable. Since sqlx 0.9 the query helpers
+only take compile-time literals by default (`SqlSafeStr`): prefer literal
+SQL or `QueryBuilder`, and when fragments really must be interpolated at
+runtime, audit them and say so at the call site with a comment and an
+explicit `sqlx::AssertSqlSafe(…)` (see `StatsScope::day_series` in
+`src/models/track_play_stats.rs`).
 
 ## Testing Your Project
 

@@ -358,6 +358,7 @@ mod tests {
         assert_eq!(page.label_id, 1);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_success(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -379,6 +380,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_name_is_empty(pool: PgPool) {
         let page = Page {
@@ -403,6 +405,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_name_length(pool: PgPool) {
         let name = "a".repeat(256);
@@ -428,6 +431,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_slug_length(pool: PgPool) {
         let slug = "a".repeat(256);
@@ -453,6 +457,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_slug_unique(pool: PgPool) {
         let page = create_test_page(&pool, 1, None).await.unwrap();
@@ -469,6 +474,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_description_length(pool: PgPool) {
         let description = "a".repeat(256);
@@ -494,6 +500,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_record_label_exists(pool: PgPool) {
         let page = Page {
@@ -518,6 +525,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_create(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -538,6 +546,7 @@ mod tests {
         assert_eq!(page.body, "This is a test page body".to_string());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_create_with_validation_error(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -558,6 +567,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug(pool: PgPool) {
         let page = create_test_page(&pool, 1, None).await.unwrap();
@@ -568,6 +578,7 @@ mod tests {
         assert_eq!(page, page_by_slug);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug_not_found(pool: PgPool) {
         let page = Page::get_by_slug(&pool, "missing".to_string(), true).await;
@@ -579,6 +590,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_get_by_slug_with_hidden(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -596,6 +608,7 @@ mod tests {
         assert!(page_by_slug.is_err());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -612,6 +625,7 @@ mod tests {
         assert!(pages.contains(&page2));
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_with_hidden(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -632,6 +646,7 @@ mod tests {
         assert!(pages.contains(&page2));
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_list_hidden_excludes_deleted(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();
@@ -650,6 +665,7 @@ mod tests {
         assert!(pages.contains(&deleted_page));
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update(pool: PgPool) {
         let page = create_test_page(&pool, 1, None).await.unwrap();
@@ -672,6 +688,7 @@ mod tests {
         assert_ne!(updated_page.updated_at, page.updated_at);
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_update_validation_error(pool: PgPool) {
         let page = create_test_page(&pool, 1, None).await.unwrap();
@@ -686,6 +703,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_delete(pool: PgPool) {
         let page = create_test_page(&pool, 1, None).await.unwrap();
@@ -693,6 +711,7 @@ mod tests {
         assert!(result.deleted_at.is_some());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_delete_not_found(pool: PgPool) {
         let page = Page::default();

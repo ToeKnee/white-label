@@ -29,7 +29,7 @@ pub async fn api_server(pool: PgPool) -> TestServer {
         save_cookies: true,
         ..TestServerConfig::default()
     };
-    TestServer::new_with_config(router, config).expect("axum-test should wrap the router")
+    TestServer::new_with_config(router, config)
 }
 
 /// Like [`api_server`], but with an uploads root (the upload endpoints resolve
@@ -43,7 +43,7 @@ pub async fn api_server_with_uploads(pool: &PgPool, upload_root: std::path::Path
         save_cookies: true,
         ..TestServerConfig::default()
     };
-    TestServer::new_with_config(router, config).expect("axum-test should wrap the router")
+    TestServer::new_with_config(router, config)
 }
 
 /// The login server fn's request, un-awaited: the call site `.await`s it (and
@@ -63,10 +63,6 @@ pub fn login_request(server: &TestServer, username: &str) -> TestRequest {
 ///
 /// Panics unless the login succeeds, so a test that gets past this is looking
 /// at a signed-in session.
-#[expect(
-    clippy::future_not_send,
-    reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-)]
 pub async fn login_as(server: &TestServer, username: &str) {
     login_request(server, username).await.assert_status_ok();
 }

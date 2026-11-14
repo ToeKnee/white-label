@@ -9,6 +9,21 @@
 //! the remaining packaging work. Server-only code inside is gated by the
 //! fullstack macros.
 
+// Web-build only: the fullstack macros turn every `#[server]` fn into a
+// client stub awaiting js-sys promise futures (`Rc<RefCell<…>>` inside, so
+// !Send). Those futures only run on wasm's single thread via `spawn_local`,
+// so `Send` is not required. The stubs exist only while `server` is off
+// (with `server` on, real fn bodies compile instead), so the expectation is
+// gated the same way — and the server/desktop builds pass the lint
+// untouched at their own call sites.
+#![cfg_attr(
+    all(feature = "web", not(feature = "server")),
+    expect(
+        clippy::future_not_send,
+        reason = "js-sys promise futures are !Send; wasm runs everything on one thread"
+    )
+)]
+
 /// Admin section (dashboard, label/page editors, `AdminRoot` layout with
 /// its side menu and admin gate, and the artist-tabs layout in
 /// `artist_root`).

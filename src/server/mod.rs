@@ -199,7 +199,7 @@ mod tests {
         let router = build_router(pool, upload_path)
             .await
             .expect("router should build against the test pool");
-        TestServer::new(router).expect("axum-test should wrap the router")
+        TestServer::new(router)
     }
 
     /// Assert the response is 200 and its SSR body contains every marker.
@@ -220,10 +220,6 @@ mod tests {
         "footer bg-neutral text-neutral-content",
     ];
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn root_serves_the_shell_and_head(pool: PgPool) {
         let server = test_server(pool, None).await;
@@ -248,10 +244,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn guests_visiting_admin_routes_get_the_login_form(pool: PgPool) {
         let server = test_server(pool, None).await;
@@ -312,10 +304,6 @@ mod tests {
             .expect("page fixture");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn public_pages_render_seeded_content(pool: PgPool) {
         seed_public_site(&pool).await;
@@ -383,10 +371,6 @@ mod tests {
     /// without one alone. The media itself only lives in the global player
     /// bar (which needs the wasm client to open): the SSR page never ships
     /// an `<audio>` element.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn a_track_with_audio_gets_a_play_button(pool: PgPool) {
         seed_public_site(&pool).await;
@@ -423,10 +407,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn unmatched_artist_routes_still_serve_the_shell(pool: PgPool) {
         seed_public_site(&pool).await;
@@ -444,10 +424,6 @@ mod tests {
         assert_shell(&unknown_release, &[CHROME[0], "Test Release 1"]);
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn label_owner_sessions_see_hidden_artists(pool: PgPool) {
         let label = create_test_record_label(&pool, 1)
@@ -498,10 +474,6 @@ mod tests {
     // `crate::server::forms`; `api_server`'s cookie jar plays the browser.
 
     /// Post an `application/x-www-form-urlencoded` body, like a real form.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; these tests run on one thread via block_on, so Send isn't needed"
-    )]
     async fn post_form(server: &TestServer, path: &str, fields: &[(&str, &str)]) -> TestResponse {
         let form: std::collections::BTreeMap<&str, &str> = fields.iter().copied().collect();
         server.post(path).form(&form).await
@@ -509,10 +481,6 @@ mod tests {
 
     /// Repeat-capable sibling of `post_form`: the release "All Artists"
     /// checkboxes post the same `artist_ids` key once per checked artist.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; these tests run on one thread via block_on, so Send isn't needed"
-    )]
     async fn post_form_pairs(
         server: &TestServer,
         path: &str,
@@ -530,10 +498,6 @@ mod tests {
             .to_string()
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn auth_pages_render_their_forms(pool: PgPool) {
         let server = test_server(pool, None).await;
@@ -564,10 +528,6 @@ mod tests {
         }
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn login_form_sets_the_session_and_lands_home(pool: PgPool) {
         // The fixture hashes the word "password" as test-5.
@@ -594,10 +554,6 @@ mod tests {
         assert!(!home.contains("Register"), "guest links gone:\n{home}");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn login_form_notices_for_bad_attempts(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -635,10 +591,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn logout_form_ends_the_session(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -673,10 +625,6 @@ mod tests {
     // services and the session records with the handlers above, so the tests
     // check the outcome shape and that the session really is shared.
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn login_twin_answers_with_the_user_and_starts_the_session(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -707,10 +655,6 @@ mod tests {
         assert!(home.contains("Log out"), "signed-in navbar:\n{home}");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn login_twin_reports_the_forms_fixed_codes(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -742,10 +686,6 @@ mod tests {
         assert_eq!(user.trim(), "null", "no session should exist:\n{user}");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn logout_twin_ends_the_session(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -780,10 +720,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn register_twin_creates_the_user_and_signs_them_in(pool: PgPool) {
         let server = api_server(pool).await;
@@ -851,10 +787,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn register_form_signs_the_new_user_in(pool: PgPool) {
         let server = api_server(pool).await;
@@ -903,10 +835,6 @@ mod tests {
         assert_shell(&page, &[CHROME[0], "Passwords did not match."]);
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn profile_and_password_forms_redirect_guests(pool: PgPool) {
         let server = api_server(pool).await;
@@ -936,10 +864,6 @@ mod tests {
         assert_eq!(location(&password), "/login");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn profile_form_saves_the_session_user(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -991,10 +915,6 @@ mod tests {
         assert_eq!(location(&impersonate), "/profile?bad=forbidden");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn change_password_form_updates_the_password(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -1078,10 +998,6 @@ mod tests {
     // same outcome as data: the account as the server now holds it (which the
     // form re-fills and the navbar shows), or the handler's own code.
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn profile_twin_answers_the_stored_account(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -1167,10 +1083,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn change_password_twin_answers_done_and_reuses_the_codes(pool: PgPool) {
         create_test_user(&pool, 5).await.expect("user fixture");
@@ -1270,18 +1182,10 @@ mod tests {
 
     /// Log `test-<n>` (password "password") into an `api_server` jar, through
     /// the login server fn the Dioxus clients use.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     async fn login_as(server: &axum_test::TestServer, n: u32) {
         test_support::login_as(server, &format!("test-{n}")).await;
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn signed_in_non_admins_get_the_login_form(pool: PgPool) {
         create_test_record_label(&pool, 1).await.expect("label");
@@ -1299,10 +1203,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn dashboard_renders_cards_and_menu_for_an_owner(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -1364,10 +1264,6 @@ mod tests {
         }
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn no_upcoming_release_hides_the_countdown(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -1392,10 +1288,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn guest_label_and_page_forms_redirect_to_login(pool: PgPool) {
         let server = test_server(pool, None).await;
@@ -1432,10 +1324,6 @@ mod tests {
         }
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn label_form_round_trip_for_a_label_owner(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -1477,10 +1365,6 @@ mod tests {
         }
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn label_form_is_forbidden_without_label_owner(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -1502,10 +1386,6 @@ mod tests {
         assert_eq!(location(&response), "/admin/label?bad=forbidden");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn page_form_flows_for_a_label_owner(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -1600,10 +1480,6 @@ mod tests {
         assert!(body.contains("id=\"page-delete\""), "{body}");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn page_form_failures_carry_fixed_codes(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -1655,10 +1531,6 @@ mod tests {
         assert_eq!(location(&response), "/admin/page/no-such-page?bad=server");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn page_create_is_forbidden_for_plain_admins(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -1681,10 +1553,6 @@ mod tests {
 
     // --- Artist profile forms ----------
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn artist_profile_flows_for_a_label_owner(pool: PgPool) {
         create_test_record_label(&pool, 1).await.expect("label");
@@ -1797,10 +1665,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn artist_form_failures_carry_fixed_codes(pool: PgPool) {
         create_test_record_label(&pool, 1).await.expect("label");
@@ -1871,10 +1735,6 @@ mod tests {
         assert_eq!(location(&response), "/admin/artist?bad=forbidden");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn missing_artist_editor_lands_on_not_found(pool: PgPool) {
         // The profile editor's fetch failure must not land back on the
@@ -1901,10 +1761,6 @@ mod tests {
         assert!(!body.contains("tabs tabs-border"), "no tab layout:\n{body}");
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn release_editor_flows_for_a_label_owner(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -2062,10 +1918,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn release_form_failures_carry_fixed_codes(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -2197,10 +2049,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn track_editor_flows_for_a_label_owner(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -2402,10 +2250,6 @@ mod tests {
     /// previews deliberately are not, and an unknown slug is a 404 rather
     /// than a silently dropped report. The counters a report leaves behind
     /// are read back through the stats pages' data endpoint.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn track_play_twin_counts_listeners_not_label_owners(pool: PgPool) {
         use crate::models::track_play_stats::TrackPlayStats;
@@ -2516,10 +2360,6 @@ mod tests {
     /// track's name in the table. A guest gets the inline login form (the
     /// admin layout's gate), and an unknown range or sort code gets the
     /// page's own load-failure alert rather than a crash or an empty page.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn play_stats_pages_render_for_a_label_owner(pool: PgPool) {
         use crate::models::track_play_stats::{PlayKind, TrackPlayStats};
@@ -2603,10 +2443,6 @@ mod tests {
     /// ranges and sorts 400, unknown slugs 404 — and a day outside the
     /// window stays out of the series while its track still shows (at
     /// zeroes) in the table.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn play_stats_twin_answers_scopes_and_ranges(pool: PgPool) {
         use crate::models::track_play_stats::{PlayKind, TrackPlayStats};
@@ -2748,10 +2584,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn track_form_failures_carry_fixed_codes(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -2948,10 +2780,6 @@ mod tests {
     /// renders one input per platform, the 303 handler
     /// saves and steers back with `?updated=1`, and failures carry fixed
     /// codes.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn links_editor_flow_for_a_label_owner(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -3054,10 +2882,6 @@ mod tests {
     /// client will call in Phases 6-7) saves, clears and authorizes like
     /// the form handler, answering with the `LinksResult` the editor
     /// re-renders.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn update_links_twin_saves_and_clears_links(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -3159,10 +2983,6 @@ mod tests {
     // data: `Saved` with the page's own result type (which the editor then
     // renders in place of a refetch), or `Failed` with the very same code.
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn release_twins_answer_the_saved_row_and_the_form_codes(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -3277,10 +3097,6 @@ mod tests {
         assert_eq!(unauthorized.status_code(), StatusCode::UNAUTHORIZED);
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn purge_form_previews_then_purges_with_query_counts(pool: PgPool) {
         create_test_user_with_permissions(&pool, 1, vec!["admin"])
@@ -3360,10 +3176,6 @@ mod tests {
         assert_eq!(guest_get.status_code(), StatusCode::UNAUTHORIZED);
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn purge_form_names_and_removes_orphan_uploads(pool: PgPool) {
         use crate::models::test_helpers::{
@@ -3396,9 +3208,11 @@ mod tests {
             .await
             .expect("track audio");
         for (table, id) in [("releases", release.id), ("artists", artist.id)] {
-            sqlx::query(&format!(
+            // The table names are literals from the array above, so the
+            // interpolated query is safe for sqlx's injection guard.
+            sqlx::query(sqlx::AssertSqlSafe(format!(
                 "UPDATE {table} SET deleted_at = NOW() - INTERVAL '91 days' WHERE id = $1"
-            ))
+            )))
             .bind(id)
             .execute(&pool)
             .await
@@ -3466,10 +3280,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn label_twin_answers_the_saved_label_and_the_forbidden_code(pool: PgPool) {
         let label = create_test_record_label(&pool, 1).await.expect("label");
@@ -3522,10 +3332,6 @@ mod tests {
     /// The artist Images tab: the SSR body carries the
     /// upload widget addressed to the artist slug, and the artist's current
     /// primary image below it (the site logo until one is stored).
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn artist_images_page_renders_the_uploader(pool: PgPool) {
         let label = create_test_record_label(&pool, 1)
@@ -3577,10 +3383,6 @@ mod tests {
     /// The release editor's image uploader renders below the field
     /// form — a sibling, never nested inside it — with the release's current
     /// image under it.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn release_editor_renders_the_image_uploader(pool: PgPool) {
         let label = create_test_record_label(&pool, 1)
@@ -3632,10 +3434,6 @@ mod tests {
     /// slots use, on the `TrackAudio` configuration) and a player for a stored
     /// file. Its javascript-off form has to name the page to come back to, and
     /// this editor is addressed by artist, release and track.
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn track_editor_renders_the_audio_uploader(pool: PgPool) {
         create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
@@ -3701,10 +3499,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn nested_admin_layouts_render_outside_in(pool: PgPool) {
         // The profile editor is a real form, so this check runs with
@@ -3765,10 +3559,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn deep_nested_routes_and_trailing_slashes_serve(pool: PgPool) {
         create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
@@ -3827,10 +3617,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn unmatched_paths_render_the_not_found_page(pool: PgPool) {
         let server = test_server(pool, None).await;
@@ -3866,10 +3652,6 @@ mod tests {
         );
     }
 
-    #[expect(
-        clippy::future_not_send,
-        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
-    )]
     #[sqlx::test]
     async fn uploaded_files_are_served(pool: PgPool) {
         let upload_dir = tempfile::tempdir().expect("temp uploads dir");

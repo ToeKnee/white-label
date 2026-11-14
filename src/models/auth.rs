@@ -413,6 +413,7 @@ pub mod db {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "server")]
     use crate::models::test_helpers::create_test_user;
 
     use super::*;
@@ -425,12 +426,14 @@ mod tests {
         assert!(user.permissions.is_empty());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_user_validate(pool: PgPool) {
         let user = User::default();
         assert!(user.validate(&pool).await.is_ok());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_user_validate_empty_username(pool: PgPool) {
         let user = User {
@@ -445,6 +448,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_user_validate_username_less_than_255_characters(pool: PgPool) {
         let user = User {
@@ -459,6 +463,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_user_validate_username_is_unique(pool: PgPool) {
         let original_user = create_test_user(&pool, 1).await.unwrap();
@@ -474,6 +479,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_user_validate_email_less_than_255_characters(pool: PgPool) {
         let user = User {
@@ -488,6 +494,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_user_validate_email_has_at_symbol(pool: PgPool) {
         let user = User {
@@ -502,6 +509,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     fn test_user_validate_email_is_unique(pool: PgPool) {
         let original_user = create_test_user(&pool, 1).await.unwrap();

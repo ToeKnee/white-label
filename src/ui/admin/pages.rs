@@ -411,10 +411,8 @@ pub fn DateField(
     date: Option<DateTime<Utc>>,
 ) -> Element {
     let local_name = format!("local_{field}");
-    let hidden_value = date.map(|when| when.to_string()).unwrap_or_default();
-    let local_value = date
-        .map(|when| when.format("%Y-%m-%dT%H:%M").to_string())
-        .unwrap_or_default();
+    let hidden_value = date.map_or_default(|when| when.to_string());
+    let local_value = date.map_or_default(|when| when.format("%Y-%m-%dT%H:%M").to_string());
     let tz_hint =
         date.map(|when| format!("Timezone {} ({})", when.format("%z"), when.format("%Z")));
 

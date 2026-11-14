@@ -134,10 +134,7 @@ impl RecordLabel {
             Ok(row) => row,
             Err(e) => {
                 tracing::error!("{e}");
-                return Err(anyhow::anyhow!(
-                    "Could not find record label with id {}.",
-                    id
-                ));
+                return Err(anyhow::anyhow!("Could not find record label with id {id}."));
             }
         };
 
@@ -176,8 +173,7 @@ impl RecordLabel {
             Err(e) => {
                 tracing::error!("{e}");
                 return Err(anyhow::anyhow!(
-                    "Could not find record label with slug {}.",
-                    slug
+                    "Could not find record label with slug {slug}."
                 ));
             }
         };
@@ -386,6 +382,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_success(pool: PgPool) {
         let record_label = RecordLabel {
@@ -404,6 +401,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_name_is_empty(pool: PgPool) {
         let record_label = RecordLabel {
@@ -426,6 +424,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_name_length(pool: PgPool) {
         let name = "a".repeat(256);
@@ -449,6 +448,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_slug_length(pool: PgPool) {
         let slug = "a".repeat(256);
@@ -472,6 +472,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[sqlx::test]
     async fn test_validate_slug_unique(pool: PgPool) {
         let record_label = create_test_record_label(&pool, 1).await.unwrap();

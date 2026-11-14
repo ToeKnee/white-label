@@ -991,6 +991,7 @@ fn MailIcon() -> Element {
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
     use dioxus::prelude::*;
     use dioxus::ssr::render_element;
