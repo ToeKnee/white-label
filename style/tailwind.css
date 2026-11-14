@@ -51,6 +51,17 @@
     --color-brand-plate: var(--brand-plate);
 }
 
+/* The play-statistics charts and legends (`ui::admin::stats`): the three
+ * counters wear the daisyUI semantic colours — a skip reads as an error,
+ * a partial as a warning, a complete play as a success — so the bars follow
+ * the theme without hard-coded hues. `fill-stats-*` colours the bars,
+ * `bg-stats-*` the legend swatches. */
+@theme inline {
+    --color-stats-skip: var(--color-error);
+    --color-stats-partial: var(--color-warning);
+    --color-stats-complete: var(--color-success);
+}
+
 /* The player bar's transport glyphs. U+23EE/U+23ED/U+23CF (⏮⏭⏏) are
  * emoji-*first* codepoints, and a colour-emoji font ignores the CSS colour
  * entirely. The U+FE0E text-presentation selector in the button labels is not

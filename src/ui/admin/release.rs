@@ -615,6 +615,21 @@ fn EditReleaseBody(
                     }
                 }
 
+        // The statistics page is a separate route (it is not a form target,
+        // and the stats table links straight back to individual tracks).
+        p {
+            Link {
+                to: Route::ReleaseStats {
+                    artist_slug: artist_slug.clone(),
+                    release_slug: release_slug.clone(),
+                    range: None,
+                    sort: None,
+                },
+                class: "btn btn-primary btn-sm",
+                "Play statistics"
+            }
+        }
+
         form {
             method: "post",
             action: "/admin/forms/release/update",

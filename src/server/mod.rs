@@ -2295,9 +2295,6 @@ mod tests {
                 "value=\"USRC17607839\"",
                 "value=\"120\"",
                 "btn btn-error",
-                // The audience counters ship in the editor; a fresh track
-                // has none, and the line says so.
-                "No plays counted yet.",
             ],
         );
 
@@ -2403,7 +2400,8 @@ mod tests {
     /// The global player's play-report endpoint `POST /api/track_play`:
     /// guests and signed-in non-owners are counted, a `label_owner`'s own
     /// previews deliberately are not, and an unknown slug is a 404 rather
-    /// than a silently dropped report.
+    /// than a silently dropped report. The counters a report leaves behind
+    /// are read back through the stats pages' data endpoint.
     #[expect(
         clippy::future_not_send,
         reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
@@ -2411,6 +2409,11 @@ mod tests {
     #[sqlx::test]
     async fn track_play_twin_counts_listeners_not_label_owners(pool: PgPool) {
         use crate::models::track_play_stats::TrackPlayStats;
+
+        /// Today, the day every report in this test lands on.
+        fn today() -> chrono::NaiveDate {
+            chrono::Utc::now().date_naive()
+        }
 
         let label = create_test_record_label(&pool, 1)
             .await
@@ -2443,25 +2446,27 @@ mod tests {
             .await;
         counted.assert_status_ok();
         assert_eq!(counted.text(), r#"{"counted":true}"#);
-        let stats = TrackPlayStats::get_by_track_id(&pool, track.id)
+        let day = TrackPlayStats::get_for_day(&pool, track.id, today())
             .await
             .expect("readable")
             .expect("a counted play leaves a row");
-        assert_eq!(stats.complete_plays, 1);
-        assert_eq!(stats.skips, 0, "only the kind's own column moves");
+        assert_eq!(day.complete_plays, 1);
+        assert_eq!(day.skips, 0, "only the kind's own column moves");
 
-        // The editor an owner opens now renders the counters it has: the
-        // same fetch that answered the report shows them, not just the
-        // "No plays counted yet" line a fresh track gets.
+        // The owner reads those counters where the stats pages put them: the
+        // release scope's answer carries the track with the counted play in
+        // its complete column.
         login_as(&server, 1).await;
-        let editor = server
-            .get("/admin/artist/test-artist-1/release/test-release-1/track/test-track-1")
-            .await
-            .text();
-        assert!(
-            editor.contains("plays so far: 1 complete, 0 partial, 0 skipped."),
-            "the editor should show the counted plays (text nodes escape the apostrophe):\n{editor}"
+        let stats_page = server
+            .get("/api/get_play_stats?scope=release&slug=test-release-1&range=all")
+            .await;
+        stats_page.assert_status_ok();
+        let stats_page: serde_json::Value = stats_page.json();
+        assert_eq!(
+            stats_page["rows"][0]["complete_plays"], 1,
+            "the guest's play is in the table the owner opens:\n{stats_page}"
         );
+        assert_eq!(stats_page["rows"][0]["track_name"], "Test Track 1");
 
         // A `label_owner` session answers counted:false rather than an
         // error, and nothing lands in the counters.
@@ -2473,11 +2478,11 @@ mod tests {
             .await;
         preview.assert_status_ok();
         assert_eq!(preview.text(), r#"{"counted":false}"#);
-        let stats = TrackPlayStats::get_by_track_id(&pool, track.id)
+        let day = TrackPlayStats::get_for_day(&pool, track.id, today())
             .await
             .expect("readable")
             .expect("the row stays");
-        assert_eq!(stats.skips, 0, "the owner's skip never landed");
+        assert_eq!(day.skips, 0, "the owner's skip never landed");
 
         // A plain signed-in listener (no permissions) is counted like a
         // guest: it is the owner's own previewing that stands out.
@@ -2490,11 +2495,11 @@ mod tests {
             .await;
         counted.assert_status_ok();
         assert_eq!(counted.text(), r#"{"counted":true}"#);
-        let stats = TrackPlayStats::get_by_track_id(&pool, track.id)
+        let day = TrackPlayStats::get_for_day(&pool, track.id, today())
             .await
             .expect("readable")
             .expect("the partial landed");
-        assert_eq!(stats.partial_plays, 1);
+        assert_eq!(day.partial_plays, 1);
 
         // An unknown slug is a 404, so a broken client stays visible.
         let ghost = server
@@ -2504,6 +2509,243 @@ mod tests {
             }))
             .await;
         assert_eq!(ghost.status_code(), StatusCode::NOT_FOUND);
+    }
+
+    /// The three stats pages render for an owner who has counted plays:
+    /// headers, range links, the table's column links, and the counted
+    /// track's name in the table. A guest gets the inline login form (the
+    /// admin layout's gate), and an unknown range or sort code gets the
+    /// page's own load-failure alert rather than a crash or an empty page.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn play_stats_pages_render_for_a_label_owner(pool: PgPool) {
+        use crate::models::track_play_stats::{PlayKind, TrackPlayStats};
+
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .expect("release fixture");
+        let track = create_test_track(&pool, 1, Some(release), Some(artist))
+            .await
+            .expect("track fixture");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+
+        TrackPlayStats::record_play(&pool, track.id, PlayKind::Complete)
+            .await
+            .expect("a counted play");
+
+        let server = api_server(pool).await;
+
+        // A guest never reaches a stats page: the admin gate swaps in the
+        // login form, as it does for every other admin route.
+        let guest = server.get("/admin/label/stats").await;
+        assert_shell(
+            &guest,
+            &[CHROME[0], "<h1>Login</h1>", "action=\"/auth/login\""],
+        );
+
+        login_as(&server, 1).await;
+
+        // One counted play shows in every scope's page: its name in the
+        // table, the 7-day window link among the four, and the table sorted
+        // by complete plays (the default, marked for assistive tech).
+        for path in [
+            "/admin/label/stats",
+            "/admin/artist/test-artist-1/stats",
+            "/admin/artist/test-artist-1/release/test-release-1/stats",
+        ] {
+            let page = server.get(path).await;
+            assert_shell(
+                &page,
+                &[
+                    "Play statistics",
+                    "Test Track 1",
+                    "range=7d",
+                    "stats?sort=skips",
+                    "aria-sort=\"descending\"",
+                ],
+            );
+        }
+
+        // A windowed page renders too, and an unknown range gets the
+        // page's own alert (the service 400s; the body says so). The same
+        // goes for a column link the service doesn't recognise, and a column
+        // link keeps the window it was clicked from.
+        let windowed = server.get("/admin/label/stats?range=7d").await;
+        assert_shell(&windowed, &["Play statistics", "Test Track 1"]);
+        let sorted = server.get("/admin/label/stats?range=7d&sort=skips").await;
+        assert_shell(
+            &sorted,
+            &[
+                "Play statistics",
+                "Test Track 1",
+                "aria-sort=\"descending\"",
+            ],
+        );
+        let bogus = server.get("/admin/label/stats?range=tomorrow").await;
+        assert_shell(&bogus, &["Could not load the play statistics"]);
+        let bogus_sort = server.get("/admin/label/stats?sort=sideways").await;
+        assert_shell(&bogus_sort, &["Could not load the play statistics"]);
+    }
+
+    /// The stats pages' data endpoint `GET /api/get_play_stats`: owners get
+    /// the series and rows for their scope, guests 401, unknown scopes,
+    /// ranges and sorts 400, unknown slugs 404 — and a day outside the
+    /// window stays out of the series while its track still shows (at
+    /// zeroes) in the table.
+    #[expect(
+        clippy::future_not_send,
+        reason = "axum-test awaits a !Send auto-future; `#[sqlx::test]` runs this body via block_on on one thread, so Send isn't needed"
+    )]
+    #[sqlx::test]
+    async fn play_stats_twin_answers_scopes_and_ranges(pool: PgPool) {
+        use crate::models::track_play_stats::{PlayKind, TrackPlayStats};
+
+        let label = create_test_record_label(&pool, 1)
+            .await
+            .expect("label fixture");
+        let artist = create_test_artist(&pool, 1, Some(label))
+            .await
+            .expect("artist fixture");
+        let release = create_test_release(&pool, 1, Some(artist.clone()))
+            .await
+            .expect("release fixture");
+        let track = create_test_track(&pool, 1, Some(release), Some(artist))
+            .await
+            .expect("track fixture");
+        create_test_user_with_permissions(&pool, 1, vec!["admin", "label_owner"])
+            .await
+            .expect("admin + label_owner user");
+
+        let past = chrono::Utc::now().date_naive() - chrono::Duration::days(40);
+        TrackPlayStats::record_play(&pool, track.id, PlayKind::Complete)
+            .await
+            .expect("today's complete play");
+        sqlx::query("INSERT INTO track_play_stats (track_id, day, skips) VALUES ($1, $2, 1)")
+            .bind(track.id)
+            .bind(past)
+            .execute(&pool)
+            .await
+            .expect("a past day's skip");
+
+        let server = api_server(pool).await;
+
+        // Guests are turned away at the endpoint itself (the pages' gate is
+        // belt-and-braces on top of this).
+        let guest = server
+            .get("/api/get_play_stats?scope=release&slug=test-release-1&range=all")
+            .await;
+        assert_eq!(guest.status_code(), StatusCode::UNAUTHORIZED);
+
+        login_as(&server, 1).await;
+
+        // All time: both counted days in the series, the track listed with
+        // its summed counters and the slugs its editor row links with.
+        let all = server
+            .get("/api/get_play_stats?scope=release&slug=test-release-1&range=all")
+            .await;
+        all.assert_status_ok();
+        let all: serde_json::Value = all.json();
+        assert_eq!(
+            all["series"].as_array().map(Vec::len),
+            Some(2),
+            "both days:\n{all}"
+        );
+        let rows = all["rows"].as_array().cloned().unwrap_or_default();
+        assert_eq!(rows.len(), 1, "one live track on the release:\n{all}");
+        assert_eq!(rows[0]["track_name"], "Test Track 1");
+        assert_eq!(rows[0]["artist_slug"], "test-artist-1");
+        assert_eq!(rows[0]["release_slug"], "test-release-1");
+        assert_eq!(rows[0]["track_slug"], "test-track-1");
+        assert_eq!(rows[0]["complete_plays"], 1, "the two days sum together");
+        assert_eq!(rows[0]["skips"], 1);
+
+        // A 7-day window keeps the past day out of the series but the
+        // track in the table (with zeroes, so the catalogue still shows).
+        let week = server
+            .get("/api/get_play_stats?scope=release&slug=test-release-1&range=7d")
+            .await;
+        week.assert_status_ok();
+        let week: serde_json::Value = week.json();
+        assert_eq!(
+            week["series"].as_array().map(Vec::len),
+            Some(1),
+            "only today\n{week}"
+        );
+        assert_eq!(week["series"][0]["complete_plays"], 1);
+        let week_rows = week["rows"].as_array().cloned().unwrap_or_default();
+        assert_eq!(
+            week_rows[0]["skips"], 0,
+            "the past skip fell outside the cut"
+        );
+
+        // Artist and label scopes answer through their own lookups; the
+        // label scope carries the placeholder slug its pages send.
+        for path in [
+            "/api/get_play_stats?scope=artist&slug=test-artist-1&range=all",
+            "/api/get_play_stats?scope=label&slug=-&range=all",
+        ] {
+            let scoped = server.get(path).await;
+            scoped.assert_status_ok();
+            let scoped: serde_json::Value = scoped.json();
+            assert_eq!(
+                scoped["rows"].as_array().map(Vec::len),
+                Some(1),
+                "{path}\n{scoped}"
+            );
+        }
+
+        // Unknown slug, scope, range and sort each get their own status, so
+        // a broken page is diagnosable from the logs alone. A sort the pages
+        // do offer (track name) is accepted and answers the same rows.
+        let by_name = server
+            .get("/api/get_play_stats?scope=label&slug=-&range=all&sort=track")
+            .await;
+        by_name.assert_status_ok();
+        let by_name: serde_json::Value = by_name.json();
+        assert_eq!(
+            by_name["rows"].as_array().map(Vec::len),
+            Some(1),
+            "the same catalogue, ordered by name:\n{by_name}"
+        );
+        assert_eq!(
+            server
+                .get("/api/get_play_stats?scope=release&slug=no-such-release&range=all")
+                .await
+                .status_code(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            server
+                .get("/api/get_play_stats?scope=universe&slug=-&range=all")
+                .await
+                .status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            server
+                .get("/api/get_play_stats?scope=label&slug=-&range=tomorrow")
+                .await
+                .status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            server
+                .get("/api/get_play_stats?scope=label&slug=-&range=all&sort=sideways")
+                .await
+                .status_code(),
+            StatusCode::BAD_REQUEST
+        );
     }
 
     #[expect(

@@ -32,6 +32,7 @@ pub mod page;
 pub mod purge;
 pub mod record_label;
 pub mod release;
+pub mod stats;
 pub mod track;
 pub mod track_play_stats;
 pub mod user;

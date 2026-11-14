@@ -326,7 +326,10 @@ fn Track(
                         }
                     }
                     if let Some(note) = plays_hint {
-                        span { class: "text-xs opacity-70", "{note}" }
+                        // `ml-2` keeps a little air between the button and the
+                        // note: the button is inline-flex, so without it the
+                        // text sits hard against the button's edge.
+                        span { class: "ml-2 align-middle text-xs opacity-70", "{note}" }
                     }
                 }
             }

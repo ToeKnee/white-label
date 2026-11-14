@@ -51,16 +51,26 @@
 //! slug to loads), so reloads keep them; desktop keeps them in memory for
 //! the life of the window.
 //!
-//! Every play the web bar loads is reported to the server's per-track
-//! counters once (web builds only): when the file ends, when the listener
-//! steps past it, when the bar closes, or when the page hides (a `pagehide`
-//! beacon catches reloads and tab closes). The report says how the play
-//! ended, measured from the bar's own media: a track that reached its 90%
-//! mark is complete, one that reached 10% but not 90% is partial, and
-//! anything under that (or unmeasurable) is a skip. `crate::services::
-//! track_play_stats` counts them; a `label_owner`'s own plays are
-//! deliberately not counted. One report per load: whoever reports first
-//! marks the load (see
+//! Every play the bar stops is reported to the server's per-track
+//! counters once: when the file ends, when the listener steps past it, when
+//! the bar closes, or when the page hides (web only — a `pagehide` beacon
+//! catches reloads and tab closes). Both clients measure the report from the
+//! bar's own media: a track that reached its 90% mark is complete, one that
+//! reached 10% but not 90% is partial, and anything under that (or
+//! unmeasurable) is a skip. The web client reads its `<audio>` element
+//! directly; the native client cannot touch the webview's element from Rust
+//! (dioxus's media events arrive with no data attached at all), so the bar
+//! installs a small recorder in the page that watches the element's own media
+//! events and pushes them to Rust (`play_recorder_js` in this module).
+//! Quitting the window mid-play is the one stop the native bar cannot report,
+//! and a file that ends by itself is complete by definition on either client.
+//! `crate::services::track_play_stats` counts what
+//! arrives; a `label_owner`'s own plays are deliberately not counted. Because
+//! that rule otherwise looks like a broken client (and the desktop client even
+//! remembers an owner login), the client says it out loud once per run at
+//! `info` level — see `note_uncounted_plays`; `RUST_LOG=debug` additionally
+//! logs every report a client files and the native recorder's readings.
+//! One report per load: whoever reports first marks the load (see
 //! [`PlayerState::pending_play_slug`](crate::ui::player::PlayerState::pending_play_slug))
 //! and the other reporters stand down.
 
@@ -68,14 +78,14 @@ use std::collections::BTreeMap;
 
 use dioxus::prelude::*;
 
-#[cfg(feature = "web")]
+#[cfg(any(feature = "web", feature = "desktop"))]
 use crate::api_types::play_stats::PlayReport;
 use crate::api_types::track::UpcomingAudio;
 use crate::models::record_label::RecordLabel;
 use crate::models::track_play_stats::PlayKind;
 use crate::ui::assets::{served_file_url, track_art_url};
 use crate::ui::data::get_continuation_tracks;
-#[cfg(feature = "web")]
+#[cfg(any(feature = "web", feature = "desktop"))]
 use crate::ui::data::report_track_play;
 use crate::ui::release::featured_artist_names;
 #[cfg(feature = "web")]
@@ -498,9 +508,11 @@ async fn continue_queue(
 /// Classify a finished play by the fraction of the track the listener got:
 /// reaching the 90% mark is complete, reaching 10% (but not 90%) partial,
 /// and anything under 10% — or nothing measurable at all (a NaN or zero
-/// duration from media that never loaded) — a skip. The web bar measures
-/// this from its own `<audio>` (see [`loaded_play_kind`]).
-#[cfg(any(feature = "web", test))]
+/// duration from media that never loaded) — a skip. Each client measures the
+/// fraction its own way: the web bar from its `<audio>` element (see
+/// [`loaded_play_kind`]), the native bar from the page-side recorder (see
+/// [`recorded_play_kind`]).
+#[cfg(any(feature = "web", feature = "desktop", test))]
 #[must_use]
 fn classify_play(fraction_done: f64) -> PlayKind {
     if !fraction_done.is_finite() || fraction_done <= 0.0 {
@@ -517,6 +529,156 @@ fn classify_play(fraction_done: f64) -> PlayKind {
 /// The id of the bar's `<audio>` element, so the reporters can ask the media
 /// itself how much of the loaded play the listener heard.
 const BAR_AUDIO_ID: &str = "global-player-audio";
+
+/// What the webview's media has told the native bar about the file it is
+/// playing: the url the element has loaded, and how much of it (and how much
+/// there is) in seconds. The web bar does not need this — it can read its own
+/// element — so only the native client ever fills one in.
+#[cfg(any(all(feature = "desktop", not(feature = "web")), test))]
+#[derive(Clone, Debug, PartialEq, serde::Deserialize)]
+struct PlayMediaRecord {
+    /// The element's `src`, which matches a queue entry's
+    /// [`PlayableTrack::audio_src`], so a record can never answer for a play
+    /// of a different file.
+    src: String,
+    /// How far into the file the listener has got, in seconds.
+    current: f64,
+    /// How long the file is, in seconds (always more than 0: the recorder
+    /// throws away a reading whose duration is unknown).
+    duration: f64,
+}
+
+/// Classify the loaded play from the recorder's last word about it. A record
+/// about a different file (the bar moved on and the new file has not spoken
+/// yet), or no record at all, measured nothing — the same answer the web bar
+/// gives for media that never loaded.
+#[cfg(any(all(feature = "desktop", not(feature = "web")), test))]
+#[must_use]
+fn recorded_play_kind(record: Option<&PlayMediaRecord>, audio_src: &str) -> PlayKind {
+    match record {
+        Some(record) if record.src != audio_src => PlayKind::Skip,
+        Some(record) if record.duration.is_finite() && record.duration > 0.0 => {
+            classify_play(record.current / record.duration)
+        }
+        Some(_) | None => PlayKind::Skip,
+    }
+}
+
+/// The native bar's media recorder, as JavaScript. Dioxus bridges the media
+/// events (`timeupdate`, `pause`, `ended`, …) but ships no media payload —
+/// `dioxus_html`'s serialized media data is an empty struct — so the events
+/// Rust receives say nothing about how far the play got. This installs
+/// listeners on `document` in the **capture** phase (media events do not
+/// bubble, but capture does reach them) and pushes the element's position and
+/// length to Rust with `dioxus.send`; [`follow_play_recorder`] keeps it in
+/// [`WEBVIEW_MEDIA`]. It ends by waiting forever so the channel stays open.
+#[cfg(all(feature = "desktop", not(feature = "web")))]
+fn play_recorder_js() -> String {
+    format!(
+        r#"
+const barId = {BAR_AUDIO_ID:?};
+if (window.whiteLabelPlayRecorder) {{
+    return false;
+}}
+window.whiteLabelPlayRecorder = true;
+const sendProgress = (event) => {{
+    const media = event.target;
+    if (!media || media.id !== barId) {{
+        return;
+    }}
+    const duration = Number(media.duration);
+    if (!Number.isFinite(duration) || duration <= 0) {{
+        return;
+    }}
+    const heard = Number(media.currentTime);
+    dioxus.send({{
+        src: media.getAttribute("src") || "",
+        current: Number.isFinite(heard) ? heard : 0,
+        duration,
+    }});
+}};
+for (const name of ["durationchange", "timeupdate", "play", "playing", "pause", "seeked", "ended"]) {{
+    document.addEventListener(name, sendProgress, true);
+}}
+await new Promise(() => {{}});
+"#
+    )
+}
+
+// The recorder's last reading, shared with the bar's reporters. One
+// `thread_local` is enough because the desktop client runs its webview
+// events, its effects and its click handlers on one executor thread.
+#[cfg(all(feature = "desktop", not(feature = "web")))]
+thread_local! {
+    static WEBVIEW_MEDIA: std::cell::RefCell<Option<PlayMediaRecord>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// The recorder's last reading, or `None` before the loaded file has said
+/// anything.
+#[cfg(all(feature = "desktop", not(feature = "web")))]
+fn webview_media() -> Option<PlayMediaRecord> {
+    WEBVIEW_MEDIA.with(|media| media.borrow().clone())
+}
+
+/// Open the recorder channel and copy its readings into [`WEBVIEW_MEDIA`] for
+/// as long as it lives. A channel that closes (a duplicate install, or the
+/// window going away) is logged and left alone: the bar then reports
+/// unmeasurable plays as skips rather than measuring nothing in silence.
+#[cfg(all(feature = "desktop", not(feature = "web")))]
+#[expect(
+    clippy::future_not_send,
+    reason = "holds dioxus's `Eval` handle, which is !Send by design; this only ever runs on the component's local executor"
+)]
+async fn follow_play_recorder() {
+    let mut recorder = document::eval(&play_recorder_js());
+    tracing::debug!("the play recorder's channel is open");
+    let mut readings = 0_usize;
+    loop {
+        match recorder.recv::<PlayMediaRecord>().await {
+            Ok(record) => {
+                readings += 1;
+                if readings == 1 {
+                    // One line per install is enough to show the chain is
+                    // alive; the rest would only repeat it four times a second.
+                    tracing::debug!("the recorder's first reading: {record:?}");
+                } else {
+                    tracing::trace!("the recorder: {record:?}");
+                }
+                WEBVIEW_MEDIA.with(|media| *media.borrow_mut() = Some(record));
+            }
+            Err(error) => {
+                tracing::warn!("the player's media recorder stopped: {error}");
+                return;
+            }
+        }
+    }
+}
+
+/// Say once per client run that this session's plays are being left out of the
+/// counters. A `label_owner` session is never counted (a label owner previews
+/// their own catalogue constantly, and the counters measure the audience), so
+/// without this a developer testing the counters — usually signed in as their
+/// own owner account, which the desktop client even remembers — cannot tell a
+/// working client from a broken one.
+#[cfg(any(feature = "web", feature = "desktop"))]
+fn note_uncounted_plays() {
+    let already_said = OWNERSHIP_NOTED.with(|noted| noted.replace(true));
+    if already_said {
+        tracing::debug!("the server keeps this session's plays out of the counters");
+    } else {
+        tracing::info!(
+            "the server keeps this session's plays out of the counters: a label owner's own plays \
+             are not counted, so watch the counters from a signed-out visitor or another account"
+        );
+    }
+}
+
+// Whether this run has already said it out loud (see `note_uncounted_plays`).
+#[cfg(any(feature = "web", feature = "desktop"))]
+thread_local! {
+    static OWNERSHIP_NOTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 /// The play-report endpoint's path, for the pagehide beacon: the click
 /// handlers send through [`crate::ui::data::report_track_play`] itself, but
@@ -552,20 +714,20 @@ fn loaded_play_kind() -> PlayKind {
 }
 
 /// Send one report and log the answer. The counters belong to the label's
-/// editors, not to the bar, so the client never shows them: a play the
-/// server deliberately kept out (`counted: false` — a `label_owner`
-/// previewing their own catalogue) is a debug, and a failed send a warn.
-#[cfg(feature = "web")]
+/// editors, not to the bar, so the client never shows them: a play the server
+/// deliberately kept out (`counted: false` — a `label_owner` previewing their
+/// own catalogue) goes through `note_uncounted_plays`, and a failed send is a
+/// warn.
+#[cfg(any(feature = "web", feature = "desktop"))]
 async fn send_play_report(slug: String, kind: PlayKind) {
+    tracing::debug!("reporting a {kind:?} play of {slug}");
     let report = PlayReport {
         track_slug: slug,
         kind,
     };
     match report_track_play(report).await {
-        Ok(answer) if !answer.counted => {
-            tracing::debug!("the server kept a label owner's play out of the counters");
-        }
-        Ok(_) => {}
+        Ok(answer) if answer.counted => {}
+        Ok(_) => note_uncounted_plays(),
         Err(error) => {
             tracing::warn!("could not report a play: {error}");
         }
@@ -575,9 +737,11 @@ async fn send_play_report(slug: String, kind: PlayKind) {
 /// Report the loaded play exactly once: a load that was already reported is
 /// skipped; otherwise the kind is decided (an ending event passes
 /// [`PlayKind::Complete`], close asks the bar's media), the load is marked
-/// so no other reporter follows it, and the report is sent.
+/// so no other reporter follows it, and the report is sent. `audio_src` is
+/// the loaded file's url, which the native bar matches its recording against;
+/// the web bar measures its own element and has no need of it.
 #[cfg(feature = "web")]
-fn report_loaded_play(mut handler: Signal<PlayerState>, kind: Option<PlayKind>) {
+fn report_loaded_play(mut handler: Signal<PlayerState>, kind: Option<PlayKind>, _audio_src: &str) {
     let Some(slug) = handler.read().pending_play_slug() else {
         return;
     };
@@ -586,11 +750,31 @@ fn report_loaded_play(mut handler: Signal<PlayerState>, kind: Option<PlayKind>) 
     spawn(send_play_report(slug, kind));
 }
 
-/// Outside the web client there is nothing to measure or report (the
-/// counters only learn of web plays — see the module docs), so the same
-/// calls are no-ops and the bar's rsx needs no cfg attributes of its own.
-#[cfg(not(feature = "web"))]
-const fn report_loaded_play(_handler: Signal<PlayerState>, _kind: Option<PlayKind>) {}
+/// The native bar's version: the kind comes from the page-side recorder's
+/// last reading of the loaded file (see [`play_recorder_js`]), which the bar
+/// has been copying into [`WEBVIEW_MEDIA`] as it arrives, so the answer is in
+/// hand before the step or close that reports swaps the element out. A play
+/// the recorder never measured is a skip, exactly as on the web.
+#[cfg(all(feature = "desktop", not(feature = "web")))]
+fn report_loaded_play(mut handler: Signal<PlayerState>, kind: Option<PlayKind>, audio_src: &str) {
+    let Some(slug) = handler.read().pending_play_slug() else {
+        return;
+    };
+    let kind = kind.unwrap_or_else(|| recorded_play_kind(webview_media().as_ref(), audio_src));
+    handler.write().mark_open_play_reported();
+    spawn(send_play_report(slug, kind));
+}
+
+/// Away from the web and desktop clients there is nothing to measure or
+/// report, so the same calls are no-ops and the bar's rsx needs no cfg
+/// attributes of its own.
+#[cfg(not(any(feature = "web", feature = "desktop")))]
+const fn report_loaded_play(
+    _handler: Signal<PlayerState>,
+    _kind: Option<PlayKind>,
+    _audio_src: &str,
+) {
+}
 
 /// `⏭`/`⏮`: step the bar and report the play it steps away from first. The
 /// slug and the play's progress are read **before** the move (the step
@@ -602,7 +786,11 @@ const fn report_loaded_play(_handler: Signal<PlayerState>, _kind: Option<PlayKin
 /// pagehide reporter will cover it. `moved` comes straight back for the
 /// caller's end-of-queue continuation.
 #[cfg(feature = "web")]
-fn step_and_report(mut handler: Signal<PlayerState>, step: fn(&mut PlayerState) -> bool) -> bool {
+fn step_and_report(
+    mut handler: Signal<PlayerState>,
+    step: fn(&mut PlayerState) -> bool,
+    _audio_src: &str,
+) -> bool {
     let pending = handler.read().pending_play_slug();
     let kind = loaded_play_kind();
     let moved = step(&mut handler.write());
@@ -612,10 +800,32 @@ fn step_and_report(mut handler: Signal<PlayerState>, step: fn(&mut PlayerState) 
     moved
 }
 
-/// Away from the web client there is nothing to report, so the step is just
-/// the step.
-#[cfg(not(feature = "web"))]
-fn step_and_report(mut handler: Signal<PlayerState>, step: fn(&mut PlayerState) -> bool) -> bool {
+/// The native bar's version: the recording is read from [`WEBVIEW_MEDIA`],
+/// which the recorder has been keeping up to date, so the play's progress is
+/// known before the step moves the loaded track on.
+#[cfg(all(feature = "desktop", not(feature = "web")))]
+fn step_and_report(
+    mut handler: Signal<PlayerState>,
+    step: fn(&mut PlayerState) -> bool,
+    audio_src: &str,
+) -> bool {
+    let pending = handler.read().pending_play_slug();
+    let kind = recorded_play_kind(webview_media().as_ref(), audio_src);
+    let moved = step(&mut handler.write());
+    if let Some(slug) = pending.filter(|_| moved) {
+        spawn(send_play_report(slug, kind));
+    }
+    moved
+}
+
+/// Away from the web and desktop clients there is nothing to report, so the
+/// step is just the step.
+#[cfg(not(any(feature = "web", feature = "desktop")))]
+fn step_and_report(
+    mut handler: Signal<PlayerState>,
+    step: fn(&mut PlayerState) -> bool,
+    _audio_src: &str,
+) -> bool {
     step(&mut handler.write())
 }
 
@@ -766,6 +976,26 @@ pub fn GlobalPlayer() -> Element {
         });
     }
 
+    // The native bar cannot read the webview's media from Rust, so the page
+    // watches the bar's element and pushes its progress back (see
+    // `play_recorder_js`). The recorder goes in the first time the bar opens:
+    // by then the page's scripts are certainly running (the click that opened
+    // the bar needed them), and this effect runs before the edits that build
+    // the loaded track's `<audio>` reach the page, so no media event is
+    // missed. Both reads subscribe the effect, so the guard needs no other
+    // memory: a second run sees the flag already set.
+    #[cfg(all(feature = "desktop", not(feature = "web")))]
+    {
+        let watch_player = player;
+        let mut recorder_installed = use_signal(|| false);
+        use_effect(move || {
+            if watch_player().is_active() && !recorder_installed() {
+                recorder_installed.set(true);
+                spawn(follow_play_recorder());
+            }
+        });
+    }
+
     let Some(current) = player().current().cloned() else {
         return rsx! {};
     };
@@ -782,6 +1012,13 @@ pub fn GlobalPlayer() -> Element {
     // entry carries the slug of the page it was added from).
     let forward_artist = current.artist_slug.clone();
     let ended_artist = current.artist_slug.clone();
+    // The loaded file's url, which the reporters match their measurement to:
+    // the native bar checks its recording is about this file before it files
+    // one, and the web bar's own element cannot be mistaken for another.
+    let back_src = current.audio_src.clone();
+    let forward_src = current.audio_src.clone();
+    let close_src = current.audio_src.clone();
+    let ended_src = current.audio_src.clone();
 
     rsx! {
         div {
@@ -819,7 +1056,7 @@ pub fn GlobalPlayer() -> Element {
                         // A file that ends by itself is a complete play by
                         // definition, reported before the queue step swaps
                         // the measured media out from under it.
-                        report_loaded_play(ended_handler, Some(PlayKind::Complete));
+                        report_loaded_play(ended_handler, Some(PlayKind::Complete), &ended_src);
                         let moved = ended_handler.write().next_track();
                         if !moved && !ended_handler.read().is_catalogue_exhausted() {
                             let exclude = ended_handler.read().queued_slugs().join(",");
@@ -838,7 +1075,7 @@ pub fn GlobalPlayer() -> Element {
                     class: "btn btn-ghost btn-sm player-glyph",
                     aria_label: "Previous track",
                     onclick: move |_| {
-                        step_and_report(back_handler, PlayerState::previous_track);
+                        step_and_report(back_handler, PlayerState::previous_track, &back_src);
                     },
                     "⏮\u{FE0E}"
                 }
@@ -850,7 +1087,8 @@ pub fn GlobalPlayer() -> Element {
                         // a `⏭` pressed at the end is asking for more music,
                         // not for the bar to sit still. `step_and_report`
                         // reports the play this button steps away from.
-                        let moved = step_and_report(forward_handler, PlayerState::next_track);
+                        let moved =
+                            step_and_report(forward_handler, PlayerState::next_track, &forward_src);
                         if !moved && !forward_handler.read().is_catalogue_exhausted() {
                             let exclude = forward_handler.read().queued_slugs().join(",");
                             spawn(continue_queue(
@@ -868,7 +1106,7 @@ pub fn GlobalPlayer() -> Element {
                     onclick: move |_| {
                         // Whatever was heard goes to the counters before
                         // the bar — and the media it measures — goes away.
-                        report_loaded_play(close_handler, None);
+                        report_loaded_play(close_handler, None, &close_src);
                         close_handler.write().close();
                     },
                     "⏏\u{FE0E}"
@@ -880,7 +1118,10 @@ pub fn GlobalPlayer() -> Element {
 
 #[cfg(test)]
 mod tests {
-    use super::{PlayableTrack, PlayerState, classify_play, playable_from_upcoming};
+    use super::{
+        PlayMediaRecord, PlayableTrack, PlayerState, classify_play, playable_from_upcoming,
+        recorded_play_kind,
+    };
     use crate::api_types::track::UpcomingAudio;
     use crate::models::track::Track;
     use crate::models::track_play_stats::PlayKind;
@@ -1482,6 +1723,72 @@ mod tests {
             classify_play(f64::INFINITY),
             PlayKind::Skip,
             "as is a wild duration"
+        );
+    }
+
+    #[test]
+    fn the_native_recording_bands_like_the_web_bar() {
+        let measured = |current: f64, duration: f64| {
+            recorded_play_kind(
+                Some(&PlayMediaRecord {
+                    src: "/uploads/one.mp3".to_string(),
+                    current,
+                    duration,
+                }),
+                "/uploads/one.mp3",
+            )
+        };
+        assert_eq!(measured(180.0, 180.0), PlayKind::Complete, "the whole file");
+        assert_eq!(measured(54.0, 60.0), PlayKind::Complete, "the 90% mark");
+        assert_eq!(measured(30.0, 60.0), PlayKind::Partial, "half of it");
+        assert_eq!(measured(6.0, 60.0), PlayKind::Partial, "the 10% mark");
+        assert_eq!(measured(2.0, 60.0), PlayKind::Skip, "barely started");
+        assert_eq!(measured(0.0, 60.0), PlayKind::Skip, "never started");
+        assert_eq!(measured(30.0, 0.0), PlayKind::Skip, "a file with no length");
+        assert_eq!(
+            measured(30.0, f64::NAN),
+            PlayKind::Skip,
+            "and a length the element never worked out"
+        );
+    }
+
+    #[test]
+    fn a_recording_of_another_file_says_nothing_about_this_play() {
+        // Stepping on is where this bites: the next file's element can be
+        // under way before the play that just ended is filed, and its position
+        // must never be mistaken for the old play's.
+        let recorded = PlayMediaRecord {
+            src: "/uploads/two.mp3".to_string(),
+            current: 40.0,
+            duration: 60.0,
+        };
+        assert_eq!(
+            recorded_play_kind(Some(&recorded), "/uploads/one.mp3"),
+            PlayKind::Skip,
+            "a record for another file"
+        );
+        assert_eq!(
+            recorded_play_kind(None, "/uploads/one.mp3"),
+            PlayKind::Skip,
+            "and a file the recorder has not heard from yet"
+        );
+    }
+
+    #[test]
+    fn the_recorder_sends_the_shape_rust_reads() {
+        // Pins the contract with `play_recorder_js`: the field names and types
+        // the page-side recorder sends through `dioxus.send`.
+        let record: PlayMediaRecord = serde_json::from_str(
+            r#"{"src":"http://127.0.0.1:8127/uploads/one.mp3","current":12.5,"duration":60}"#,
+        )
+        .unwrap_or_else(|error| panic!("the recorder's reading should look like this: {error}"));
+        assert_eq!(
+            record,
+            PlayMediaRecord {
+                src: "http://127.0.0.1:8127/uploads/one.mp3".to_string(),
+                current: 12.5,
+                duration: 60.0,
+            }
         );
     }
 

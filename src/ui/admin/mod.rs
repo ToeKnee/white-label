@@ -36,6 +36,7 @@ pub mod label;
 pub mod links;
 pub mod pages;
 pub mod release;
+pub mod stats;
 pub mod track;
 
 // Re-exported so the route table can import them from `ui::admin`.
@@ -46,6 +47,7 @@ pub use label::EditLabel;
 pub use links::EditArtistLinks;
 pub use pages::{CreatePage, EditPage};
 pub use release::{CreateRelease, EditRelease, Releases};
+pub use stats::{ArtistStats, LabelStats, ReleaseStats};
 pub use track::{CreateTrack, EditTrack, TrackList, Tracks};
 
 use dioxus::prelude::*;
@@ -190,6 +192,18 @@ fn AdminMenuBody() -> Element {
             li {
                 Link { to: Route::EditLabel { updated: None, bad: None },
                     "{menu.record_label.name}"
+                }
+                // The label's play statistics ride along with the label. The
+                // menu only appears for `admin`, while the stats page is
+                // `label_owner` gated: an admin without that permission gets
+                // steered to the dashboard by the page itself.
+                Link {
+                    to: Route::LabelStats {
+                        range: None,
+                        sort: None,
+                    },
+                    class: "text-sm",
+                    "Play statistics"
                 }
             }
             li {

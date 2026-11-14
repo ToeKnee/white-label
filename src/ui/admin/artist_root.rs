@@ -41,6 +41,14 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
             uploaded: None,
             bad_upload: None,
         },
+        Route::ArtistStats {
+            artist_slug: ref slug,
+            ..
+        } => Route::ArtistStats {
+            artist_slug: slug.clone(),
+            range: None,
+            sort: None,
+        },
         other => other,
     };
     let profile = Route::EditArtist {
@@ -57,9 +65,14 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
         bad: None,
     };
     let images = Route::EditArtistImages {
-        artist_slug,
+        artist_slug: artist_slug.clone(),
         uploaded: None,
         bad_upload: None,
+    };
+    let stats = Route::ArtistStats {
+        artist_slug,
+        range: None,
+        sort: None,
     };
 
     let tab_class = |tab: &Route| {
@@ -95,6 +108,12 @@ pub fn AdminArtistRoot(artist_slug: String) -> Element {
                 role: "tab",
                 class: tab_class(&images),
                 "Images"
+            }
+            Link {
+                to: stats.clone(),
+                role: "tab",
+                class: tab_class(&stats),
+                "Stats"
             }
         }
         Outlet::<Route> {}

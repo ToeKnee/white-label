@@ -17,10 +17,12 @@
 //!
 //! - The handlers never redirect to a caller-supplied URL — every target
 //!   is a literal — and no submitted value is echoed back.
-//! - The session cookie (tower-sessions defaults) is `HttpOnly` +
-//!   SameSite=Lax, which blocks cross-site form posts from modern
-//!   browsers. `Secure`/`SameSite=None` decisions for deployment and an
-//!   optional CSRF-token pass remain open follow-ups for deployment.
+//! - The session cookie (the tower-sessions default) is `HttpOnly` +
+//!   `SameSite=Strict` + `Secure`, which blocks cross-site form posts from
+//!   modern browsers (`Secure` still works over plain http on localhost,
+//!   which browsers treat as a secure context). An explicit
+//!   `SameSite=None` decision for deployment and an optional CSRF-token
+//!   pass remain open follow-ups for deployment.
 //! - Login and register failures answer fixed codes (see [`login_code`]
 //!   and [`register_code`]), the same ones the Dioxus auth server fns
 //!   return; bcrypt work happens only for an existing username.

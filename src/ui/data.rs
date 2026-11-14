@@ -28,6 +28,7 @@ use crate::api_types::play_stats::{PlayCounted, PlayReport};
 use crate::api_types::purge::PurgeResult;
 use crate::api_types::record_label::{LabelArtistResult, LabelPageResult, LabelResult};
 use crate::api_types::release::{ReleaseResult, ReleasesResult};
+use crate::api_types::stats::StatsResult;
 use crate::api_types::track::{ContinuationResult, TrackResult};
 #[cfg(feature = "server")]
 use crate::error::AppError;
@@ -271,9 +272,9 @@ pub async fn get_continuation_tracks(
 /// statistics: complete past 90% of the track, partial past 10%, skip
 /// before that — see [`crate::ui::player`]). Guests count; a `label_owner`
 /// session's plays do not (the service drops those reports with
-/// `counted: false`, not an error). The client-side bar is the only
-/// reporter (web builds), and the answer is small because nobody renders
-/// it — the bar just logs the difference.
+/// `counted: false`, not an error). Only the client-side bar reports (web
+/// and desktop builds), and the answer is small because nobody renders it
+/// — the bar just logs the difference.
 ///
 /// # Errors
 /// 404 when the slug matches no track, 500 on database failure.
@@ -284,6 +285,45 @@ pub async fn get_continuation_tracks(
 pub async fn report_track_play(report: PlayReport) -> core::result::Result<PlayCounted, HttpError> {
     match services::track_play_stats::report_play_service(&db.0, user.0.as_ref(), report).await {
         Ok(answer) => Ok(answer),
+        Err(error) => to_http_error(&error),
+    }
+}
+
+/// The play statistics for one admin stats page: which catalogue
+/// (`scope` — `label`, `artist` or `release`) plus its slug, over which
+/// range (`all`, `1y`, `30d` or `7d`), with the table in the order `sort`
+/// names (`track`, `skips`, `partial` or `complete`). A missing or empty
+/// sort means the default — complete plays first — so a caller that cares
+/// about the series but not the order can leave it out. The label scope has
+/// no slug to address, so its pages send `-` and the service ignores it.
+/// `label_owner` sessions only; the graph's day series and the table's rows
+/// are both inside one answer, so a page load is one round trip.
+///
+/// # Errors
+/// 401 for guests, 403 for signed-in non-owners, 400 on an unknown scope,
+/// range or sort, 404 when the scope's slug matches no row, 500 on database
+/// failure.
+#[get("/api/get_play_stats?scope&slug&range&sort",
+    db: crate::server::current_user::Db,
+    user: crate::server::current_user::CurrentUser
+)]
+pub async fn get_play_stats(
+    scope: String,
+    slug: String,
+    range: String,
+    sort: Option<String>,
+) -> core::result::Result<StatsResult, HttpError> {
+    match services::stats::play_stats_service(
+        &db.0,
+        user.0.as_ref(),
+        &scope,
+        &slug,
+        &range,
+        sort.as_deref().unwrap_or_default(),
+    )
+    .await
+    {
+        Ok(result) => Ok(result),
         Err(error) => to_http_error(&error),
     }
 }

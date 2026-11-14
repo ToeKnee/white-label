@@ -94,7 +94,8 @@ document loads, the links editor submits without a round trip, login and logout
 submit through the `/api/login` and `/api/logout` twins so the navbar follows
 the session
 without a reload, the profile avatar upload and the artist image upload both
-run through the server fns with a progress bar) — it needs the
+run through the server fns with a progress bar, and the play-statistics tab,
+table and window links all work after hydration) — it needs the
 wasm bundle, so it only runs through the gate script below.
 
 The gate script boots that server against the dev database and adds curl
@@ -210,15 +211,18 @@ the `e2e-radio` fixtures get the same treatment (their bytes: `999999996-` to
 `999999994-e2e-radio-*.wav` for the audio, `999999993-`/`999999992-e2e-radio-album-*.jpg`
 for the album art).
 
-Every play the web bar loads is reported to the server once, where per-track
-counters accumulate in `track_play_stats` (one row per track: `complete_plays`,
-`partial_plays`, `skips`; the foreign key cascades, so deleting a track takes
-its counters). The reporters are the bar's own moments: a file ending (a
-complete play), a `⏮`/`⏭` that steps away from a loaded one (classified from
-how far the bar's `<audio>` — the bar's `#global-player-audio` — had got, read
-before the step swaps the element out), closing the bar, and `pagehide` (a
-`navigator.sendBeacon`, which catches reloads and tab closes when no handler
-can run). Whoever reports first marks the load
+Every play the bar loads is reported to the server once, where the counters
+accumulate in `track_play_stats` as one row per track **per day** (`day`,
+`complete_plays`, `partial_plays`, `skips`), keyed `(track_id, day)` and
+upserted against `CURRENT_DATE` — a day's listening stays one small row, and a
+windowed query can stop at its first day. The foreign key cascades, so deleting
+a track takes its counters. The reporters are the bar's own moments: a file
+ending (a complete play), a `⏮`/`⏭` that steps away from a loaded one
+(classified from how far the bar's `<audio>` — the bar's
+`#global-player-audio` — had got, read before the step swaps the element out, or
+from the desktop bar's recording of that same element),
+closing the bar, and `pagehide` (a `navigator.sendBeacon`, which catches reloads
+and tab closes when no handler can run). Whoever reports first marks the load
 (`PlayerState::mark_open_play_reported`), so the four can never stack onto one
 play. The classification cuts at the Ideas list's marks: reaching 90% of the
 duration is complete, 10%-90% partial, under 10% — or unmeasurable (media that
@@ -227,24 +231,99 @@ in `src/ui/data.rs`, rules in `report_play_service`): guests and ordinary
 signed-in listeners are counted, a `label_owner`'s plays deliberately are not
 (the answer is `counted: false`, not an error — they preview their own
 catalogue constantly and the counters are meant to measure the audience), and
-an unknown slug answers 404 so a broken client stays visible. The counters show
-on the track editor ("This track's plays so far: …" / "No plays counted yet",
-carried by `get_track`'s `TrackResult.play_stats`, never by the save round
-trips — edits don't move them), not on public pages. Reporting is web-only for
-now: desktop builds compile the bar without it. The counters are an audience
+an unknown slug answers 404 so a broken client stays visible. The track
+editor deliberately shows no counters of its own — an owner reads them on the
+stats pages below. Both bars measure their own media, but they cannot reach it
+the same way: the web client reads its `<audio>` element directly, while Rust
+cannot read the webview's element on the desktop client and dioxus bridges media
+events with no payload at all (`dioxus_html`'s serialized media data is an empty
+struct), so the desktop bar installs a page-side recorder — `play_recorder_js`
+in `src/ui/player.rs` — whose listeners sit on `document` in the **capture**
+phase (media events do not bubble, but capture does reach the bar's element) and
+push position and length to Rust over dioxus's eval channel;
+`follow_play_recorder` keeps the newest reading in a thread-local, and a reading
+counts only when its `src` is the file the bar is on, so the file a step moved on
+to can never answer for the play that just ended. Quitting the window mid-play is
+the one stop the desktop bar cannot report (there is no `pagehide` beacon there),
+and the no-client SSR build files nothing at all. That recorder script is a
+string inside the crate, where a typo fails silently by leaving the window
+without a recorder, so `tests/player_recorder.spec.ts` pins it: it lifts the
+crate's exact text out of `src/ui/player.rs`, runs it the way the query bridge
+does (`new AsyncFunction("dioxus", body)`), plays a small real WAV, and checks
+the readings carry the element's own `src` verbatim, that the reading filed at
+the end of the file reaches the complete mark, that an element which is not the
+bar contributes nothing, and that installing the recorder twice does not double
+what one seek produces. The window itself stays a manual smoke test
+(`run-dioxus-desktop.sh`), and its own log is where a quiet counter gets
+diagnosed: the default filter shows a warn when the recorder's channel closes
+(`the player's media recorder stopped`) and one info line the first time the
+server says this session's plays are not being counted — the usual reason a
+developer sees nothing at all, since the desktop client remembers a login and a
+label owner's own plays are left out by design. `RUST_LOG=debug` adds the
+recorder's channel opening, its first reading and every report the client files
+(`reporting a partial play of <slug>`), which is enough to name the faulty link
+between page, channel, classification and endpoint.
+The counters are an audience
 measurement, not a lock: the endpoint is open by design (anything the bar can
 send, a script can forge), and the browser-side guest allowance above is what
 actually gates listening. The gate pins this end to end: the client spec plays
 and closes `e2e-radio-track-a1` as the owner (the close report answers
 `counted: false`) and again as a signed-out guest (the same report answers
-`counted: true`, and the editor's total clears its earlier baseline — the
+`counted: true`, and the stats twin's total for that track clears its earlier
+baseline — the
 radio fixture files are byte stubs that never decode, so every measured play
 there is a skip; the complete/partial thresholds ride on `classify_play`'s unit
 tests and the cascade/delete behaviour on the model's own `#[sqlx::test]`s),
 while `track_play_twin_counts_listeners_not_label_owners` pins the endpoint on
 a clean database: the guest report counted (right column only), the owner
-preview dropped and the counters unmoved, the editor page rendering the filled
-counters line, a plain signed-in listener counted, and an unknown slug a 404.
+preview dropped and the counters unmoved, the filled counters read back from
+the stats twin, a plain signed-in listener counted, and an unknown slug a 404.
+
+Those counters are read back at three levels, all `label_owner` pages and all
+under the admin area (public pages show no counters): the label
+(`/admin/label/stats`, reached both from a link on the label editor and under
+the label in the admin side menu), one artist (`/admin/artist/<slug>/stats`,
+reached from a **Stats** tab in the artist's tab bar) and one release
+(`/admin/artist/<slug>/release/<slug>/stats`, reached from a "Play statistics"
+link on its editor). Every page offers the same two views of one scope: a line
+chart of per-day plays (skip, partial, complete — one line each, a marker per
+counted day) and a table of the scope's tracks — each row names the track, its
+artist and its release — with their totals over the window, where a track
+nobody has heard still appears with zeroes and each row links to that track's
+editor. The window travels in the route's `range` query (`?range=7d`, `?range=30d`,
+`?range=1y`, no query for all time) and the table's column in its `sort` query
+(`?sort=track`, `artist`, `release`, `skips`, `partial`; no sort means the
+default, complete plays first with ties by name), so switching either is a
+router navigation and the body is keyed on both. Each link carries its partner
+knob, so changing the window never resets the column or the other way round.
+`PlaySort` in `src/models/track_play_stats.rs` owns the six codes, their column
+labels and
+the `ORDER BY` clause each means — nothing a visitor sends reaches the SQL, and
+an unknown code is a 400 the page reports. Both views come from
+`play_stats_service` (`src/services/stats.rs`) — the pages through
+`src/ui/data.rs`, the JSON twin `GET /api/get_play_stats?scope&slug&range&sort`
+for the hydrated client (a caller that only wants the series can leave `sort`
+out) — and the scope filters (`StatsScope` in `src/models/track_play_stats.rs`)
+count a track for an artist when the artist is its `primary_artist_id` **or**
+one of its `track_artists` links, so a featured spot counts for both artists
+and a row whose link table was never populated is not invisible.
+
+The chart is hand-rolled SVG: no chart crate earns its licence review for three
+lines, markers, a labelled y scale and a baseline. Its colours come from the
+daisyUI semantic palette through the
+`stroke-stats-*`/`fill-stats-*`/`bg-stats-*` utilities declared in
+`style/tailwind.css`, so the theme swap recolours it for free. The `tick_step`
+function (`src/ui/admin/stats.rs`) picks the gridline spacing (1, 2 or 5 times a
+power of ten), pinned by its own unit test. The gate pins the three pages' server-rendered HTML (headers, a window link, a
+column link, the `aria-sort` mark on the sorted column, the `e2e-radio` fixture
+rows, that an album's page lists only that album's tracks, and that the label
+page carries no back link to the label editor — the table's artist and release
+columns share their values with the side menu, so the client spec pins them
+after all), pins the track editor showing no counters anymore while its side
+menu carries the label's stats link, pins a guest swapped to the login form and
+a guest `401` from the twin, and its client spec proves the tab, the table and
+its extra columns, the line chart's three lines and y scale, the window links
+and the column links work after hydration without a document load.
 
 ### Uploads with progress
 

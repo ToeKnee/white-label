@@ -14,9 +14,9 @@ use dioxus::prelude::*;
 
 use super::admin::artist_root::AdminArtistRoot;
 use super::admin::{
-    AdminRoot, CreateArtist, CreatePage, CreateRelease, CreateTrack, Dashboard, EditArtist,
-    EditArtistImages, EditArtistLinks, EditLabel, EditPage, EditRelease, EditTrack, Releases,
-    Tracks,
+    AdminRoot, ArtistStats, CreateArtist, CreatePage, CreateRelease, CreateTrack, Dashboard,
+    EditArtist, EditArtistImages, EditArtistLinks, EditLabel, EditPage, EditRelease, EditTrack,
+    LabelStats, ReleaseStats, Releases, Tracks,
 };
 use super::artist::{ArtistPage, ArtistsPage};
 use super::auth::{ChangePassword, EditProfile, Login, Logout, Register};
@@ -134,6 +134,17 @@ pub enum Route {
         /// Error code from a failed save.
         bad: Option<String>,
     },
+    /// The label's play statistics. `range` picks the window (`7d`, `30d`,
+    /// `1y` or `all`) and `sort` the table's column (`track`, `skips`,
+    /// `partial` or `complete`); carrying neither means all time, complete
+    /// plays first.
+    #[route("/admin/label/stats?:range&:sort")]
+    LabelStats {
+        /// The statistics window, as a fixed range code.
+        range: Option<String>,
+        /// The table's sort column, as a fixed code.
+        sort: Option<String>,
+    },
     /// Artist management under `/admin/artist`. The slug sits in the nest
     /// path, so every variant inside carries it as a prop — the layout
     /// receives it too (which is how `AdminArtistRoot` renders its tabs).
@@ -186,6 +197,18 @@ pub enum Route {
         /// Error code from a failed javascript-off upload.
         bad_upload: Option<String>,
     },
+    /// The artist's play statistics. `range` picks the window (`7d`, `30d`,
+    /// `1y` or `all`) and `sort` the table's column; carrying neither means
+    /// all time, complete plays first.
+    #[route("/stats?:range&:sort")]
+    ArtistStats {
+        /// The artist slug.
+        artist_slug: String,
+        /// The statistics window, as a fixed range code.
+        range: Option<String>,
+        /// The table's sort column, as a fixed code.
+        sort: Option<String>,
+    },
     /// List an artist's releases.
     #[route("/releases")]
     Releases {
@@ -218,6 +241,20 @@ pub enum Route {
         uploaded: Option<String>,
         /// Error code from a failed javascript-off upload.
         bad_upload: Option<String>,
+    },
+    /// The release's play statistics. `range` picks the window (`7d`, `30d`,
+    /// `1y` or `all`) and `sort` the table's column; carrying neither means
+    /// all time, complete plays first.
+    #[route("/release/:release_slug/stats?:range&:sort")]
+    ReleaseStats {
+        /// The artist slug.
+        artist_slug: String,
+        /// The release slug.
+        release_slug: String,
+        /// The statistics window, as a fixed range code.
+        range: Option<String>,
+        /// The table's sort column, as a fixed code.
+        sort: Option<String>,
     },
     /// List a release's tracks.
     #[route("/release/:release_slug/tracks")]
@@ -535,6 +572,58 @@ mod tests {
         );
     }
 
+    /// The stats routes carry the window and the column as optional queries:
+    /// no query means the default pair (all time, complete plays), and each
+    /// knob travels with its partner so switching one keeps the other.
+    #[test]
+    fn stats_routes_parse() {
+        assert_eq!(
+            parse("/admin/artist/jimi/stats"),
+            Route::ArtistStats {
+                artist_slug: "jimi".into(),
+                range: None,
+                sort: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/stats?range=30d"),
+            Route::ArtistStats {
+                artist_slug: "jimi".into(),
+                range: Some("30d".into()),
+                sort: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/stats?range=30d&sort=skips"),
+            Route::ArtistStats {
+                artist_slug: "jimi".into(),
+                range: Some("30d".into()),
+                sort: Some("skips".into()),
+            }
+        );
+        assert_eq!(
+            parse("/admin/label/stats"),
+            Route::LabelStats {
+                range: None,
+                sort: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/label/stats?range=7d"),
+            Route::LabelStats {
+                range: Some("7d".into()),
+                sort: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/label/stats?sort=track"),
+            Route::LabelStats {
+                range: None,
+                sort: Some("track".into()),
+            }
+        );
+    }
+
     /// The routes under a release (its track list, its track editors) parse
     /// with the artist and release slugs the nest carries.
     #[test]
@@ -564,6 +653,33 @@ mod tests {
                 bad: None,
                 uploaded: None,
                 bad_upload: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/release/axis/stats"),
+            Route::ReleaseStats {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                range: None,
+                sort: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/release/axis/stats?range=1y"),
+            Route::ReleaseStats {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                range: Some("1y".into()),
+                sort: None,
+            }
+        );
+        assert_eq!(
+            parse("/admin/artist/jimi/release/axis/stats?sort=partial"),
+            Route::ReleaseStats {
+                artist_slug: "jimi".into(),
+                release_slug: "axis".into(),
+                range: None,
+                sort: Some("partial".into()),
             }
         );
     }

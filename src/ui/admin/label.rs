@@ -24,6 +24,7 @@
 //!   path renders the row its save answered.
 
 use dioxus::prelude::*;
+use dioxus::router::Link;
 
 use crate::api_types::edit::EditOutcome;
 use crate::api_types::record_label::LabelResult;
@@ -116,6 +117,18 @@ fn EditLabelBody(
     rsx! {
         document::Title { "Edit {label.name}" }
         h1 { "Edit {label.name} Details" }
+        p {
+            // The statistics page is a route, not a form target: this editor
+            // already hosts the label form, so the link sits outside it.
+            Link {
+                to: Route::LabelStats {
+                    range: None,
+                    sort: None,
+                },
+                class: "btn btn-primary btn-sm",
+                "Play statistics"
+            }
+        }
         form { method: "post", action: "/admin/forms/label",
             onsubmit: move |evt| {
                 evt.prevent_default();

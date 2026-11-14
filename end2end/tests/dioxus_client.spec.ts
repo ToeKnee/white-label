@@ -868,8 +868,8 @@ test("a guest gets a label-sized play allowance per track, remembered across rel
 
 test("a guest play reaches the server's counters; the owner's is not counted", async ({ page }) => {
   // The Ideas.md ask, on the `e2e-radio` fixtures: the bar reports each
-  // play it stops to the `/api/track_play` twin, and the track editor
-  // shows the counters. The reports here come from closing the bar (the
+  // play it stops to the `/api/track_play` twin, and the stats pages read
+  // the counters back. The reports here come from closing the bar (the
   // fixture files are byte stubs, never decodable media — nothing plays,
   // nothing has ever, so the measured play is always a skip; the
   // complete/partial thresholds ride on `classify_play`'s unit tests and
@@ -882,12 +882,29 @@ test("a guest play reaches the server's counters; the owner's is not counted", a
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  const editorUrl = `${base}/admin/artist/e2e-radio/release/e2e-radio-album-a/track/e2e-radio-track-a1`;
-  const statsLine = page.getByText(/This track's plays so far|No plays counted yet/);
-  // The counters as one total: a fresh track says "No plays counted yet".
+  // The counters as the stats pages read them: one row of the release
+  // scope's answer, three columns summed. The track editor deliberately no
+  // longer carries them. The read goes through an in-page `fetch`, not
+  // `page.request`: the session cookie is `Secure` (the tower-sessions
+  // default), which the browsers send to http://127.0.0.1 (a secure
+  // context) but Playwright's out-of-browser request API will not, so only
+  // the page itself can answer as the signed-in owner.
   const totals = async (): Promise<number> => {
-    const match = (await statsLine.innerText()).match(/(\d+) complete, (\d+) partial, (\d+) skipped/);
-    return match ? Number(match[1]) + Number(match[2]) + Number(match[3]) : 0;
+    const { status, body } = (await page.evaluate(async () => {
+      const response = await fetch("/api/get_play_stats?scope=release&slug=e2e-radio-album-a&range=all&sort=complete");
+      return {
+        status: response.status,
+        body: response.status === 200 ? await response.json() : undefined,
+      };
+    })) as {
+      status: number;
+      body?: {
+        rows?: { track_slug: string; complete_plays: number; partial_plays: number; skips: number }[];
+      };
+    };
+    expect(status, "the owner should reach the stats twin").toBe(200);
+    const row = body?.rows?.find((entry) => entry.track_slug === "e2e-radio-track-a1");
+    return row ? row.complete_plays + row.partial_plays + row.skips : 0;
   };
   // Press Close with the report response already being awaited: closing a
   // play this bar never measured (a byte-stub file never loads) must post
@@ -906,8 +923,6 @@ test("a guest play reaches the server's counters; the owner's is not counted", a
 
   // Baseline, read by the owner…
   await loginAs(page, "e2e-admin");
-  await page.goto(editorUrl);
-  await expect(statsLine).toBeVisible();
   const before = await totals();
 
   // …who is also the owner's-exclusion case: the owner plays and closes on
@@ -935,17 +950,112 @@ test("a guest play reaches the server's counters; the owner's is not counted", a
   await expect(page.locator("#global-player")).toContainText("E2E Radio Album A");
   expect(await closeAndAnswer(), "the guest's play is counted").toEqual({ counted: true });
 
-  // Back into the editor as the owner: the counters cleared the baseline
+  // Back into the stats data as the owner: the counters cleared the baseline
   // by at least the one guest report (parallel specs may add more).
   await loginAs(page, "e2e-admin");
-  await page.goto(editorUrl);
-  await expect(statsLine).toBeVisible();
   await expect
     .poll(totals, {
       message: `the counters should clear the baseline of ${before} by at least one`,
       timeout: 15000,
     })
     .toBeGreaterThan(before);
+
+  // The poll proves the release scope's series is non-empty (this very run
+  // counted a play), so the line chart draws its three lines — skip,
+  // partial and complete — and at least one day of points. The y scale
+  // draws its gridlines (light) and tick labels (dimmed) with them.
+  await page.goto(`${base}/admin/artist/e2e-radio/release/e2e-radio-album-a/stats`);
+  await expect(page.locator("polyline[class*='stroke-stats-']")).toHaveCount(3);
+  await expect(page.locator("circle[class*='fill-stats-']")).not.toHaveCount(0);
+  await expect(page.locator("line[class*='opacity-15']")).not.toHaveCount(0);
+  await expect(page.locator("svg text[class*='opacity-60']")).not.toHaveCount(0);
+
+  expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+});
+
+test("stats tabs list every track and follow range links without a page load", async ({ page }) => {
+  // The Ideas.md ask, on the `e2e-radio` fixtures: the artist tab bar gains
+  // a Stats tab; its page lists all three fixture tracks (zero-play rows
+  // included), and the window links are SPA navigations — same document,
+  // same table. The release-level page lists only its own album's track,
+  // and a table row links to that track's editor. Structural pins only:
+  // the guest-report spec above moves these fixtures' counters in parallel,
+  // so counters and the chart's lines are never asserted.
+  requireAdmin();
+
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let documentLoads = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentLoads += 1;
+  });
+
+  await loginAs(page, "e2e-admin");
+
+  await page.goto(`${base}/admin/artist/e2e-radio`);
+  await clientIsLive(page);
+
+  // The Stats tab is one of the artist tab bar, and clicking it does not
+  // reload the document.
+  const loadsBeforeTab = documentLoads;
+  await page.getByRole("tab", { name: "Stats" }).click();
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-radio\/stats/, { timeout: 15000 });
+  await expect(h1(page)).toHaveText("E2E Radio Artist Play statistics", { timeout: 15000 });
+  expect(documentLoads, "the Stats tab should be SPA navigation").toBe(loadsBeforeTab);
+
+  // All three radio fixture rows are listed (a track nobody heard still
+  // shows), each linking to its editor. Scoped to the table: the admin
+  // menu carries links to the same slugs.
+  const table = page.locator("table");
+  await expect(table.getByRole("link", { name: "Radio Track A1" })).toBeVisible();
+  await expect(table.getByRole("link", { name: "Radio Track B1" })).toBeVisible();
+  await expect(table.getByRole("link", { name: "Radio Track B2" })).toBeVisible();
+
+  // Every row also names its artist and release (the two extra columns).
+  await expect(table.getByText("E2E Radio Artist").first()).toBeVisible();
+  await expect(table.getByText("E2E Radio Album A").first()).toBeVisible();
+  await expect(table.getByText("E2E Radio Album B").first()).toBeVisible();
+
+  // A window link: SPA navigation, and the table follows the new page.
+  const loadsBeforeRange = documentLoads;
+  await page.getByRole("tab", { name: "30 days" }).click();
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-radio\/stats\?range=30d/, { timeout: 15000 });
+  await expect(table.getByRole("link", { name: "Radio Track A1" })).toBeVisible();
+  expect(documentLoads, "switching the window should be SPA navigation").toBe(loadsBeforeRange);
+
+  // A column header: also SPA navigation, and it keeps the window the page
+  // is already showing. The counters themselves are racy across the gate's
+  // parallel runs, so the pin is the marked column, not the row order.
+  const loadsBeforeSort = documentLoads;
+  await page.getByRole("link", { name: "Skips" }).click();
+  await expect(page).toHaveURL(/\/admin\/artist\/e2e-radio\/stats\?range=30d&sort=skips/, {
+    timeout: 15000,
+  });
+  await expect(table.getByRole("link", { name: "Radio Track A1" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: /Skips/ })).toHaveAttribute("aria-sort", "descending");
+  expect(documentLoads, "re-sorting the table should be SPA navigation").toBe(loadsBeforeSort);
+
+  // A row's link opens that track's editor, also without a document load.
+  await table.getByRole("link", { name: "Radio Track A1" }).click();
+  await expect(h1(page)).toHaveText("Radio Track A1 - E2E Radio Album A - E2E Radio Artist", {
+    timeout: 15000,
+  });
+  expect(documentLoads, "a stats row link should be SPA navigation too").toBe(loadsBeforeSort);
+
+  // The release-level page lists only its own album's track.
+  await page.goto(`${base}/admin/artist/e2e-radio/release/e2e-radio-album-a/stats`);
+  await expect(h1(page)).toHaveText("E2E Radio Album A Play statistics");
+  await expect(page.locator("table").getByRole("link", { name: "Radio Track A1" })).toBeVisible();
+  await expect(page.locator("table").getByRole("link", { name: "Radio Track B1" })).toHaveCount(0);
+
+  // The label-level page shows the radio rows (artist and release columns
+  // included) and no longer links back to the label editor: the admin side
+  // menu already carries that link on every admin page.
+  await page.goto(`${base}/admin/label/stats`);
+  await expect(h1(page)).toHaveText("Play statistics");
+  await expect(page.locator("table").getByRole("link", { name: "Radio Track A1" })).toBeVisible();
+  await expect(table.getByText("E2E Radio Album A").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to the label editor" })).toHaveCount(0);
 
   expect(pageErrors, `client page errors:\n${pageErrors.join("\n")}`).toEqual([]);
 });

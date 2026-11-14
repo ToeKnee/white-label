@@ -449,6 +449,39 @@ if [ "$admin_ok" -eq 1 ]; then
     pin "$OUT/track_editor.html" 'name="file_type" value="TrackImage"'
     pin "$OUT/track_editor.html" 'accept=".mp3,.MP3,.wav,.WAV,.flac,.FLAC,.ogg,.OGG"'
     pin "$OUT/track_editor.html" 'accept=".jpg,.JPG,.jpeg,.JPEG,.png,.PNG,.gif,.GIF,.webp,.WEBP"'
+    # The audience counters left the track editor (the stats pages hold
+    # them now), while the side menu gained the label's stats link.
+    no_pin "$OUT/track_editor.html" 'plays so far'
+    pin "$OUT/track_editor.html" 'admin/label/stats'
+    # The stats pages (SSR): headers, a window link, a column-sort link, the
+    # column the table arrives sorted by, and the fixture rows listed in the
+    # table (the counters are racy across runs, so only the structure is
+    # pinned).
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/label_stats.html" -w "label stats status=%{http_code}\n" "$base/admin/label/stats"
+    pin "$OUT/label_stats.html" 'Play statistics'
+    pin "$OUT/label_stats.html" 'admin/label/stats?range=7d'
+    pin "$OUT/label_stats.html" 'admin/label/stats?sort=skips'
+    pin "$OUT/label_stats.html" 'aria-sort="descending"'
+    pin "$OUT/label_stats.html" 'Radio Track A1'
+    # The label page lost its back link (the side menu already carries it),
+    # and the table's new artist/release columns cannot be curl-pinned (the
+    # menu names the same artists and releases) - the client spec pins
+    # both instead.
+    no_pin "$OUT/label_stats.html" 'Back to the label editor'
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/artist_stats.html" -w "artist stats status=%{http_code}\n" "$base/admin/artist/e2e-radio/stats"
+    pin "$OUT/artist_stats.html" 'E2E Radio Artist Play statistics'
+    pin "$OUT/artist_stats.html" 'Radio Track B2'
+    # Album A holds one track: B1 (an album B row) must not appear.
+    curl -sS -b "$OUT/admin-cookies.txt" -o "$OUT/release_stats.html" -w "release stats status=%{http_code}\n" "$base/admin/artist/e2e-radio/release/e2e-radio-album-a/stats"
+    pin "$OUT/release_stats.html" 'E2E Radio Album A Play statistics'
+    pin "$OUT/release_stats.html" 'Radio Track A1'
+    no_pin "$OUT/release_stats.html" 'Radio Track B1'
+    # Guests reach neither the page (the admin gate swaps in the login
+    # form) nor the data endpoint (the service answers 401).
+    curl -sS -o "$OUT/stats_guest.html" -w "stats guest page status=%{http_code}\n" "$base/admin/label/stats"
+    pin "$OUT/stats_guest.html" 'action="/auth/login"'
+    curl -sS -o "$OUT/stats_guest.json" -w "stats guest api status=%{http_code}\n" "$base/api/get_play_stats?scope=label&slug=-&range=all"
+    pin "$OUT/stats_guest.json" 'User not supplied'
 else
     echo "ADMIN CHECKS SKIPPED: e2e-admin lacks the admin permission (see instructions above)"
     # Guest view of a guarded admin route: the login page replaces it.
@@ -543,6 +576,15 @@ if [ "$admin_ok" -eq 1 ]; then
 else
     DIOXUS_URL="$base_client" npx playwright test tests/dioxus_client.spec.ts --project=firefox --reporter=list || status=$?
 fi
+
+# The desktop bar's media recorder is a string of JavaScript inside the crate
+# (`play_recorder_js` in `src/ui/player.rs`), so the window cannot tell a
+# working recorder from a typo: the counters simply stay quiet. This lifts the
+# crate's exact text and runs it the way dioxus's eval channel runs it, against
+# a small real WAV, in both browsers. No server needed, and it needs the
+# desktop target to compile no more than the pins above already do.
+echo "== playwright player recorder smoke (chromium & firefox) =="
+npx playwright test tests/player_recorder.spec.ts --project=chromium --project=firefox --reporter=list || status=$?
 
 if [ "$pin_failed" -ne 0 ]; then
     echo "== gate page pins FAILED =="
